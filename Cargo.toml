@@ -1,0 +1,15 @@
+[workspace]
+
+members = [
+    "lsp4spl",
+    "spl_frontend",
+    "lsp_base"
+]
+
+[workspace.package]
+description = "Language Server for SPL"
+authors = ["Alec Ghost"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.66"
