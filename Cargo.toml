@@ -3,7 +3,6 @@
 members = [
     "lsp4spl",
     "spl_frontend",
-    "lsp_base"
 ]
 
 [workspace.package]
