@@ -4,22 +4,74 @@ use serde_json::Value;
 use tokio_util::codec::{Decoder, Encoder};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub(super) struct Message {
+#[serde(untagged)]
+pub(super) enum Message {
+    Request(Request),
+    Notification(Notification),
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub(super) struct Request {
     jsonrpc: String,
-    pub id: Option<i32>,
+    id: i32,
     pub method: String,
+    #[serde(default)]
     pub params: Value,
 }
 
-impl Message {
-    pub(super) fn new(id: Option<i32>, method: String, params: Value) -> Self {
-        Self {
+impl Request {
+    pub(super) fn split(self) -> (Value, PreparedResponse) {
+        (self.params, PreparedResponse::new(self.id))
+    }
+}
+
+pub(super) struct PreparedResponse {
+    id: i32,
+}
+
+impl PreparedResponse {
+    fn new(id: i32) -> Self {
+        Self { id }
+    }
+
+    pub fn to_result_response<T: Serialize>(self, value: T) -> Response {
+        Response {
             jsonrpc: "2.0".to_string(),
-            id,
-            method,
-            params,
+            id: self.id,
+            answer: ResponseAnswer::Result { result: value.to_value() },
         }
     }
+
+    pub fn to_error_response<T: Serialize>(self, value: T) -> Response {
+        Response {
+            jsonrpc: "2.0".to_string(),
+            id: self.id,
+            answer: ResponseAnswer::Error { error: value.to_value() },
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub(super) struct Notification {
+    jsonrpc: String,
+    pub method: String,
+    #[serde(default)]
+    pub params: Value,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub(super) struct Response {
+    jsonrpc: String,
+    id: i32,
+    #[serde(flatten)]
+    answer: ResponseAnswer,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+enum ResponseAnswer {
+    Result { result: Value },
+    Error { error: Value },
 }
 
 pub(super) struct LSCodec {}
@@ -45,7 +97,7 @@ impl From<std::io::Error> for CodecError {
 }
 
 impl From<serde_json::Error> for CodecError {
-    fn from(value: serde_json::Error) -> Self {
+    fn from(_value: serde_json::Error) -> Self {
         CodecError::InvalidContent
     }
 }
@@ -94,12 +146,11 @@ impl Decoder for LSCodec {
     }
 }
 
-impl Encoder<Message> for LSCodec {
+impl Encoder<Response> for LSCodec {
     type Error = CodecError;
-    fn encode(&mut self, item: Message, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Response, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let content = serde_json::to_string(&item).map_err(CodecError::from)?;
-        let header_length = 20;
-        let length = header_length + content.len();
+        let length = content.len();
         let encoded = format!("Content-Length: {}\r\n\r\n{}", length, content);
         dst.reserve(length);
         dst.extend_from_slice(encoded.as_bytes());
@@ -110,14 +161,13 @@ impl Encoder<Message> for LSCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
     use std::io::Cursor;
-    use tokio_stream::StreamExt;
     use tokio_util::codec::FramedRead;
 
     #[tokio::test]
     async fn framed_read_success() {
-        let content =
-            r#"{"jsonrpc": "2.0", "id": 1,"method": "textDocument/didOpen","params": null}"#;
+        let content = r#"{"jsonrpc": "2.0", "id": 1,"method": "initialize","params": null}"#;
         let stdin = Cursor::new(
             format!("Content-Length: {}\r\n\r\n{}", content.len(), content)
                 .as_bytes()
@@ -126,12 +176,24 @@ mod tests {
         let mut framed_read = FramedRead::new(stdin, LSCodec::new());
         assert_eq!(
             framed_read.next().await,
-            Some(Ok(Message::new(
-                Some(1),
-                "textDocument/didOpen".to_string(),
-                Value::Null
-            )))
+            Some(Ok(Message::Request(Request {
+                jsonrpc: "2.0".to_string(),
+                id: 1,
+                method: "initialize".to_string(),
+                params: Value::Null,
+            })))
         );
         assert_eq!(framed_read.next().await, None);
     }
 }
+
+pub trait ToValue {
+    fn to_value(self) -> serde_json::Value
+    where
+        Self: Sized + serde::Serialize,
+    {
+        serde_json::to_value(self).expect("Cannot encode result to json")
+    }
+}
+
+impl<T> ToValue for T where T: Sized + serde::Serialize {}
