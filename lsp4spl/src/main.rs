@@ -1,9 +1,12 @@
 #![allow(dead_code)]
+use color_eyre::eyre::Result;
 use lsp_types::{
     ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
     TextDocumentSyncOptions,
 };
 use server::LanguageServer;
+use simplelog::{Config, LevelFilter, WriteLogger};
+
 mod document;
 mod error;
 mod io;
@@ -11,7 +14,8 @@ mod server;
 
 #[tokio::main]
 async fn main() {
-    eprintln!("LSP4SPL: Startup.");
+    register_logger().expect("Cannot register logger");
+    log::info!("Startup");
     let ls = LanguageServer::setup(
         Some(ServerInfo {
             name: "lsp4spl".to_string(),
@@ -58,5 +62,14 @@ async fn main() {
         },
     );
     ls.run().await;
-    eprintln!("LSP4SPL: Shutdown.");
+    log::info!("Shutdown");
+}
+
+fn register_logger() -> Result<()> {
+    WriteLogger::init(
+        LevelFilter::Debug,
+        Config::default(),
+        std::fs::File::create("lsp4spl.log")?,
+    )?;
+    Ok(())
 }

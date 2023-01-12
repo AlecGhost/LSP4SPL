@@ -127,6 +127,7 @@ impl Decoder for LSCodec {
         let content = &src[content_start..content_end];
         let message = serde_json::from_slice(content).map_err(CodecError::from);
         src.advance(content_end);
+        log::info!("Decoded: {:#?}", message);
         message
     }
 }
@@ -139,6 +140,7 @@ impl Encoder<Response> for LSCodec {
         let encoded = format!("Content-Length: {}\r\n\r\n{}", length, content);
         dst.reserve(length);
         dst.extend_from_slice(encoded.as_bytes());
+        log::info!("Encoded: {:#?}", item);
         Ok(())
     }
 }
@@ -147,7 +149,8 @@ pub(super) async fn responder(stdout: tokio::io::Stdout, mut rx: Receiver<Respon
     let mut framed_write = FramedWrite::new(stdout, LSCodec::new());
     while let Some(response) = rx.recv().await {
         if let Err(err) = framed_write.send(response).await {
-            panic!("Sending messages failed: {:#?}", err);
+            log::error!("Sending responses failed: {:#?}", err);
+            panic!("Sending responses failed: {:#?}", err);
         }
     }
 }

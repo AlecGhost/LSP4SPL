@@ -47,6 +47,7 @@ impl LanguageServer {
 
         // Initialization phase
         if let Err(err) = phases::initialization(&self, &mut framed_read, iotx.clone()).await {
+            log::error!("Unexpected error occured during initialization: {:#?}", err);
             panic!("Unexpected error occured during initialization: {:#?}", err);
         }
 
@@ -106,17 +107,20 @@ impl LanguageServer {
                         }
 
                         if let Err(err) = match_notification(notification, doctx.clone()).await {
-                            // TODO: proper error logging
-                            eprintln!("Error occured during notification handling: {:#?}", err);
+                            log::warn!("Error occured during notification handling: {:#?}", err);
                         }
                     }
                 },
-                Err(err) => panic!("Recieved frame with error: {:?}", err),
+                Err(err) => {
+                    log::error!("Recieved frame with error: {:?}", err);
+                    panic!("Recieved frame with error: {:?}", err);
+                }
             };
         }
 
         // Shutdown phase
         if let Err(err) = phases::shutdown(&mut framed_read, iotx).await {
+            log::error!("Unexpected error occured during shutdown: {:#?}", err);
             panic!("Unexpected error occured during shutdown: {:#?}", err);
         }
         drop(doctx);
