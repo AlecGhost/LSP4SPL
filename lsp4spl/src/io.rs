@@ -2,6 +2,7 @@ use bytes::{Buf, BytesMut};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_util::codec::{Decoder, Encoder};
+use crate::error::{ResponseError, CodecError};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -42,11 +43,11 @@ impl PreparedResponse {
         }
     }
 
-    pub fn to_error_response<T: Serialize>(self, value: T) -> Response {
+    pub fn to_error_response(self, error: ResponseError) -> Response {
         Response {
             jsonrpc: "2.0".to_string(),
             id: self.id,
-            answer: ResponseAnswer::Error { error: value.to_value() },
+            answer: ResponseAnswer::Error { error },
         }
     }
 }
@@ -71,7 +72,7 @@ pub(super) struct Response {
 #[serde(untagged)]
 enum ResponseAnswer {
     Result { result: Value },
-    Error { error: Value },
+    Error { error: ResponseError },
 }
 
 pub(super) struct LSCodec {}
@@ -79,26 +80,6 @@ pub(super) struct LSCodec {}
 impl LSCodec {
     pub(super) fn new() -> Self {
         Self {}
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub(super) enum CodecError {
-    InvalidHeaders,
-    NoUTF8,
-    IOError(String),
-    InvalidContent,
-}
-
-impl From<std::io::Error> for CodecError {
-    fn from(value: std::io::Error) -> Self {
-        CodecError::IOError(value.to_string())
-    }
-}
-
-impl From<serde_json::Error> for CodecError {
-    fn from(_value: serde_json::Error) -> Self {
-        CodecError::InvalidContent
     }
 }
 

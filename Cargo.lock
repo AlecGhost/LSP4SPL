@@ -203,6 +203,7 @@ dependencies = [
  "lsp-types",
  "serde",
  "serde_json",
+ "serde_repr",
  "tokio",
  "tokio-util",
 ]
