@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use error::ErrorCode;
 use error::ResponseError;
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 use io::{LSCodec, Message, Response};
 use lsp_types::notification::*;
 use lsp_types::request::*;
@@ -9,10 +9,10 @@ use lsp_types::*;
 use serde_json::Value;
 use tokio::io::Stdin;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
-use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_util::codec::FramedRead;
 
+mod document;
 mod error;
 mod io;
 
@@ -85,15 +85,19 @@ impl LanguageServer {
     async fn run(self) {
         // spawn thread which handles sending back messages to the client
         let stdout = tokio::io::stdout();
-        let (tx, rx) = mpsc::channel(32);
-        let responder_handle = tokio::spawn(responder(stdout, rx));
+        let (iotx, iorx) = mpsc::channel(32);
+        let responder_handle = tokio::spawn(io::responder(stdout, iorx));
+
+        // spawn thread which handles document synchronization
+        let (doctx, docrx) = mpsc::channel(32);
+        let document_broker_handle = tokio::spawn(document::broker(docrx));
 
         // Decode messages, while stdin is not closed
         let stdin = tokio::io::stdin();
         let mut framed_read = FramedRead::new(stdin, LSCodec::new());
 
         // Initialization phase
-        self.run_initialization_phase(&mut framed_read, tx.clone())
+        self.run_initialization_phase(&mut framed_read, iotx.clone())
             .await;
 
         // Main phase
@@ -113,7 +117,7 @@ impl LanguageServer {
                                 // exit main phase
                                 let (_, response) = request.split();
                                 let response = response.to_result_response(Value::Null);
-                                tx.send(response).await.expect("Cannot send messages");
+                                iotx.send(response).await.expect("Cannot send messages");
                                 break;
                             }
                             unknown_method => {
@@ -125,26 +129,46 @@ impl LanguageServer {
                                 ))
                             }
                         };
-                        tx.send(response).await.expect("Cannot send messages");
+                        iotx.send(response).await.expect("Cannot send messages");
                     }
-                    Message::Notification(notification) => match notification.method.as_str() {
-                        Exit::METHOD => std::process::exit(1), // ungraceful exit
-                        _ => { /* drop all other notifications */ }
-                    },
+                    Message::Notification(notification) => {
+                        match notification.method.as_str() {
+                            DidOpenTextDocument::METHOD => {
+                                let params = serde_json::from_value(notification.params)
+                                    .expect("Invalid params");
+                                document::did_open(doctx.clone(), params).await;
+                            }
+                            DidChangeTextDocument::METHOD => {
+                                let params = serde_json::from_value(notification.params)
+                                    .expect("Invalid params");
+                                document::did_change(doctx.clone(), params).await;
+                            }
+                            DidCloseTextDocument::METHOD => {
+                                let params = serde_json::from_value(notification.params)
+                                    .expect("Invalid params");
+                                document::did_close(doctx.clone(), params).await;
+                            }
+                            Exit::METHOD => std::process::exit(1), // ungraceful exit
+                            _ => { /* drop all other notifications */ }
+                        };
+                    }
                 },
                 Err(err) => panic!("Recieved frame with error: {:?}", err),
             };
         }
 
         // Shutdown phase
-        self.run_shutdown_phase(&mut framed_read, tx).await;
-        responder_handle.await.expect("Should shutdown gracefully");
+        self.run_shutdown_phase(&mut framed_read, iotx).await;
+        drop(doctx);
+        responder_handle.await.unwrap();
+        document_broker_handle.await.unwrap();
+        // tokio::join!(responder_handle, document_broker_handle);
     }
 
     async fn run_initialization_phase(
         &self,
         framed_read: &mut FramedRead<Stdin, LSCodec>,
-        tx: Sender<Response>,
+        iotx: Sender<Response>,
     ) {
         while let Some(frame) = framed_read.next().await {
             match frame {
@@ -156,7 +180,7 @@ impl LanguageServer {
                                 let params = serde_json::from_value(params).expect("Ivalid params");
                                 let result = self.initialize(params);
                                 let response = response.to_result_response(result);
-                                tx.send(response).await.expect("Cannot send messages");
+                                iotx.send(response).await.expect("Cannot send messages");
                                 break;
                             }
                             _ => {
@@ -167,7 +191,7 @@ impl LanguageServer {
                                 ))
                             }
                         };
-                        tx.send(response).await.expect("Cannot send messages");
+                        iotx.send(response).await.expect("Cannot send messages");
                     }
                     Message::Notification(notification) => match notification.method.as_str() {
                         Exit::METHOD => std::process::exit(1), // ungraceful exit
@@ -187,7 +211,7 @@ impl LanguageServer {
                             error::ErrorCode::ServerNotInitialized,
                             "Server not initialized".to_string(),
                         ));
-                        tx.send(response).await.expect("Cannot send messages");
+                        iotx.send(response).await.expect("Cannot send messages");
                     }
                     Message::Notification(notification) => match notification.method.as_str() {
                         Initialized::METHOD => {
@@ -235,15 +259,6 @@ impl LanguageServer {
         InitializeResult {
             capabilities: self.server_capabilities.clone(),
             server_info: self.server_info.clone(),
-        }
-    }
-}
-
-async fn responder(stdout: tokio::io::Stdout, mut rx: Receiver<Response>) {
-    let mut framed_write = FramedWrite::new(stdout, LSCodec::new());
-    while let Some(response) = rx.recv().await {
-        if let Err(err) = framed_write.send(response).await {
-            panic!("Sending messages failed: {:#?}", err);
         }
     }
 }

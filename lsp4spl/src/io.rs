@@ -1,7 +1,9 @@
+use futures::SinkExt;
 use bytes::{Buf, BytesMut};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio_util::codec::{Decoder, Encoder};
+use tokio::sync::mpsc::Receiver;
+use tokio_util::codec::{Decoder, Encoder, FramedWrite};
 use crate::error::{ResponseError, CodecError};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -136,6 +138,15 @@ impl Encoder<Response> for LSCodec {
         dst.reserve(length);
         dst.extend_from_slice(encoded.as_bytes());
         Ok(())
+    }
+}
+
+pub(super) async fn responder(stdout: tokio::io::Stdout, mut rx: Receiver<Response>) {
+    let mut framed_write = FramedWrite::new(stdout, LSCodec::new());
+    while let Some(response) = rx.recv().await {
+        if let Err(err) = framed_write.send(response).await {
+            panic!("Sending messages failed: {:#?}", err);
+        }
     }
 }
 
