@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use thiserror::Error;
 
 #[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
 #[repr(i64)]
@@ -35,22 +36,12 @@ impl ResponseError {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error)]
 pub(super) enum CodecError {
+    #[error("Invalid headers")]
     InvalidHeaders,
-    NoUTF8,
-    IOError(String),
-    InvalidContent,
-}
-
-impl From<std::io::Error> for CodecError {
-    fn from(value: std::io::Error) -> Self {
-        CodecError::IOError(value.to_string())
-    }
-}
-
-impl From<serde_json::Error> for CodecError {
-    fn from(_value: serde_json::Error) -> Self {
-        CodecError::InvalidContent
-    }
+    #[error("IO error")]
+    IOError(#[from] std::io::Error),
+    #[error("Could not deserialize content")]
+    InvalidContent(#[from] serde_json::Error),
 }

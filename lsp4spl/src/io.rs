@@ -1,10 +1,10 @@
-use futures::SinkExt;
+use crate::error::{CodecError, ResponseError};
 use bytes::{Buf, BytesMut};
+use futures::SinkExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 use tokio_util::codec::{Decoder, Encoder, FramedWrite};
-use crate::error::{ResponseError, CodecError};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -37,15 +37,17 @@ impl PreparedResponse {
         Self { id }
     }
 
-    pub fn to_result_response<T: Serialize>(self, value: T) -> Response {
+    pub fn into_result_response<T: Serialize>(self, value: T) -> Response {
         Response {
             jsonrpc: "2.0".to_string(),
             id: self.id,
-            answer: ResponseAnswer::Result { result: value.to_value() },
+            answer: ResponseAnswer::Result {
+                result: value.to_value(),
+            },
         }
     }
 
-    pub fn to_error_response(self, error: ResponseError) -> Response {
+    pub fn into_error_response(self, error: ResponseError) -> Response {
         Response {
             jsonrpc: "2.0".to_string(),
             id: self.id,
@@ -94,30 +96,19 @@ impl Decoder for LSCodec {
             return Ok(None);
         }
         let mut headers = [httparse::EMPTY_HEADER; 2];
-        let content_start = match httparse::parse_headers(src, &mut headers) {
-            Ok(status) => match status {
-                httparse::Status::Complete((content_start, _)) => content_start,
-                httparse::Status::Partial => return Ok(None),
-            },
-            Err(_) => return Err(CodecError::InvalidHeaders),
+        let content_start = match httparse::parse_headers(src, &mut headers)
+            .map_err(|_| CodecError::InvalidHeaders)?
+        {
+            httparse::Status::Complete((content_start, _)) => content_start,
+            httparse::Status::Partial => return Ok(None),
         };
-        let content_length = match headers
+        let length_header = headers
             .iter()
             .find(|header| header.name == "Content-Length")
-        {
-            Some(header) => {
-                let length = match std::str::from_utf8(header.value) {
-                    Ok(length) => length,
-                    Err(_) => return Err(CodecError::InvalidHeaders),
-                };
-                let length: usize = match length.parse() {
-                    Ok(length) => length,
-                    Err(_) => return Err(CodecError::InvalidHeaders),
-                };
-                length
-            }
-            None => return Err(CodecError::InvalidHeaders),
-        };
+            .ok_or(CodecError::InvalidHeaders)?;
+        let length_str =
+            std::str::from_utf8(length_header.value).map_err(|_| CodecError::InvalidHeaders)?;
+        let content_length: usize = length_str.parse().map_err(|_| CodecError::InvalidHeaders)?;
         let content_end = content_start + content_length;
         if src.len() < content_end {
             return Ok(None);
@@ -132,7 +123,7 @@ impl Decoder for LSCodec {
 impl Encoder<Response> for LSCodec {
     type Error = CodecError;
     fn encode(&mut self, item: Response, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let content = serde_json::to_string(&item).map_err(CodecError::from)?;
+        let content = serde_json::to_string(&item)?;
         let length = content.len();
         let encoded = format!("Content-Length: {}\r\n\r\n{}", length, content);
         dst.reserve(length);
@@ -167,15 +158,15 @@ mod tests {
         );
         let mut framed_read = FramedRead::new(stdin, LSCodec::new());
         assert_eq!(
-            framed_read.next().await,
-            Some(Ok(Message::Request(Request {
+            framed_read.next().await.unwrap().unwrap(),
+            Message::Request(Request {
                 jsonrpc: "2.0".to_string(),
                 id: 1,
                 method: "initialize".to_string(),
                 params: Value::Null,
-            })))
+            })
         );
-        assert_eq!(framed_read.next().await, None);
+        assert!(framed_read.next().await.is_none());
     }
 }
 

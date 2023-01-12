@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-
+use color_eyre::eyre::Result;
 use lsp_types::*;
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -15,31 +15,32 @@ pub(super) enum DocumentStatus {
     DidClose(Url),
 }
 
-pub(super) async fn did_open(broker: Sender<DocumentStatus>, params: DidOpenTextDocumentParams) {
+pub(super) async fn did_open(broker: Sender<DocumentStatus>, params: DidOpenTextDocumentParams) -> Result<()> {
     broker
         .send(DocumentStatus::DidOpen((params.text_document.uri, params.text_document.text)))
-        .await
-        .expect("Cannot send messages");
+        .await?;
+    Ok(())
+        
 }
 
 pub(super) async fn did_change(
     broker: Sender<DocumentStatus>,
     params: DidChangeTextDocumentParams,
-) {
+) -> Result<()>{
     broker
         .send(DocumentStatus::DidChange((
             params.text_document.uri,
             params.content_changes,
         )))
-        .await
-        .expect("Cannot send messages");
+        .await?;
+    Ok(())
 }
 
-pub(super) async fn did_close(broker: Sender<DocumentStatus>, params: DidCloseTextDocumentParams) {
+pub(super) async fn did_close(broker: Sender<DocumentStatus>, params: DidCloseTextDocumentParams) -> Result<()>{
     broker
         .send(DocumentStatus::DidClose(params.text_document.uri))
-        .await
-        .expect("Cannot send messages");
+        .await?;
+    Ok(())
 }
 
 pub(super) async fn broker(mut rx: Receiver<DocumentStatus>) {
