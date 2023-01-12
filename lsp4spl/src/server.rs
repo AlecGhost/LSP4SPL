@@ -1,16 +1,13 @@
-use crate::document::{self, DocumentStatus};
-use crate::error::ErrorCode;
-use crate::error::ResponseError;
-use crate::io::{self, LSCodec, Message, Response};
+use crate::{
+    document::{self, DocumentStatus},
+    error::{ErrorCode, ResponseError},
+    io::{self, LSCodec, Message, Response},
+};
 use color_eyre::eyre::Result;
 use futures::StreamExt;
-use lsp_types::notification::*;
-use lsp_types::request::*;
-use lsp_types::*;
+use lsp_types::{notification::*, request::*, *};
 use serde_json::Value;
-use tokio::io::Stdin;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{self, Sender};
 use tokio_util::codec::FramedRead;
 
 #[derive(Clone, Debug)]
@@ -48,65 +45,8 @@ impl LanguageServer {
         let stdin = tokio::io::stdin();
         let mut framed_read = FramedRead::new(stdin, LSCodec::new());
 
-        async fn run_initialization_phase(
-            ls: &LanguageServer,
-            framed_read: &mut FramedRead<Stdin, LSCodec>,
-            iotx: Sender<Response>,
-        ) -> Result<()> {
-            while let Some(frame) = framed_read.next().await {
-                let message = frame?;
-                match message {
-                    Message::Request(request) => {
-                        let response: Response = match request.method.as_str() {
-                            Initialize::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let result = ls.initialize(params);
-                                let response = response.into_result_response(result);
-                                iotx.send(response).await?;
-                                break;
-                            }
-                            _ => {
-                                let (_, response) = request.split();
-                                response.into_error_response(ResponseError::new(
-                                    ErrorCode::ServerNotInitialized,
-                                    "Server not initialized".to_string(),
-                                ))
-                            }
-                        };
-                        iotx.send(response).await?;
-                    }
-                    Message::Notification(notification) => {
-                        if notification.method.as_str() == Exit::METHOD {
-                            std::process::exit(1) // ungraceful exit
-                        }
-                    }
-                };
-            }
-            while let Some(frame) = framed_read.next().await {
-                let message = frame?;
-                match message {
-                    Message::Request(request) => {
-                        // Answer all incoming requests with an error
-                        let (_, response) = request.split();
-                        let response = response.into_error_response(ResponseError::new(
-                            ErrorCode::ServerNotInitialized,
-                            "Server not initialized".to_string(),
-                        ));
-                        iotx.send(response).await?;
-                    }
-                    Message::Notification(notification) => match notification.method.as_str() {
-                        Initialized::METHOD => break, // Server is properly initialized and can start working
-                        Exit::METHOD => std::process::exit(1), // ungraceful exit
-                        _ => { /* drop all other notifications */ }
-                    },
-                };
-            }
-            Ok(())
-        }
-
         // Initialization phase
-        if let Err(err) = run_initialization_phase(&self, &mut framed_read, iotx.clone()).await {
+        if let Err(err) = phases::initialization(&self, &mut framed_read, iotx.clone()).await {
             panic!("Unexpected error occured during initialization: {:#?}", err);
         }
 
@@ -175,40 +115,107 @@ impl LanguageServer {
             };
         }
 
-        async fn run_shutdown_phase(
-            framed_read: &mut FramedRead<Stdin, LSCodec>,
-            tx: Sender<Response>,
-        ) -> Result<()> {
-            while let Some(frame) = framed_read.next().await {
-                let message = frame?;
-                match message {
-                    Message::Request(request) => {
-                        // Answer all incoming requests with an error
-                        let (_, response) = request.split();
-                        let response = response.into_error_response(ResponseError::new(
-                            ErrorCode::InvalidRequest,
-                            "Server shutting down. No further requests allowed".to_string(),
-                        ));
-                        tx.send(response).await?;
-                    }
-                    Message::Notification(notification) => {
-                        // only waiting for exit notification
-                        if notification.method.as_str() == Exit::METHOD {
-                            break;
-                        }
-                    }
-                };
-            }
-            Ok(())
-        }
-
         // Shutdown phase
-        if let Err(err) = run_shutdown_phase(&mut framed_read, iotx).await {
+        if let Err(err) = phases::shutdown(&mut framed_read, iotx).await {
             panic!("Unexpected error occured during shutdown: {:#?}", err);
         }
         drop(doctx);
         responder_handle.await.unwrap();
         document_broker_handle.await.unwrap();
         // tokio::join!(responder_handle, document_broker_handle);
+    }
+}
+
+mod phases {
+    use super::LanguageServer;
+    use crate::{
+        error::{ErrorCode, ResponseError},
+        io::{LSCodec, Message, Response},
+    };
+    use color_eyre::eyre::Result;
+    use futures::StreamExt;
+    use lsp_types::{notification::*, request::*};
+    use tokio::{io::Stdin, sync::mpsc::Sender};
+    use tokio_util::codec::FramedRead;
+
+    pub(super) async fn initialization(
+        ls: &LanguageServer,
+        framed_read: &mut FramedRead<Stdin, LSCodec>,
+        iotx: Sender<Response>,
+    ) -> Result<()> {
+        while let Some(frame) = framed_read.next().await {
+            let message = frame?;
+            match message {
+                Message::Request(request) => {
+                    let response: Response = if request.method.as_str() == Initialize::METHOD {
+                        let (params, response) = request.split();
+                        let params = serde_json::from_value(params)?;
+                        let result = ls.initialize(params);
+                        let response = response.into_result_response(result);
+                        iotx.send(response).await?;
+                        break;
+                    } else {
+                        let (_, response) = request.split();
+                        response.into_error_response(ResponseError::new(
+                            ErrorCode::ServerNotInitialized,
+                            "Server not initialized".to_string(),
+                        ))
+                    };
+                    iotx.send(response).await?;
+                }
+                Message::Notification(notification) => {
+                    if notification.method.as_str() == Exit::METHOD {
+                        std::process::exit(1) // ungraceful exit
+                    }
+                }
+            };
+        }
+        while let Some(frame) = framed_read.next().await {
+            let message = frame?;
+            match message {
+                Message::Request(request) => {
+                    // Answer all incoming requests with an error
+                    let (_, response) = request.split();
+                    let response = response.into_error_response(ResponseError::new(
+                        ErrorCode::ServerNotInitialized,
+                        "Server not initialized".to_string(),
+                    ));
+                    iotx.send(response).await?;
+                }
+                Message::Notification(notification) => match notification.method.as_str() {
+                    Initialized::METHOD => break, // Server is properly initialized and can start working
+                    Exit::METHOD => std::process::exit(1), // ungraceful exit
+                    _ => { /* drop all other notifications */ }
+                },
+            };
+        }
+        Ok(())
+    }
+
+    pub(super) async fn shutdown(
+        framed_read: &mut FramedRead<Stdin, LSCodec>,
+        tx: Sender<Response>,
+    ) -> Result<()> {
+        while let Some(frame) = framed_read.next().await {
+            let message = frame?;
+            match message {
+                Message::Request(request) => {
+                    // Answer all incoming requests with an error
+                    let (_, response) = request.split();
+                    let response = response.into_error_response(ResponseError::new(
+                        ErrorCode::InvalidRequest,
+                        "Server shutting down. No further requests allowed".to_string(),
+                    ));
+                    tx.send(response).await?;
+                }
+                Message::Notification(notification) => {
+                    // only waiting for exit notification
+                    if notification.method.as_str() == Exit::METHOD {
+                        break;
+                    }
+                }
+            };
+        }
+        Ok(())
     }
 }

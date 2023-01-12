@@ -13,6 +13,17 @@ pub(super) enum Message {
     Notification(Notification),
 }
 
+pub trait ToValue {
+    fn to_value(self) -> serde_json::Value
+    where
+        Self: Sized + serde::Serialize,
+    {
+        serde_json::to_value(self).expect("Cannot encode result to json")
+    }
+}
+
+impl<T> ToValue for T where T: Sized + serde::Serialize {}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub(super) struct Request {
     jsonrpc: String,
@@ -169,14 +180,3 @@ mod tests {
         assert!(framed_read.next().await.is_none());
     }
 }
-
-pub trait ToValue {
-    fn to_value(self) -> serde_json::Value
-    where
-        Self: Sized + serde::Serialize,
-    {
-        serde_json::to_value(self).expect("Cannot encode result to json")
-    }
-}
-
-impl<T> ToValue for T where T: Sized + serde::Serialize {}

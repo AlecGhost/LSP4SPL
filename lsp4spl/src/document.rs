@@ -1,32 +1,32 @@
-use std::collections::HashMap;
 use color_eyre::eyre::Result;
 use lsp_types::*;
+use std::collections::HashMap;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 #[derive(Debug)]
 pub(super) enum DocumentStatus {
     DidOpen((Url, String)),
-    DidChange(
-        (
-            Url,
-            Vec<TextDocumentContentChangeEvent>,
-        ),
-    ),
+    DidChange((Url, Vec<TextDocumentContentChangeEvent>)),
     DidClose(Url),
 }
 
-pub(super) async fn did_open(broker: Sender<DocumentStatus>, params: DidOpenTextDocumentParams) -> Result<()> {
+pub(super) async fn did_open(
+    broker: Sender<DocumentStatus>,
+    params: DidOpenTextDocumentParams,
+) -> Result<()> {
     broker
-        .send(DocumentStatus::DidOpen((params.text_document.uri, params.text_document.text)))
+        .send(DocumentStatus::DidOpen((
+            params.text_document.uri,
+            params.text_document.text,
+        )))
         .await?;
     Ok(())
-        
 }
 
 pub(super) async fn did_change(
     broker: Sender<DocumentStatus>,
     params: DidChangeTextDocumentParams,
-) -> Result<()>{
+) -> Result<()> {
     broker
         .send(DocumentStatus::DidChange((
             params.text_document.uri,
@@ -36,7 +36,10 @@ pub(super) async fn did_change(
     Ok(())
 }
 
-pub(super) async fn did_close(broker: Sender<DocumentStatus>, params: DidCloseTextDocumentParams) -> Result<()>{
+pub(super) async fn did_close(
+    broker: Sender<DocumentStatus>,
+    params: DidCloseTextDocumentParams,
+) -> Result<()> {
     broker
         .send(DocumentStatus::DidClose(params.text_document.uri))
         .await?;
@@ -57,7 +60,7 @@ pub(super) async fn broker(mut rx: Receiver<DocumentStatus>) {
                     None => {
                         docs.insert(uri.path().to_string(), change.text);
                     }
-                })
+                });
             }
             DidClose(uri) => {
                 docs.remove(uri.path());
