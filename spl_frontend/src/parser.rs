@@ -177,21 +177,33 @@ impl Parser for Expression {
             ))(input)
         }
 
+        fn parse_rhs<'a, P>(
+            input: Span<'a>,
+            lhs: Expression,
+            op: &str,
+            parser: P,
+        ) -> IResult<'a, Expression>
+        where
+            P: Fn(Span) -> IResult<Expression>,
+        {
+            let (input, rhs) = expect(
+                parser,
+                ErrorMessage::ExpectedToken("expression".to_string()),
+            )(input)?;
+            let rhs = rhs.unwrap_or(Expression::Error);
+            let exp = Expression::Binary(BinaryExpression {
+                operator: Operator::new(op).expect("Operator conversion failed"),
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            });
+            Ok((input, exp))
+        }
+
         fn parse_mul(input: Span) -> IResult<Expression> {
             // Mul := Unary (("*" | "/") Unary)*
             let (mut input, mut exp) = parse_unary(input)?;
             while let Ok((i, op)) = ws(alt((tag("*"), tag("/"))))(input.clone()) {
-                let (i, rhs) = expect(
-                    parse_unary,
-                    ErrorMessage::ExpectedToken("expression".to_string()),
-                )(i)?;
-                let rhs = rhs.unwrap_or(Expression::Error);
-                input = i;
-                exp = Expression::Binary(BinaryExpression {
-                    operator: Operator::new(&op).expect("Operator conversion failed"),
-                    lhs: Box::new(exp),
-                    rhs: Box::new(rhs),
-                });
+                (input, exp) = parse_rhs(i, exp, &op, parse_unary)?;
             }
             Ok((input, exp))
         }
@@ -200,17 +212,7 @@ impl Parser for Expression {
             // Add := Mul (("+" | "-") Mul)*
             let (mut input, mut exp) = parse_mul(input)?;
             while let Ok((i, op)) = ws(alt((tag("+"), tag("-"))))(input.clone()) {
-                let (i, rhs) = expect(
-                    parse_mul,
-                    ErrorMessage::ExpectedToken("expression".to_string()),
-                )(i)?;
-                let rhs = rhs.unwrap_or(Expression::Error);
-                input = i;
-                exp = Expression::Binary(BinaryExpression {
-                    operator: Operator::new(&op).expect("Operator conversion failed"),
-                    lhs: Box::new(exp),
-                    rhs: Box::new(rhs),
-                });
+                (input, exp) = parse_rhs(i, exp, &op, parse_mul)?;
             }
             Ok((input, exp))
         }
@@ -227,17 +229,7 @@ impl Parser for Expression {
                 tag(">="),
             )))(input.clone())
             {
-                let (i, rhs) = expect(
-                    parse_add,
-                    ErrorMessage::ExpectedToken("expression".to_string()),
-                )(i)?;
-                let rhs = rhs.unwrap_or(Expression::Error);
-                input = i;
-                exp = Expression::Binary(BinaryExpression {
-                    operator: Operator::new(&op).expect("Operator conversion failed"),
-                    lhs: Box::new(exp),
-                    rhs: Box::new(rhs),
-                });
+                (input, exp) = parse_rhs(i, exp, &op, parse_add)?;
             }
             Ok((input, exp))
         }
