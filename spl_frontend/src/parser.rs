@@ -4,12 +4,14 @@ use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric0, anychar, digit1, hex_digit1},
-    combinator::map,
+    combinator::{map, opt},
     multi::many0,
-    sequence::{delimited, pair, preceded},
+    sequence::{delimited, pair, preceded, terminated},
 };
 use std::{cell::RefCell, ops::Range, sync::Arc};
 
+#[cfg(test)]
+mod tests;
 mod util_parsers;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -18,6 +20,7 @@ pub struct ParseError(Range<usize>, ErrorMessage);
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ErrorMessage {
     MissingClosing(char),
+    MissingTrailingSemic,
     UnexpectedCharacters(String),
     ExpectedToken(String),
 }
@@ -26,6 +29,7 @@ impl ToString for ErrorMessage {
     fn to_string(&self) -> String {
         match self {
             Self::MissingClosing(c) => format!("missing closing `{}`", c),
+            Self::MissingTrailingSemic => "missing trailing `;`".to_string(),
             Self::UnexpectedCharacters(s) => format!("unexpected `{}`", s),
             Self::ExpectedToken(t) => format!("expected `{}`", t),
         }
@@ -139,7 +143,7 @@ impl Parser for Variable {
             name = Self::ArrayAccess(ArrayAccess {
                 array: Box::new(name),
                 index: Box::new(access),
-            })
+            });
         }
         Ok((input, name))
     }
@@ -283,217 +287,166 @@ impl Parser for TypeDeclaration {
             TypeExpression::parse,
             ErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
-        let (input, _) =
-            expect(symbols::semic, ErrorMessage::ExpectedToken(";".to_string()))(input)?;
+        let (input, _) = expect(symbols::semic, ErrorMessage::MissingTrailingSemic)(input)?;
         Ok((input, Self { name, type_expr }))
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use nom::combinator::all_consuming;
-
-    #[test]
-    fn expressions() {
-        type E = Expression;
-
-        fn int_lit(value: u32) -> Box<E> {
-            Box::new(E::IntLiteral(IntLiteral { value: Some(value) }))
-        }
-
-        let expr = "1";
-        assert_eq!(
-            all_consuming(E::parse)(expr.to_span()).unwrap().1,
-            E::IntLiteral(IntLiteral { value: Some(1) }),
-            "Expression: {}",
-            expr
-        );
-        let expr = "1 + 2";
-        assert_eq!(
-            all_consuming(E::parse)(expr.to_span()).unwrap().1,
-            E::Binary(BinaryExpression {
-                operator: Operator::Add,
-                lhs: int_lit(1),
-                rhs: int_lit(2),
-            }),
-            "Expression: {}",
-            expr
-        );
-        let expr = "1 + 2 * 3";
-        assert_eq!(
-            all_consuming(E::parse)(expr.to_span()).unwrap().1,
-            E::Binary(BinaryExpression {
-                operator: Operator::Add,
-                lhs: int_lit(1),
-                rhs: Box::new(E::Binary(BinaryExpression {
-                    operator: Operator::Mul,
-                    lhs: int_lit(2),
-                    rhs: int_lit(3),
-                })),
-            }),
-            "Expression: {}",
-            expr
-        );
-        let expr = "1 / 2 + 3";
-        assert_eq!(
-            all_consuming(E::parse)(expr.to_span()).unwrap().1,
-            E::Binary(BinaryExpression {
-                operator: Operator::Add,
-                lhs: Box::new(E::Binary(BinaryExpression {
-                    operator: Operator::Div,
-                    lhs: int_lit(1),
-                    rhs: int_lit(2)
-                })),
-                rhs: int_lit(3),
-            }),
-            "Expression: {}",
-            expr
-        );
-        let expr = "1 * 2 / 3 * 4";
-        assert_eq!(
-            all_consuming(E::parse)(expr.to_span()).unwrap().1,
-            E::Binary(BinaryExpression {
-                operator: Operator::Mul,
-                lhs: Box::new(E::Binary(BinaryExpression {
-                    operator: Operator::Div,
-                    lhs: Box::new(E::Binary(BinaryExpression {
-                        operator: Operator::Mul,
-                        lhs: int_lit(1),
-                        rhs: int_lit(2),
-                    })),
-                    rhs: int_lit(3),
-                })),
-                rhs: int_lit(4),
-            }),
-            "Expression: {}",
-            expr
-        );
-        let expr = "1 - 2 + 3 - 4";
-        assert_eq!(
-            all_consuming(E::parse)(expr.to_span()).unwrap().1,
-            E::Binary(BinaryExpression {
-                operator: Operator::Sub,
-                lhs: Box::new(E::Binary(BinaryExpression {
-                    operator: Operator::Add,
-                    lhs: Box::new(E::Binary(BinaryExpression {
-                        operator: Operator::Sub,
-                        lhs: int_lit(1),
-                        rhs: int_lit(2),
-                    })),
-                    rhs: int_lit(3),
-                })),
-                rhs: int_lit(4),
-            }),
-            "Expression: {}",
-            expr
-        );
-        let expr = "(1 + 2) * 3 = 4 + 5 * 6 / 6";
-        assert_eq!(
-            all_consuming(E::parse)(expr.to_span()).unwrap().1,
-            E::Binary(BinaryExpression {
-                operator: Operator::Equ,
-                lhs: Box::new(Expression::Binary(BinaryExpression {
-                    operator: Operator::Mul,
-                    lhs: Box::new(E::Binary(BinaryExpression {
-                        operator: Operator::Add,
-                        lhs: int_lit(1),
-                        rhs: int_lit(2)
-                    })),
-                    rhs: int_lit(3),
-                })),
-                rhs: Box::new(Expression::Binary(BinaryExpression {
-                    operator: Operator::Add,
-                    lhs: int_lit(4),
-                    rhs: Box::new(E::Binary(BinaryExpression {
-                        operator: Operator::Div,
-                        lhs: Box::new(E::Binary(BinaryExpression {
-                            operator: Operator::Mul,
-                            lhs: int_lit(5),
-                            rhs: int_lit(6)
-                        })),
-                        rhs: int_lit(6),
-                    }))
-                }))
-            }),
-            "Expression: {}",
-            expr
-        );
-        let expr = "a < b > c";
-        assert!(
-            all_consuming(E::parse)(expr.to_span()).is_err(),
-            "Expression: {}",
-            expr
-        );
+impl Parser for VariableDeclaration {
+    fn parse(input: Span) -> IResult<Self> {
+        let (input, _) = keywords::var(input)?;
+        let (input, name) = expect(
+            Identifier::parse,
+            ErrorMessage::ExpectedToken("identifier".to_string()),
+        )(input)?;
+        let (input, _) =
+            expect(symbols::colon, ErrorMessage::ExpectedToken(":".to_string()))(input)?;
+        let (input, type_expr) = expect(
+            TypeExpression::parse,
+            ErrorMessage::ExpectedToken("type expression".to_string()),
+        )(input)?;
+        let (input, _) = expect(symbols::semic, ErrorMessage::MissingTrailingSemic)(input)?;
+        Ok((input, Self { name, type_expr }))
     }
+}
 
-    #[test]
-    fn type_declarations() {
-        type TD = TypeDeclaration;
-        type TE = TypeExpression;
-
-        let dec = "type a = int;";
-        assert_eq!(
-            all_consuming(TD::parse)(dec.to_span()).unwrap().1,
-            TD {
-                name: Some(Identifier {
-                    value: "a".to_string()
-                }),
-                type_expr: Some(TE::Type(Identifier {
-                    value: "int".to_string()
-                }))
-            },
-            "Declaration: {}",
-            dec
-        );
-
-        let dec = "type a = array [2] of array [3] of int;";
-        assert_eq!(
-            all_consuming(TD::parse)(dec.to_span()).unwrap().1,
-            TD {
-                name: Some(Identifier {
-                    value: "a".to_string()
-                }),
-                type_expr: Some(TE::ArrayType(
-                    Some(2),
-                    Some(Box::new(TE::ArrayType(
-                        Some(3),
-                        Some(Box::new(TE::Type(Identifier {
-                            value: "int".to_string()
-                        })))
-                    )))
-                ))
-            },
-            "Declaration: {}",
-            dec
-        );
-
-        let dec = "type = array [] of array [] of;";
-        let (input, td) = all_consuming(TD::parse)(dec.to_span()).unwrap();
-        assert_eq!(
-            td,
-            TD {
-                name: None,
-                type_expr: Some(TE::ArrayType(
-                    None,
-                    Some(Box::new(TE::ArrayType(None, None)))
-                ))
-            },
-            "Declaration: {}",
-            dec
-        );
-        let vec: &[ParseError] = &input.extra.borrow();
-        assert_eq!(
-            vec,
-            vec![
-                ParseError(5..5, ErrorMessage::ExpectedToken("identifier".to_string())),
-                ParseError(14..14, ErrorMessage::ExpectedToken("integer".to_string())),
-                ParseError(26..26, ErrorMessage::ExpectedToken("integer".to_string())),
-                ParseError(
-                    30..30,
-                    ErrorMessage::ExpectedToken("type expression".to_string())
+impl Parser for ParameterDeclaration {
+    fn parse(input: Span) -> IResult<Self> {
+        let (input, (is_ref, name)) = alt((
+            map(
+                preceded(
+                    keywords::r#ref,
+                    expect(
+                        Identifier::parse,
+                        ErrorMessage::ExpectedToken("identifier".to_string()),
+                    ),
                 ),
-            ]
-        )
+                |ident| (true, ident),
+            ),
+            map(Identifier::parse, |ident| (false, Some(ident))),
+        ))(input)?;
+        let (input, _) =
+            expect(symbols::colon, ErrorMessage::ExpectedToken(":".to_string()))(input)?;
+        let (input, type_expr) = expect(
+            TypeExpression::parse,
+            ErrorMessage::ExpectedToken("type expression".to_string()),
+        )(input)?;
+        Ok((
+            input,
+            Self {
+                is_ref,
+                name,
+                type_expr,
+            },
+        ))
+    }
+}
+
+impl Parser for CallStatement {
+    fn parse(input: Span) -> IResult<Self> {
+        let (input, name) = terminated(Identifier::parse, symbols::lparen)(input)?;
+        let (input, mut arguments) = many0(terminated(Expression::parse, symbols::comma))(input)?;
+        let (input, opt_argument) = if arguments.is_empty() {
+            opt(Expression::parse)(input)?
+        } else {
+            expect(
+                Expression::parse,
+                ErrorMessage::ExpectedToken("expression".to_string()),
+            )(input)?
+        };
+        if let Some(argument) = opt_argument {
+            arguments.push(argument);
+        };
+        let (input, _) = expect(symbols::rparen, ErrorMessage::MissingClosing(')'))(input)?;
+        let (input, _) = expect(symbols::semic, ErrorMessage::MissingTrailingSemic)(input)?;
+        Ok((input, Self { name, arguments }))
+    }
+}
+
+impl Parser for Assignment {
+    fn parse(input: Span) -> IResult<Self> {
+        let (input, variable) = terminated(Variable::parse, symbols::assign)(input)?;
+        let (input, expr) = expect(
+            Expression::parse,
+            ErrorMessage::ExpectedToken("expression".to_string()),
+        )(input)?;
+        let (input, _) = expect(symbols::semic, ErrorMessage::MissingTrailingSemic)(input)?;
+        Ok((input, Self { variable, expr }))
+    }
+}
+
+impl Parser for IfStatement {
+    fn parse(input: Span) -> IResult<Self> {
+        let (input, _) = keywords::r#if(input)?;
+        let (input, _) = expect(
+            symbols::lparen,
+            ErrorMessage::ExpectedToken("(".to_string()),
+        )(input)?;
+        let (input, condition) = expect(
+            Expression::parse,
+            ErrorMessage::ExpectedToken("expression".to_string()),
+        )(input)?;
+        let (input, _) = expect(symbols::rparen, ErrorMessage::MissingClosing(')'))(input)?;
+        let (input, if_branch) = expect(
+            Statement::parse,
+            ErrorMessage::ExpectedToken("expression".to_string()),
+        )(input)?;
+        let (input, else_branch) = opt(Statement::parse)(input)?;
+        Ok((
+            input,
+            Self {
+                condition,
+                if_branch: if_branch.map(Box::new),
+                else_branch: else_branch.map(Box::new),
+            },
+        ))
+    }
+}
+
+impl Parser for WhileStatement {
+    fn parse(input: Span) -> IResult<Self> {
+        let (input, _) = keywords::r#while(input)?;
+        let (input, _) = expect(
+            symbols::lparen,
+            ErrorMessage::ExpectedToken("(".to_string()),
+        )(input)?;
+        let (input, condition) = expect(
+            Expression::parse,
+            ErrorMessage::ExpectedToken("expression".to_string()),
+        )(input)?;
+        let (input, _) = expect(symbols::rparen, ErrorMessage::MissingClosing(')'))(input)?;
+        let (input, stmt) = expect(
+            Statement::parse,
+            ErrorMessage::ExpectedToken("expression".to_string()),
+        )(input)?;
+        Ok((
+            input,
+            Self {
+                condition,
+                statements: stmt.map(Box::new),
+            },
+        ))
+    }
+}
+
+impl Parser for BlockStatement {
+    fn parse(input: Span) -> IResult<Self> {
+        let (input, _) = symbols::lcurly(input)?;
+        let (input, statements) = many0(Statement::parse)(input)?;
+        let (input, _) = expect(symbols::rcurly, ErrorMessage::MissingClosing('}'))(input)?;
+        Ok((input, Self { statements }))
+    }
+}
+
+impl Parser for Statement {
+    fn parse(input: Span) -> IResult<Self> {
+        alt((
+            map(symbols::semic, |_| Self::Empty),
+            map(Assignment::parse, Self::Assignment),
+            map(CallStatement::parse, Self::Call),
+            map(IfStatement::parse, Self::If),
+            map(WhileStatement::parse, Self::While),
+            map(BlockStatement::parse, Self::Block),
+        ))(input)
     }
 }

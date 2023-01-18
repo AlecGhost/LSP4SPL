@@ -3,9 +3,23 @@ pub struct IntLiteral {
     pub value: Option<u32>,
 }
 
+impl IntLiteral {
+    pub(crate) fn new(value: u32) -> Self {
+        Self { value: Some(value) }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Identifier {
     pub value: String,
+}
+
+impl Identifier {
+    pub(crate) fn new<T: ToString>(value: T) -> Self {
+        Self {
+            value: value.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -77,5 +91,58 @@ pub struct TypeDeclaration {
 pub enum TypeExpression {
     Type(Identifier),
     ArrayType(Option<u32>, Option<Box<TypeExpression>>),
-    Error
+    Error,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct VariableDeclaration {
+    pub name: Option<Identifier>,
+    pub type_expr: Option<TypeExpression>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParameterDeclaration {
+    pub is_ref: bool,
+    pub name: Option<Identifier>,
+    pub type_expr: Option<TypeExpression>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CallStatement {
+    pub name: Identifier,
+    pub arguments: Vec<Expression>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Assignment {
+    pub variable: Variable,
+    pub expr: Option<Expression>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct IfStatement {
+    pub condition: Option<Expression>,
+    pub if_branch: Option<Box<Statement>>,
+    pub else_branch: Option<Box<Statement>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct WhileStatement {
+    pub condition: Option<Expression>,
+    pub statements: Option<Box<Statement>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct BlockStatement {
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Statement {
+    Empty,
+    Assignment(Assignment),
+    Call(CallStatement),
+    If(IfStatement),
+    While(WhileStatement),
+    Block(BlockStatement),
 }
