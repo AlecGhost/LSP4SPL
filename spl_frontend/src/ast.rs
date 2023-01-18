@@ -66,3 +66,16 @@ pub enum Expression {
     Variable(Variable),
     Error,
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TypeDeclaration {
+    pub name: Option<Identifier>,
+    pub type_expr: Option<TypeExpression>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum TypeExpression {
+    Type(Identifier),
+    ArrayType(Option<u32>, Option<Box<TypeExpression>>),
+    Error
+}

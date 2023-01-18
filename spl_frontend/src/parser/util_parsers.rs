@@ -4,8 +4,7 @@ use nom::{
     error::ErrorKind,
     {InputTake, Offset},
 };
-
-use super::{DiagnosticsBroker, ErrorMessage, IResult, Span, ToRange};
+use super::{DiagnosticsBroker, ErrorMessage, IResult, Span};
 
 pub trait MutParser<'a, O> {
     fn parse(&mut self, input: Span<'a>) -> IResult<'a, O>;
@@ -113,9 +112,60 @@ where
     move |input| match parser.parse(input.clone()) {
         Ok((input, out)) => Ok((input, Some(out))),
         Err(_) => {
-            let err = super::ParseError(input.to_range(), error_msg.clone());
+            // TODO: look into error range reporting
+            let pos = input.location_offset();
+            let err = super::ParseError(pos..pos, error_msg.clone());
             input.extra.report_error(err);
             Ok((input, None))
         }
     }
+}
+
+macro_rules! simple_parsers {
+    ($($name: ident: $pattern: literal),*) => {
+        $(
+        pub(crate) fn $name(input: crate::parser::Span) -> nom::IResult<crate::parser::Span, crate::parser::Span> {
+            crate::parser::ws(nom::bytes::complete::tag($pattern))(input)
+        }
+        )*
+    };
+}
+
+pub(crate) mod keywords {
+    simple_parsers!(
+        array: "array",
+        r#else: "else",
+        r#if: "if",
+        of: "of",
+        proc: "proc",
+        r#ref: "ref",
+        r#type: "type",
+        var: "var",
+        r#while: "while"
+    );
+}
+
+pub(crate) mod symbols {
+    simple_parsers!(
+        lparen: "(",
+        rparen: ")",
+        lbracket: "[",
+        rbracket: "]",
+        lcurly: "{",
+        rcurly: "}",
+        eq: "=",
+        neq: "#",
+        lt: "<",
+        le: "<=",
+        gt: ">",
+        ge: ">=",
+        assign: ":=",
+        colon: ":",
+        comma: ",",
+        semic: ";",
+        plus: "+",
+        minus: "-",
+        times: "*",
+        divide: "/"
+    );
 }
