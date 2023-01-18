@@ -1,5 +1,31 @@
+use std::{cell::RefCell, rc::Rc};
 use super::*;
 use nom::combinator::all_consuming;
+
+type LocalBroker = Rc<RefCell<Vec<ParseError>>>;
+
+impl DiagnosticsBroker for LocalBroker {
+    fn report_error(&self, error: ParseError) {
+        self.borrow_mut().push(error);
+    }
+}
+
+trait ToSpan<B> {
+    fn to_span(&self) -> Span<B>;
+}
+
+impl ToSpan<LocalBroker> for &str {
+    fn to_span(&self) -> Span<LocalBroker> {
+        Span::new_extra(self, Rc::new(RefCell::new(Vec::new())))
+    }
+}
+
+impl ToSpan<LocalBroker> for String {
+    fn to_span(&self) -> Span<LocalBroker> {
+        Span::new_extra(self, Rc::new(RefCell::new(Vec::new())))
+    }
+}
+
 
 fn int_lit(value: u32) -> Box<Expression> {
     Box::new(Expression::IntLiteral(IntLiteral::new(value)))
@@ -314,7 +340,10 @@ fn if_statements() {
 #[test]
 fn acker() {
     let acker = std::fs::read_to_string("/Users/alex/dev/compiler/programs/acker.spl").unwrap();
-    let (input, program) = all_consuming(Program::parse)(acker.to_span()).unwrap();
+    let broker: LocalBroker = Rc::new(RefCell::new(Vec::new()));
+    let program = parse(acker.as_str(), Rc::clone(&broker));
+
+    // variables for use in assertion
     let int_type = Some(TypeExpression::Type(Identifier::new("int")));
     let a = Some(Identifier::new("a"));
     let i = Some(Identifier::new("i"));
@@ -338,6 +367,7 @@ fn acker() {
             arguments: vec![arg0, arg1, arg2],
         })
     }
+
     assert_eq!(
         program,
         Program {
@@ -532,6 +562,5 @@ fn acker() {
         "Acker: {}",
         acker
     );
-    let vec: &[ParseError] = &input.extra.borrow();
-    assert!(vec.is_empty(), "Acker: {}", acker);
+    assert!(broker.borrow().is_empty(), "Acker: {}", acker);
 }

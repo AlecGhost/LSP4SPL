@@ -7,20 +7,20 @@ use nom::{
     {InputTake, Offset},
 };
 
-pub trait MutParser<'a, O> {
-    fn parse(&mut self, input: Span<'a>) -> IResult<'a, O>;
+pub trait MutParser<'a, O, B: Clone> {
+    fn parse(&mut self, input: Span<'a, B>) -> IResult<'a, O, B>;
 }
 
-impl<'a, O, F> MutParser<'a, O> for F
+impl<'a, O, B: Clone, F> MutParser<'a, O, B> for F
 where
-    F: FnMut(Span<'a>) -> IResult<'a, O>,
+    F: FnMut(Span<'a, B>) -> IResult<'a, O, B>,
 {
-    fn parse(&mut self, input: Span<'a>) -> IResult<'a, O> {
+    fn parse(&mut self, input: Span<'a, B>) -> IResult<'a, O, B> {
         self(input)
     }
 }
 
-pub fn comment(input: Span) -> IResult<Span> {
+pub fn comment<B: Clone>(input: Span<B>) -> IResult<Span<B>, B> {
     let (input, _) = multispace0(input)?;
     let (input, _) = tag("//")(input)?;
     let (input, comment) = take_till(|c| c == '\n')(input)?;
@@ -30,11 +30,11 @@ pub fn comment(input: Span) -> IResult<Span> {
 // Source: https://github.com/Geal/nom/blob/main/doc/nom_recipes.md#whitespace
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
 /// trailing whitespace, returning the output of `inner`.
-pub fn ws<'a, O, F>(mut inner: F) -> impl FnMut(Span<'a>) -> IResult<O>
+pub fn ws<'a, O, B: Clone, F>(mut inner: F) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
 where
-    F: MutParser<'a, O>,
+    F: MutParser<'a, O, B>,
 {
-    move |input: Span| {
+    move |input: Span<B>| {
         let (input, _) = many0(comment)(input)?;
         let (input, _) = multispace0(input)?;
         let (input, result) = inner.parse(input)?;
@@ -44,11 +44,11 @@ where
     }
 }
 
-pub fn ws_enclosed<'a, O, F>(mut inner: F) -> impl FnMut(Span<'a>) -> IResult<O>
+pub fn ws_enclosed<'a, O, B: Clone, F>(mut inner: F) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
 where
-    F: MutParser<'a, O>,
+    F: MutParser<'a, O, B>,
 {
-    move |input: Span| {
+    move |input: Span<B>| {
         let (input, _) = multispace1(input)?;
         let (input, result) = inner.parse(input)?;
         let (input, _) = multispace1(input)?;
@@ -56,11 +56,11 @@ where
     }
 }
 
-pub fn ignore_until<'a, F>(mut f: F) -> impl FnMut(Span<'a>) -> IResult<Span<'a>>
+pub fn ignore_until<'a, B: Clone, F>(mut f: F) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
 where
-    F: MutParser<'a, Span<'a>>,
+    F: MutParser<'a, Span<'a, B>, B>,
 {
-    move |mut i: Span| {
+    move |mut i: Span<B>| {
         let original_input = i.clone();
         loop {
             match f.parse(i.clone()) {
@@ -81,11 +81,11 @@ where
     }
 }
 
-pub fn ignore_until1<'a, F>(mut f: F) -> impl FnMut(Span<'a>) -> IResult<Span<'a>>
+pub fn ignore_until1<'a, B: Clone, F>(mut f: F) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
 where
-    F: MutParser<'a, Span<'a>>,
+    F: MutParser<'a, Span<'a, B>, B>,
 {
-    move |mut i: Span| {
+    move |mut i: Span<B>| {
         if let Ok((i1, _)) = f.parse(i.clone()) {
             return Err(nom::Err::Error(nom::error::ParseError::from_error_kind(
                 i1,
@@ -112,14 +112,14 @@ where
     }
 }
 
-pub fn expect<'a, O, F>(
+pub fn expect<'a, O, B: Clone + DiagnosticsBroker, F>(
     mut parser: F,
     error_msg: ErrorMessage,
-) -> impl FnMut(Span<'a>) -> IResult<Option<O>>
+) -> impl FnMut(Span<'a, B>) -> IResult<Option<O>, B>
 where
-    F: MutParser<'a, O>,
+    F: MutParser<'a, O, B>,
 {
-    move |input| match parser.parse(input.clone()) {
+    move |input: Span<B>| match parser.parse(input.clone()) {
         Ok((input, out)) => Ok((input, Some(out))),
         Err(_) => {
             // TODO: look into error range reporting
@@ -134,7 +134,7 @@ where
 macro_rules! simple_parsers {
     ($($name: ident: $pattern: literal),*) => {
         $(
-        pub(crate) fn $name(input: crate::parser::Span) -> nom::IResult<crate::parser::Span, crate::parser::Span> {
+        pub(crate) fn $name<B: Clone>(input: crate::parser::Span<B>) -> nom::IResult<crate::parser::Span<B>, crate::parser::Span<B>> {
             crate::parser::ws(nom::bytes::complete::tag($pattern))(input)
         }
         )*
