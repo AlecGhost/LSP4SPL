@@ -1,10 +1,11 @@
+use super::{DiagnosticsBroker, ErrorMessage, IResult, Span};
 use nom::{
-    bytes::complete::take,
+    bytes::complete::{tag, take, take_till},
     character::complete::{multispace0, multispace1},
     error::ErrorKind,
+    multi::many0,
     {InputTake, Offset},
 };
-use super::{DiagnosticsBroker, ErrorMessage, IResult, Span};
 
 pub trait MutParser<'a, O> {
     fn parse(&mut self, input: Span<'a>) -> IResult<'a, O>;
@@ -19,6 +20,13 @@ where
     }
 }
 
+pub fn comment(input: Span) -> IResult<Span> {
+    let (input, _) = multispace0(input)?;
+    let (input, _) = tag("//")(input)?;
+    let (input, comment) = take_till(|c| c == '\n')(input)?;
+    Ok((input, comment))
+}
+
 // Source: https://github.com/Geal/nom/blob/main/doc/nom_recipes.md#whitespace
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
 /// trailing whitespace, returning the output of `inner`.
@@ -27,9 +35,11 @@ where
     F: MutParser<'a, O>,
 {
     move |input: Span| {
+        let (input, _) = many0(comment)(input)?;
         let (input, _) = multispace0(input)?;
         let (input, result) = inner.parse(input)?;
         let (input, _) = multispace0(input)?;
+        let (input, _) = many0(comment)(input)?;
         Ok((input, result))
     }
 }

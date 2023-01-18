@@ -22,19 +22,19 @@ impl Identifier {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArrayAccess {
     pub array: Box<Variable>,
     pub index: Box<Expression>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Variable {
     NamedVariable(Identifier),
     ArrayAccess(ArrayAccess),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operator {
     Add, // +
     Sub, // -
@@ -66,14 +66,14 @@ impl Operator {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BinaryExpression {
     pub operator: Operator,
     pub lhs: Box<Expression>,
     pub rhs: Box<Expression>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expression {
     Binary(BinaryExpression),
     IntLiteral(IntLiteral),
@@ -81,63 +81,63 @@ pub enum Expression {
     Error,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeDeclaration {
     pub name: Option<Identifier>,
     pub type_expr: Option<TypeExpression>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeExpression {
     Type(Identifier),
     ArrayType(Option<u32>, Option<Box<TypeExpression>>),
     Error,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableDeclaration {
     pub name: Option<Identifier>,
     pub type_expr: Option<TypeExpression>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParameterDeclaration {
     pub is_ref: bool,
     pub name: Option<Identifier>,
     pub type_expr: Option<TypeExpression>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallStatement {
     pub name: Identifier,
     pub arguments: Vec<Expression>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assignment {
     pub variable: Variable,
     pub expr: Option<Expression>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IfStatement {
     pub condition: Option<Expression>,
     pub if_branch: Option<Box<Statement>>,
     pub else_branch: Option<Box<Statement>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WhileStatement {
     pub condition: Option<Expression>,
-    pub statements: Option<Box<Statement>>,
+    pub statement: Option<Box<Statement>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockStatement {
     pub statements: Vec<Statement>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {
     Empty,
     Assignment(Assignment),
@@ -145,4 +145,18 @@ pub enum Statement {
     If(IfStatement),
     While(WhileStatement),
     Block(BlockStatement),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProcedureDeclaration {
+    pub name: Option<Identifier>,
+    pub parameters: Vec<ParameterDeclaration>,
+    pub variable_declarations: Vec<VariableDeclaration>,
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Program {
+    pub type_declarations: Vec<TypeDeclaration>,
+    pub procedure_declarations: Vec<ProcedureDeclaration>,
 }

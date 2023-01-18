@@ -310,3 +310,228 @@ fn if_statements() {
     let vec: &[ParseError] = &input.extra.borrow();
     assert!(vec.is_empty(), "IfStatement: {}", stmt);
 }
+
+#[test]
+fn acker() {
+    let acker = std::fs::read_to_string("/Users/alex/dev/compiler/programs/acker.spl").unwrap();
+    let (input, program) = all_consuming(Program::parse)(acker.to_span()).unwrap();
+    let int_type = Some(TypeExpression::Type(Identifier::new("int")));
+    let a = Some(Identifier::new("a"));
+    let i = Some(Identifier::new("i"));
+    let j = Some(Identifier::new("j"));
+    let k = Some(Identifier::new("k"));
+    let var_i = Box::new(Expression::Variable(Variable::NamedVariable(
+        Identifier::new("i"),
+    )));
+    let var_a = Box::new(Expression::Variable(Variable::NamedVariable(
+        Identifier::new("a"),
+    )));
+    let var_j = Box::new(Expression::Variable(Variable::NamedVariable(
+        Identifier::new("j"),
+    )));
+    let var_k = Box::new(Expression::Variable(Variable::NamedVariable(
+        Identifier::new("k"),
+    )));
+    fn call_ackermann(arg0: Expression, arg1: Expression, arg2: Expression) -> Statement {
+        Statement::Call(CallStatement {
+            name: Identifier::new("ackermann"),
+            arguments: vec![arg0, arg1, arg2],
+        })
+    }
+    assert_eq!(
+        program,
+        Program {
+            type_declarations: Vec::new(),
+            procedure_declarations: vec![
+                ProcedureDeclaration {
+                    name: Some(Identifier::new("ackermann")),
+                    parameters: vec![
+                        ParameterDeclaration {
+                            is_ref: false,
+                            name: i.clone(),
+                            type_expr: int_type.clone()
+                        },
+                        ParameterDeclaration {
+                            is_ref: false,
+                            name: j.clone(),
+                            type_expr: int_type.clone()
+                        },
+                        ParameterDeclaration {
+                            is_ref: true,
+                            name: k.clone(),
+                            type_expr: int_type.clone()
+                        },
+                    ],
+                    variable_declarations: vec![VariableDeclaration {
+                        name: a.clone(),
+                        type_expr: int_type.clone(),
+                    }],
+                    statements: vec![Statement::If(IfStatement {
+                        condition: Some(Expression::Binary(BinaryExpression {
+                            operator: Operator::Equ,
+                            lhs: var_i.clone(),
+                            rhs: int_lit(0)
+                        })),
+                        if_branch: Some(Box::new(Statement::Block(BlockStatement {
+                            statements: vec![Statement::Assignment(Assignment {
+                                variable: Variable::NamedVariable(Identifier::new("k")),
+                                expr: Some(Expression::Binary(BinaryExpression {
+                                    operator: Operator::Add,
+                                    lhs: var_j.clone(),
+                                    rhs: int_lit(1)
+                                }))
+                            })]
+                        }))),
+                        else_branch: Some(Box::new(Statement::Block(BlockStatement {
+                            statements: vec![Statement::If(IfStatement {
+                                condition: Some(Expression::Binary(BinaryExpression {
+                                    operator: Operator::Equ,
+                                    lhs: var_j.clone(),
+                                    rhs: int_lit(0)
+                                })),
+                                if_branch: Some(Box::new(Statement::Block(BlockStatement {
+                                    statements: vec![call_ackermann(
+                                        Expression::Binary(BinaryExpression {
+                                            operator: Operator::Sub,
+                                            lhs: var_i.clone(),
+                                            rhs: int_lit(1)
+                                        }),
+                                        Expression::IntLiteral(IntLiteral::new(1)),
+                                        *var_k.clone()
+                                    )]
+                                }))),
+                                else_branch: Some(Box::new(Statement::Block(BlockStatement {
+                                    statements: vec![
+                                        call_ackermann(
+                                            *var_i.clone(),
+                                            Expression::Binary(BinaryExpression {
+                                                operator: Operator::Sub,
+                                                lhs: var_j.clone(),
+                                                rhs: int_lit(1)
+                                            }),
+                                            *var_a.clone()
+                                        ),
+                                        call_ackermann(
+                                            Expression::Binary(BinaryExpression {
+                                                operator: Operator::Sub,
+                                                lhs: var_i.clone(),
+                                                rhs: int_lit(1)
+                                            }),
+                                            *var_a.clone(),
+                                            *var_k.clone()
+                                        )
+                                    ]
+                                })))
+                            })]
+                        })))
+                    })],
+                },
+                ProcedureDeclaration {
+                    name: Some(Identifier::new("main")),
+                    parameters: Vec::new(),
+                    variable_declarations: vec![
+                        VariableDeclaration {
+                            name: i.clone(),
+                            type_expr: int_type.clone(),
+                        },
+                        VariableDeclaration {
+                            name: j.clone(),
+                            type_expr: int_type.clone(),
+                        },
+                        VariableDeclaration {
+                            name: k.clone(),
+                            type_expr: int_type.clone(),
+                        }
+                    ],
+                    statements: vec![
+                        Statement::Assignment(Assignment {
+                            variable: Variable::NamedVariable(Identifier::new("i")),
+                            expr: Some(*int_lit(0).clone())
+                        }),
+                        Statement::While(WhileStatement {
+                            condition: Some(Expression::Binary(BinaryExpression {
+                                operator: Operator::Lse,
+                                lhs: var_i.clone(),
+                                rhs: int_lit(3)
+                            })),
+                            statement: Some(Box::new(Statement::Block(BlockStatement {
+                                statements: vec![
+                                    Statement::Assignment(Assignment {
+                                        variable: Variable::NamedVariable(Identifier::new("j")),
+                                        expr: Some(*int_lit(0))
+                                    }),
+                                    Statement::While(WhileStatement {
+                                        condition: Some(Expression::Binary(BinaryExpression {
+                                            operator: Operator::Lse,
+                                            lhs: var_j.clone(),
+                                            rhs: int_lit(6)
+                                        })),
+                                        statement: Some(Box::new(Statement::Block(
+                                            BlockStatement {
+                                                statements: vec![
+                                                    call_ackermann(
+                                                        *var_i.clone(),
+                                                        *var_j.clone(),
+                                                        *var_k.clone()
+                                                    ),
+                                                    Statement::Call(CallStatement {
+                                                        name: Identifier::new("printi"),
+                                                        arguments: vec![*var_i.clone()]
+                                                    }),
+                                                    Statement::Call(CallStatement {
+                                                        name: Identifier::new("printc"),
+                                                        arguments: vec![*int_lit(32)]
+                                                    }),
+                                                    Statement::Call(CallStatement {
+                                                        name: Identifier::new("printi"),
+                                                        arguments: vec![*var_j.clone()]
+                                                    }),
+                                                    Statement::Call(CallStatement {
+                                                        name: Identifier::new("printc"),
+                                                        arguments: vec![*int_lit(32)]
+                                                    }),
+                                                    Statement::Call(CallStatement {
+                                                        name: Identifier::new("printi"),
+                                                        arguments: vec![*var_k.clone()]
+                                                    }),
+                                                    Statement::Call(CallStatement {
+                                                        name: Identifier::new("printc"),
+                                                        arguments: vec![*int_lit(10)]
+                                                    }),
+                                                    Statement::Assignment(Assignment {
+                                                        variable: Variable::NamedVariable(
+                                                            Identifier::new("j")
+                                                        ),
+                                                        expr: Some(Expression::Binary(
+                                                            BinaryExpression {
+                                                                operator: Operator::Add,
+                                                                lhs: var_j.clone(),
+                                                                rhs: int_lit(1)
+                                                            }
+                                                        ))
+                                                    })
+                                                ]
+                                            }
+                                        )))
+                                    }),
+                                    Statement::Assignment(Assignment {
+                                        variable: Variable::NamedVariable(Identifier::new("i")),
+                                        expr: Some(Expression::Binary(BinaryExpression {
+                                            operator: Operator::Add,
+                                            lhs: var_i.clone(),
+                                            rhs: int_lit(1)
+                                        }))
+                                    })
+                                ]
+                            })))
+                        })
+                    ]
+                },
+            ],
+        },
+        "Acker: {}",
+        acker
+    );
+    let vec: &[ParseError] = &input.extra.borrow();
+    assert!(vec.is_empty(), "Acker: {}", acker);
+}

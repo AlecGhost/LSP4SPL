@@ -1,10 +1,10 @@
-use self::util_parsers::{expect, keywords, ws};
+use self::util_parsers::{expect, ignore_until1, keywords, ws};
 use crate::{ast::*, parser::util_parsers::symbols};
 use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric0, anychar, digit1, hex_digit1},
-    combinator::{map, opt},
+    combinator::{eof, map, opt, peek},
     multi::many0,
     sequence::{delimited, pair, preceded, terminated},
 };
@@ -19,6 +19,7 @@ pub struct ParseError(Range<usize>, ErrorMessage);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ErrorMessage {
+    MissingOpening(char),
     MissingClosing(char),
     MissingTrailingSemic,
     UnexpectedCharacters(String),
@@ -28,6 +29,7 @@ pub enum ErrorMessage {
 impl ToString for ErrorMessage {
     fn to_string(&self) -> String {
         match self {
+            Self::MissingOpening(c) => format!("missing opening `{}`", c),
             Self::MissingClosing(c) => format!("missing closing `{}`", c),
             Self::MissingTrailingSemic => "missing trailing `;`".to_string(),
             Self::UnexpectedCharacters(s) => format!("unexpected `{}`", s),
@@ -64,6 +66,12 @@ trait ToSpan {
 }
 
 impl ToSpan for &str {
+    fn to_span(&self) -> Span {
+        Span::new_extra(self, Arc::new(RefCell::new(Vec::new())))
+    }
+}
+
+impl ToSpan for String {
     fn to_span(&self) -> Span {
         Span::new_extra(self, Arc::new(RefCell::new(Vec::new())))
     }
@@ -158,12 +166,12 @@ impl Parser for Expression {
                 map(Variable::parse, Expression::Variable),
                 map(
                     delimited(
-                        tag("("),
+                        symbols::lparen,
                         expect(
                             Expression::parse,
                             ErrorMessage::ExpectedToken("expression".to_string()),
                         ),
-                        expect(tag(")"), ErrorMessage::MissingClosing(')')),
+                        expect(symbols::rparen, ErrorMessage::MissingClosing(')')),
                     ),
                     |opt| opt.unwrap_or(Expression::Error),
                 ),
@@ -177,7 +185,7 @@ impl Parser for Expression {
                 map(preceded(tag("-"), parse_unary), |exp| {
                     Expression::Binary(BinaryExpression {
                         operator: Operator::Sub,
-                        lhs: Box::new(Expression::IntLiteral(IntLiteral { value: Some(0) })),
+                        lhs: Box::new(Expression::IntLiteral(IntLiteral::new(0))),
                         rhs: Box::new(exp),
                     })
                 }),
@@ -378,10 +386,7 @@ impl Parser for Assignment {
 impl Parser for IfStatement {
     fn parse(input: Span) -> IResult<Self> {
         let (input, _) = keywords::r#if(input)?;
-        let (input, _) = expect(
-            symbols::lparen,
-            ErrorMessage::ExpectedToken("(".to_string()),
-        )(input)?;
+        let (input, _) = expect(symbols::lparen, ErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
             ErrorMessage::ExpectedToken("expression".to_string()),
@@ -391,13 +396,19 @@ impl Parser for IfStatement {
             Statement::parse,
             ErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
-        let (input, else_branch) = opt(Statement::parse)(input)?;
+        let (input, else_branch) = opt(preceded(
+            keywords::r#else,
+            expect(
+                Statement::parse,
+                ErrorMessage::ExpectedToken("statement".to_string()),
+            ),
+        ))(input)?;
         Ok((
             input,
             Self {
                 condition,
                 if_branch: if_branch.map(Box::new),
-                else_branch: else_branch.map(Box::new),
+                else_branch: else_branch.flatten().map(Box::new),
             },
         ))
     }
@@ -406,10 +417,7 @@ impl Parser for IfStatement {
 impl Parser for WhileStatement {
     fn parse(input: Span) -> IResult<Self> {
         let (input, _) = keywords::r#while(input)?;
-        let (input, _) = expect(
-            symbols::lparen,
-            ErrorMessage::ExpectedToken("(".to_string()),
-        )(input)?;
+        let (input, _) = expect(symbols::lparen, ErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
             ErrorMessage::ExpectedToken("expression".to_string()),
@@ -423,7 +431,7 @@ impl Parser for WhileStatement {
             input,
             Self {
                 condition,
-                statements: stmt.map(Box::new),
+                statement: stmt.map(Box::new),
             },
         ))
     }
@@ -442,11 +450,79 @@ impl Parser for Statement {
     fn parse(input: Span) -> IResult<Self> {
         alt((
             map(symbols::semic, |_| Self::Empty),
-            map(Assignment::parse, Self::Assignment),
-            map(CallStatement::parse, Self::Call),
             map(IfStatement::parse, Self::If),
             map(WhileStatement::parse, Self::While),
             map(BlockStatement::parse, Self::Block),
+            map(Assignment::parse, Self::Assignment),
+            map(CallStatement::parse, Self::Call),
         ))(input)
+    }
+}
+
+impl Parser for ProcedureDeclaration {
+    fn parse(input: Span) -> IResult<Self> {
+        let (input, _) = keywords::proc(input)?;
+        let (input, name) = expect(
+            Identifier::parse,
+            ErrorMessage::ExpectedToken("identifier".to_string()),
+        )(input)?;
+        let (input, _) = expect(symbols::lparen, ErrorMessage::MissingOpening('('))(input)?;
+        let (input, mut parameters) =
+            many0(terminated(ParameterDeclaration::parse, symbols::comma))(input)?;
+        let (input, opt_parameter) = if parameters.is_empty() {
+            opt(ParameterDeclaration::parse)(input)?
+        } else {
+            expect(
+                ParameterDeclaration::parse,
+                ErrorMessage::ExpectedToken("parameter declaration".to_string()),
+            )(input)?
+        };
+        if let Some(parameter) = opt_parameter {
+            parameters.push(parameter);
+        };
+        let (input, _) = expect(symbols::rparen, ErrorMessage::MissingClosing(')'))(input)?;
+        let (input, _) = expect(symbols::lcurly, ErrorMessage::MissingOpening('{'))(input)?;
+        let (input, variable_declarations) = many0(VariableDeclaration::parse)(input)?;
+        let (input, statements) = many0(Statement::parse)(input)?;
+        let (input, _) = expect(symbols::rcurly, ErrorMessage::MissingClosing('}'))(input)?;
+        Ok((
+            input,
+            Self {
+                name,
+                parameters,
+                variable_declarations,
+                statements,
+            },
+        ))
+    }
+}
+
+impl Parser for Program {
+    fn parse(input: Span) -> IResult<Self> {
+        let mut type_declarations = Vec::new();
+        let mut procedure_declarations = Vec::new();
+        let (input, _) = many0(alt((
+            map(TypeDeclaration::parse, |td| type_declarations.push(td)),
+            map(ProcedureDeclaration::parse, |pd| {
+                procedure_declarations.push(pd);
+            }),
+            map(
+                ignore_until1(peek(alt((keywords::r#type, keywords::proc, eof)))),
+                |span| {
+                    let err = ParseError(
+                        span.to_range(),
+                        ErrorMessage::UnexpectedCharacters(span.fragment().to_string()),
+                    );
+                    span.extra.report_error(err);
+                },
+            ),
+        )))(input)?;
+        Ok((
+            input,
+            Self {
+                type_declarations,
+                procedure_declarations,
+            },
+        ))
     }
 }
