@@ -2,11 +2,22 @@ use std::{cell::RefCell, rc::Rc};
 use super::*;
 use nom::combinator::all_consuming;
 
-type LocalBroker = Rc<RefCell<Vec<ParseError>>>;
+#[derive(Clone, Debug)]
+struct LocalBroker(Rc<RefCell<Vec<ParseError>>>);
+
+impl LocalBroker {
+    fn new() -> Self {
+       Self(Rc::new(RefCell::new(Vec::new()))) 
+    }
+
+    fn errors<'a>(&self) -> Vec<ParseError> {
+        self.0.borrow().clone()
+    }
+}
 
 impl DiagnosticsBroker for LocalBroker {
     fn report_error(&self, error: ParseError) {
-        self.borrow_mut().push(error);
+        self.0.borrow_mut().push(error);
     }
 }
 
@@ -16,13 +27,13 @@ trait ToSpan<B> {
 
 impl ToSpan<LocalBroker> for &str {
     fn to_span(&self) -> Span<LocalBroker> {
-        Span::new_extra(self, Rc::new(RefCell::new(Vec::new())))
+        Span::new_extra(self, LocalBroker::new())
     }
 }
 
 impl ToSpan<LocalBroker> for String {
     fn to_span(&self) -> Span<LocalBroker> {
-        Span::new_extra(self, Rc::new(RefCell::new(Vec::new())))
+        Span::new_extra(self, LocalBroker::new())
     }
 }
 
@@ -215,9 +226,8 @@ fn type_declarations() {
         "Declaration: {}",
         dec
     );
-    let vec: &[ParseError] = &input.extra.borrow();
     assert_eq!(
-        vec,
+        input.extra.errors(),
         vec![
             ParseError(5..5, ErrorMessage::ExpectedToken("identifier".to_string())),
             ParseError(14..14, ErrorMessage::ExpectedToken("integer".to_string())),
@@ -245,8 +255,7 @@ fn assignments() {
         "Assignment: {}",
         asgn
     );
-    let vec: &[ParseError] = &input.extra.borrow();
-    assert!(vec.is_empty(), "Assignment: {}", asgn);
+    assert!(input.extra.errors().is_empty(), "Assignment: {}", asgn);
 
     let asgn = "a = 1;";
     assert!(
@@ -269,8 +278,7 @@ fn call_statements() {
         "CallStatement: {}",
         stmt
     );
-    let vec: &[ParseError] = &input.extra.borrow();
-    assert!(vec.is_empty(), "CallStatement: {}", stmt);
+    assert!(input.extra.errors().is_empty(), "CallStatement: {}", stmt);
 
     let stmt = "a(1, 2, 3);";
     let (input, cs) = all_consuming(CallStatement::parse)(stmt.to_span()).unwrap();
@@ -287,8 +295,7 @@ fn call_statements() {
         "CallStatement: {}",
         stmt
     );
-    let vec: &[ParseError] = &input.extra.borrow();
-    assert!(vec.is_empty(), "CallStatement: {}", stmt);
+    assert!(input.extra.errors().is_empty(), "CallStatement: {}", stmt);
 
     let stmt = "a(1,)";
     let (input, cs) = all_consuming(CallStatement::parse)(stmt.to_span()).unwrap();
@@ -301,9 +308,8 @@ fn call_statements() {
         "CallStatement: {}",
         stmt
     );
-    let vec: &[ParseError] = &input.extra.borrow();
     assert_eq!(
-        vec,
+        input.extra.errors(),
         vec![
             ParseError(4..4, ErrorMessage::ExpectedToken("expression".to_string())),
             ParseError(5..5, ErrorMessage::MissingTrailingSemic),
@@ -333,15 +339,15 @@ fn if_statements() {
         "IfStatement: {}",
         stmt
     );
-    let vec: &[ParseError] = &input.extra.borrow();
-    assert!(vec.is_empty(), "IfStatement: {}", stmt);
+    assert!(input.extra.errors().is_empty(), "IfStatement: {}", stmt);
 }
 
 #[test]
 fn acker() {
     let acker = std::fs::read_to_string("/Users/alex/dev/compiler/programs/acker.spl").unwrap();
-    let broker: LocalBroker = Rc::new(RefCell::new(Vec::new()));
-    let program = parse(acker.as_str(), Rc::clone(&broker));
+    let errors = Rc::new(RefCell::new(Vec::new()));
+    let broker = LocalBroker(Rc::clone(&errors));
+    let program = parse(acker.as_str(), broker);
 
     // variables for use in assertion
     let int_type = Some(TypeExpression::Type(Identifier::new("int")));
@@ -562,5 +568,5 @@ fn acker() {
         "Acker: {}",
         acker
     );
-    assert!(broker.borrow().is_empty(), "Acker: {}", acker);
+    assert!(errors.borrow().is_empty(), "Acker: {}", acker);
 }

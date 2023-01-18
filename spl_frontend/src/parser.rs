@@ -14,7 +14,7 @@ use util_parsers::{expect, ignore_until1, keywords, ws};
 mod tests;
 mod util_parsers;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParseError(Range<usize>, ErrorMessage);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
