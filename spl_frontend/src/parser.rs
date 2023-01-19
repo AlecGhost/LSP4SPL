@@ -1,4 +1,4 @@
-use crate::{ast::*, parser::util_parsers::symbols};
+use crate::{ast::*, DiagnosticsBroker};
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -8,7 +8,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated},
 };
 use std::ops::Range;
-use util_parsers::{expect, ignore_until1, keywords, ws};
+use util_parsers::{expect, ignore_until1, keywords, symbols, ws};
 
 #[cfg(test)]
 mod tests;
@@ -38,11 +38,7 @@ impl ToString for ErrorMessage {
     }
 }
 
-pub trait DiagnosticsBroker<E> {
-    fn report_error(&self, error: E);
-}
-
-pub trait ParseErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError> {}
+trait ParseErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError> {}
 
 impl<T> ParseErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError> {}
 
@@ -66,7 +62,7 @@ type IResult<'a, T, B> = nom::IResult<Span<'a, B>, T>;
 
 pub fn parse<B>(src: &str, broker: B) -> Program
 where
-    B: ParseErrorBroker,
+    B: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError>,
 {
     let input = Span::new_extra(src, broker);
     let (_, program) = all_consuming(Program::parse)(input).expect("Parser cannot fail");

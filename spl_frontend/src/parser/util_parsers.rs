@@ -7,7 +7,7 @@ use nom::{
     {InputTake, Offset},
 };
 
-pub trait MutParser<'a, O, B> {
+pub(super) trait MutParser<'a, O, B> {
     fn parse(&mut self, input: Span<'a, B>) -> IResult<'a, O, B>;
 }
 
@@ -20,7 +20,7 @@ where
     }
 }
 
-pub fn comment<B: Clone>(input: Span<B>) -> IResult<Span<B>, B> {
+pub(super) fn comment<B: Clone>(input: Span<B>) -> IResult<Span<B>, B> {
     let (input, _) = multispace0(input)?;
     let (input, _) = tag("//")(input)?;
     let (input, comment) = take_till(|c| c == '\n')(input)?;
@@ -30,7 +30,7 @@ pub fn comment<B: Clone>(input: Span<B>) -> IResult<Span<B>, B> {
 // Source: https://github.com/Geal/nom/blob/main/doc/nom_recipes.md#whitespace
 /// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
 /// trailing whitespace, returning the output of `inner`.
-pub fn ws<'a, O, B: Clone, F>(mut inner: F) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
+pub(super) fn ws<'a, O, B: Clone, F>(mut inner: F) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
 where
     F: MutParser<'a, O, B>,
 {
@@ -44,7 +44,7 @@ where
     }
 }
 
-pub fn ws_enclosed<'a, O, B: Clone, F>(mut inner: F) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
+pub(super) fn ws_enclosed<'a, O, B: Clone, F>(mut inner: F) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
 where
     F: MutParser<'a, O, B>,
 {
@@ -56,7 +56,7 @@ where
     }
 }
 
-pub fn ignore_until<'a, B: Clone, F>(mut f: F) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
+pub(super) fn ignore_until<'a, B: Clone, F>(mut f: F) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
 where
     F: MutParser<'a, Span<'a, B>, B>,
 {
@@ -81,7 +81,7 @@ where
     }
 }
 
-pub fn ignore_until1<'a, B: Clone, F>(
+pub(super) fn ignore_until1<'a, B: Clone, F>(
     mut f: F,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
 where
@@ -114,7 +114,7 @@ where
     }
 }
 
-pub fn expect<'a, O, B: ParseErrorBroker, F>(
+pub(super) fn expect<'a, O, B: ParseErrorBroker, F>(
     mut parser: F,
     error_msg: ErrorMessage,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Option<O>, B>
