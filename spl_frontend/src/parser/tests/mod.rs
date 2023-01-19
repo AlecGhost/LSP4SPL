@@ -15,7 +15,7 @@ impl LocalBroker {
     }
 }
 
-impl DiagnosticsBroker for LocalBroker {
+impl DiagnosticsBroker<ParseError> for LocalBroker {
     fn report_error(&self, error: ParseError) {
         self.0.borrow_mut().push(error);
     }
@@ -345,9 +345,7 @@ fn if_statements() {
 #[test]
 fn acker() {
     let acker = std::fs::read_to_string("/Users/alex/dev/compiler/programs/acker.spl").unwrap();
-    let errors = Rc::new(RefCell::new(Vec::new()));
-    let broker = LocalBroker(Rc::clone(&errors));
-    let program = parse(acker.as_str(), broker);
+    let (input, program) = all_consuming(Program::parse)(acker.to_span()).unwrap();
 
     // variables for use in assertion
     let int_type = Some(TypeExpression::Type(Identifier::new("int")));
@@ -568,5 +566,5 @@ fn acker() {
         "Acker: {}",
         acker
     );
-    assert!(errors.borrow().is_empty(), "Acker: {}", acker);
+    assert!(input.extra.errors().is_empty(), "Acker: {}", acker);
 }

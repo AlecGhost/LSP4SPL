@@ -1,4 +1,4 @@
-use super::{DiagnosticsBroker, ErrorMessage, IResult, Span};
+use super::{ErrorMessage, IResult, ParseErrorBroker, Span};
 use nom::{
     bytes::complete::{tag, take, take_till},
     character::complete::{multispace0, multispace1},
@@ -7,11 +7,11 @@ use nom::{
     {InputTake, Offset},
 };
 
-pub trait MutParser<'a, O, B: Clone> {
+pub trait MutParser<'a, O, B> {
     fn parse(&mut self, input: Span<'a, B>) -> IResult<'a, O, B>;
 }
 
-impl<'a, O, B: Clone, F> MutParser<'a, O, B> for F
+impl<'a, O, B, F> MutParser<'a, O, B> for F
 where
     F: FnMut(Span<'a, B>) -> IResult<'a, O, B>,
 {
@@ -81,7 +81,9 @@ where
     }
 }
 
-pub fn ignore_until1<'a, B: Clone, F>(mut f: F) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
+pub fn ignore_until1<'a, B: Clone, F>(
+    mut f: F,
+) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
 where
     F: MutParser<'a, Span<'a, B>, B>,
 {
@@ -112,7 +114,7 @@ where
     }
 }
 
-pub fn expect<'a, O, B: Clone + DiagnosticsBroker, F>(
+pub fn expect<'a, O, B: ParseErrorBroker, F>(
     mut parser: F,
     error_msg: ErrorMessage,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Option<O>, B>
