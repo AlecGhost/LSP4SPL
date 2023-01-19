@@ -1,13 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
 use super::*;
 use nom::combinator::all_consuming;
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone, Debug)]
 struct LocalBroker(Rc<RefCell<Vec<ParseError>>>);
 
 impl LocalBroker {
     fn new() -> Self {
-       Self(Rc::new(RefCell::new(Vec::new()))) 
+        Self(Rc::new(RefCell::new(Vec::new())))
     }
 
     fn errors<'a>(&self) -> Vec<ParseError> {
@@ -37,6 +37,14 @@ impl ToSpan<LocalBroker> for String {
     }
 }
 
+impl Identifier {
+    fn new<T: ToString>(value: T, range: Range<usize>) -> Self {
+        Self {
+            value: value.to_string(),
+            range,
+        }
+    }
+}
 
 fn int_lit(value: u32) -> Box<Expression> {
     Box::new(Expression::IntLiteral(IntLiteral::new(value)))
@@ -180,12 +188,8 @@ fn type_declarations() {
     assert_eq!(
         all_consuming(TD::parse)(dec.to_span()).unwrap().1,
         TD {
-            name: Some(Identifier {
-                value: "a".to_string()
-            }),
-            type_expr: Some(TE::Type(Identifier {
-                value: "int".to_string()
-            }))
+            name: Some(Identifier::new("a", 5..6)),
+            type_expr: Some(TE::Type(Identifier::new("int", 9..12)))
         },
         "Declaration: {}",
         dec
@@ -195,16 +199,12 @@ fn type_declarations() {
     assert_eq!(
         all_consuming(TD::parse)(dec.to_span()).unwrap().1,
         TD {
-            name: Some(Identifier {
-                value: "a".to_string()
-            }),
+            name: Some(Identifier::new("a", 5..6)),
             type_expr: Some(TE::ArrayType(
                 Some(2),
                 Some(Box::new(TE::ArrayType(
                     Some(3),
-                    Some(Box::new(TE::Type(Identifier {
-                        value: "int".to_string()
-                    })))
+                    Some(Box::new(TE::Type(Identifier::new("int", 35..38))))
                 )))
             ))
         },
@@ -249,7 +249,7 @@ fn assignments() {
     assert_eq!(
         assignment,
         Assignment {
-            variable: Variable::NamedVariable(Identifier::new("a")),
+            variable: Variable::NamedVariable(Identifier::new("a", 0..1)),
             expr: Some(Expression::IntLiteral(IntLiteral::new(1)))
         },
         "Assignment: {}",
@@ -272,7 +272,7 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a"),
+            name: Identifier::new("a", 0..1),
             arguments: Vec::new(),
         },
         "CallStatement: {}",
@@ -285,7 +285,7 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a"),
+            name: Identifier::new("a", 0..1),
             arguments: vec![
                 Expression::IntLiteral(IntLiteral::new(1)),
                 Expression::IntLiteral(IntLiteral::new(2)),
@@ -302,7 +302,7 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a"),
+            name: Identifier::new("a", 0..1),
             arguments: vec![Expression::IntLiteral(IntLiteral::new(1)),],
         },
         "CallStatement: {}",
@@ -348,26 +348,39 @@ fn acker() {
     let (input, program) = all_consuming(Program::parse)(acker.to_span()).unwrap();
 
     // variables for use in assertion
-    let int_type = Some(TypeExpression::Type(Identifier::new("int")));
-    let a = Some(Identifier::new("a"));
-    let i = Some(Identifier::new("i"));
-    let j = Some(Identifier::new("j"));
-    let k = Some(Identifier::new("k"));
-    let var_i = Box::new(Expression::Variable(Variable::NamedVariable(
-        Identifier::new("i"),
-    )));
-    let var_a = Box::new(Expression::Variable(Variable::NamedVariable(
-        Identifier::new("a"),
-    )));
-    let var_j = Box::new(Expression::Variable(Variable::NamedVariable(
-        Identifier::new("j"),
-    )));
-    let var_k = Box::new(Expression::Variable(Variable::NamedVariable(
-        Identifier::new("k"),
-    )));
-    fn call_ackermann(arg0: Expression, arg1: Expression, arg2: Expression) -> Statement {
+    let int_type = |range| Some(TypeExpression::Type(Identifier::new("int", range)));
+    let a = |range| Some(Identifier::new("a", range));
+    let i = |range| Some(Identifier::new("i", range));
+    let j = |range| Some(Identifier::new("j", range));
+    let k = |range| Some(Identifier::new("k", range));
+    let var_i = |range| {
+        Box::new(Expression::Variable(Variable::NamedVariable(
+            Identifier::new("i", range),
+        )))
+    };
+    let var_a = |range| {
+        Box::new(Expression::Variable(Variable::NamedVariable(
+            Identifier::new("a", range),
+        )))
+    };
+    let var_j = |range| {
+        Box::new(Expression::Variable(Variable::NamedVariable(
+            Identifier::new("j", range),
+        )))
+    };
+    let var_k = |range| {
+        Box::new(Expression::Variable(Variable::NamedVariable(
+            Identifier::new("k", range),
+        )))
+    };
+    fn call_ackermann(
+        range: Range<usize>,
+        arg0: Expression,
+        arg1: Expression,
+        arg2: Expression,
+    ) -> Statement {
         Statement::Call(CallStatement {
-            name: Identifier::new("ackermann"),
+            name: Identifier::new("ackermann", range),
             arguments: vec![arg0, arg1, arg2],
         })
     }
@@ -378,40 +391,40 @@ fn acker() {
             type_declarations: Vec::new(),
             procedure_declarations: vec![
                 ProcedureDeclaration {
-                    name: Some(Identifier::new("ackermann")),
+                    name: Some(Identifier::new("ackermann", 50..59)),
                     parameters: vec![
                         ParameterDeclaration {
                             is_ref: false,
-                            name: i.clone(),
-                            type_expr: int_type.clone()
+                            name: i(60..61),
+                            type_expr: int_type(63..66)
                         },
                         ParameterDeclaration {
                             is_ref: false,
-                            name: j.clone(),
-                            type_expr: int_type.clone()
+                            name: j(68..69),
+                            type_expr: int_type(71..74)
                         },
                         ParameterDeclaration {
                             is_ref: true,
-                            name: k.clone(),
-                            type_expr: int_type.clone()
+                            name: k(80..81),
+                            type_expr: int_type(83..86)
                         },
                     ],
                     variable_declarations: vec![VariableDeclaration {
-                        name: a.clone(),
-                        type_expr: int_type.clone(),
+                        name: a(96..97),
+                        type_expr: int_type(99..102),
                     }],
                     statements: vec![Statement::If(IfStatement {
                         condition: Some(Expression::Binary(BinaryExpression {
                             operator: Operator::Equ,
-                            lhs: var_i.clone(),
+                            lhs: var_i(111..112),
                             rhs: int_lit(0)
                         })),
                         if_branch: Some(Box::new(Statement::Block(BlockStatement {
                             statements: vec![Statement::Assignment(Assignment {
-                                variable: Variable::NamedVariable(Identifier::new("k")),
+                                variable: Variable::NamedVariable(Identifier::new("k", 124..125)),
                                 expr: Some(Expression::Binary(BinaryExpression {
                                     operator: Operator::Add,
-                                    lhs: var_j.clone(),
+                                    lhs: var_j(129..130),
                                     rhs: int_lit(1)
                                 }))
                             })]
@@ -420,39 +433,42 @@ fn acker() {
                             statements: vec![Statement::If(IfStatement {
                                 condition: Some(Expression::Binary(BinaryExpression {
                                     operator: Operator::Equ,
-                                    lhs: var_j.clone(),
+                                    lhs: var_j(155..156),
                                     rhs: int_lit(0)
                                 })),
                                 if_branch: Some(Box::new(Statement::Block(BlockStatement {
                                     statements: vec![call_ackermann(
+                                        170..179,
                                         Expression::Binary(BinaryExpression {
                                             operator: Operator::Sub,
-                                            lhs: var_i.clone(),
+                                            lhs: var_i(180..181),
                                             rhs: int_lit(1)
                                         }),
                                         Expression::IntLiteral(IntLiteral::new(1)),
-                                        *var_k.clone()
+                                        *var_k(190..191)
                                     )]
                                 }))),
                                 else_branch: Some(Box::new(Statement::Block(BlockStatement {
                                     statements: vec![
                                         call_ackermann(
-                                            *var_i.clone(),
+                                            213..222,
+                                            *var_i(223..224),
                                             Expression::Binary(BinaryExpression {
                                                 operator: Operator::Sub,
-                                                lhs: var_j.clone(),
+                                                lhs: var_j(226..227),
                                                 rhs: int_lit(1)
                                             }),
-                                            *var_a.clone()
+                                            *var_a(233..234)
                                         ),
                                         call_ackermann(
+                                            243..252,
                                             Expression::Binary(BinaryExpression {
                                                 operator: Operator::Sub,
-                                                lhs: var_i.clone(),
+                                                lhs: var_i(253..254),
                                                 rhs: int_lit(1)
                                             }),
-                                            *var_a.clone(),
-                                            *var_k.clone()
+                                            *var_a(260..261),
+                                            *var_k(263..264)
                                         )
                                     ]
                                 })))
@@ -461,85 +477,89 @@ fn acker() {
                     })],
                 },
                 ProcedureDeclaration {
-                    name: Some(Identifier::new("main")),
+                    name: Some(Identifier::new("main", 286..290)),
                     parameters: Vec::new(),
                     variable_declarations: vec![
                         VariableDeclaration {
-                            name: i.clone(),
-                            type_expr: int_type.clone(),
+                            name: i(301..302),
+                            type_expr: int_type(304..307),
                         },
                         VariableDeclaration {
-                            name: j.clone(),
-                            type_expr: int_type.clone(),
+                            name: j(315..316),
+                            type_expr: int_type(318..321),
                         },
                         VariableDeclaration {
-                            name: k.clone(),
-                            type_expr: int_type.clone(),
+                            name: k(329..330),
+                            type_expr: int_type(332..335),
                         }
                     ],
                     statements: vec![
                         Statement::Assignment(Assignment {
-                            variable: Variable::NamedVariable(Identifier::new("i")),
+                            variable: Variable::NamedVariable(Identifier::new("i", 340..341)),
                             expr: Some(*int_lit(0).clone())
                         }),
                         Statement::While(WhileStatement {
                             condition: Some(Expression::Binary(BinaryExpression {
                                 operator: Operator::Lse,
-                                lhs: var_i.clone(),
+                                lhs: var_i(357..358),
                                 rhs: int_lit(3)
                             })),
                             statement: Some(Box::new(Statement::Block(BlockStatement {
                                 statements: vec![
                                     Statement::Assignment(Assignment {
-                                        variable: Variable::NamedVariable(Identifier::new("j")),
+                                        variable: Variable::NamedVariable(Identifier::new(
+                                            "j",
+                                            371..372
+                                        )),
                                         expr: Some(*int_lit(0))
                                     }),
                                     Statement::While(WhileStatement {
                                         condition: Some(Expression::Binary(BinaryExpression {
                                             operator: Operator::Lse,
-                                            lhs: var_j.clone(),
+                                            lhs: var_j(390..391),
                                             rhs: int_lit(6)
                                         })),
                                         statement: Some(Box::new(Statement::Block(
                                             BlockStatement {
                                                 statements: vec![
                                                     call_ackermann(
-                                                        *var_i.clone(),
-                                                        *var_j.clone(),
-                                                        *var_k.clone()
+                                                        406..415,
+                                                        *var_i(416..417),
+                                                        *var_j(419..420),
+                                                        *var_k(422..423)
                                                     ),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printi"),
-                                                        arguments: vec![*var_i.clone()]
+                                                        name: Identifier::new("printi", 432..438),
+                                                        arguments: vec![*var_i(439..440)]
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printc"),
+                                                        name: Identifier::new("printc", 449..455),
                                                         arguments: vec![*int_lit(32)]
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printi"),
-                                                        arguments: vec![*var_j.clone()]
+                                                        name: Identifier::new("printi", 468..474),
+                                                        arguments: vec![*var_j(475..476)]
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printc"),
+                                                        name: Identifier::new("printc", 485..491),
                                                         arguments: vec![*int_lit(32)]
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printi"),
-                                                        arguments: vec![*var_k.clone()]
+                                                        name: Identifier::new("printi", 504..510),
+                                                        arguments: vec![*var_k(511..512)]
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printc"),
+                                                        name: Identifier::new("printc", 521..527),
                                                         arguments: vec![*int_lit(10)]
                                                     }),
                                                     Statement::Assignment(Assignment {
                                                         variable: Variable::NamedVariable(
-                                                            Identifier::new("j")
+                                                            Identifier::new("j", 541..542)
                                                         ),
                                                         expr: Some(Expression::Binary(
                                                             BinaryExpression {
                                                                 operator: Operator::Add,
-                                                                lhs: var_j.clone(),
+                                                                lhs: var_j(546..547),
                                                                 rhs: int_lit(1)
                                                             }
                                                         ))
@@ -549,10 +569,13 @@ fn acker() {
                                         )))
                                     }),
                                     Statement::Assignment(Assignment {
-                                        variable: Variable::NamedVariable(Identifier::new("i")),
+                                        variable: Variable::NamedVariable(Identifier::new(
+                                            "i",
+                                            563..564
+                                        )),
                                         expr: Some(Expression::Binary(BinaryExpression {
                                             operator: Operator::Add,
-                                            lhs: var_i.clone(),
+                                            lhs: var_i(568..569),
                                             rhs: int_lit(1)
                                         }))
                                     })

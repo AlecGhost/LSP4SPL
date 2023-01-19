@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IntLiteral {
     pub value: Option<u32>,
@@ -12,14 +14,7 @@ impl IntLiteral {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Identifier {
     pub value: String,
-}
-
-impl Identifier {
-    pub(crate) fn new<T: ToString>(value: T) -> Self {
-        Self {
-            value: value.to_string(),
-        }
-    }
+    pub range: Range<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
