@@ -44,7 +44,9 @@ where
     }
 }
 
-pub(super) fn ws_enclosed<'a, O, B: Clone, F>(mut inner: F) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
+pub(super) fn ws_enclosed<'a, O, B: Clone, F>(
+    mut inner: F,
+) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
 where
     F: MutParser<'a, O, B>,
 {
@@ -56,7 +58,9 @@ where
     }
 }
 
-pub(super) fn ignore_until<'a, B: Clone, F>(mut f: F) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
+pub(super) fn ignore_until<'a, B: Clone, F>(
+    mut f: F,
+) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
 where
     F: MutParser<'a, Span<'a, B>, B>,
 {
@@ -154,6 +158,13 @@ pub(crate) mod keywords {
         r#type: "type",
         var: "var",
         r#while: "while"
+    );
+}
+
+pub(crate) mod primitives {
+    simple_parsers!(
+        int: "int",
+        bool: "bool"
     );
 }
 

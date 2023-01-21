@@ -8,7 +8,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated},
 };
 use std::ops::Range;
-use util_parsers::{expect, ignore_until1, keywords, symbols, ws};
+use util_parsers::{expect, ignore_until1, keywords, primitives, symbols, ws};
 
 #[cfg(test)]
 mod tests;
@@ -251,7 +251,7 @@ impl<B: ParseErrorBroker> Parser<B> for TypeExpression {
                 symbols::lbracket,
                 ErrorMessage::ExpectedToken("[".to_string()),
             )(input)?;
-            let (input, dim) = expect(
+            let (input, size) = expect(
                 ws(u32::parse),
                 ErrorMessage::ExpectedToken("integer".to_string()),
             )(input)?;
@@ -264,11 +264,19 @@ impl<B: ParseErrorBroker> Parser<B> for TypeExpression {
             )(input)?;
             Ok((
                 input,
-                TypeExpression::ArrayType(dim, type_expr.map(Box::new)),
+                TypeExpression::ArrayType {
+                    size,
+                    base_type: type_expr.map(Box::new),
+                },
             ))
         }
 
-        alt((parse_array_type, map(Identifier::parse, Self::Type)))(input)
+        alt((
+            parse_array_type,
+            map(primitives::int, |_| Self::IntType),
+            map(primitives::bool, |_| Self::BoolType),
+            map(Identifier::parse, Self::NamedType),
+        ))(input)
     }
 }
 
@@ -486,15 +494,11 @@ impl<B: ParseErrorBroker> Parser<B> for ProcedureDeclaration {
     }
 }
 
-impl<B: ParseErrorBroker> Parser<B> for Program {
+impl<B: ParseErrorBroker> Parser<B> for GlobalDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        let mut type_declarations = Vec::new();
-        let mut procedure_declarations = Vec::new();
-        let (input, _) = many0(alt((
-            map(TypeDeclaration::parse, |td| type_declarations.push(td)),
-            map(ProcedureDeclaration::parse, |pd| {
-                procedure_declarations.push(pd);
-            }),
+        alt((
+            map(TypeDeclaration::parse, Self::Type),
+            map(ProcedureDeclaration::parse, Self::Procedure),
             map(
                 ignore_until1(peek(alt((keywords::r#type::<B>, keywords::proc, eof)))),
                 |span| {
@@ -503,14 +507,20 @@ impl<B: ParseErrorBroker> Parser<B> for Program {
                         ErrorMessage::UnexpectedCharacters(span.fragment().to_string()),
                     );
                     span.extra.report_error(err);
+                    Self::Error
                 },
             ),
-        )))(input)?;
+        ))(input)
+    }
+}
+
+impl<B: ParseErrorBroker> Parser<B> for Program {
+    fn parse(input: Span<B>) -> IResult<Self, B> {
+        let (input, global_declarations) = many0(GlobalDeclaration::parse)(input)?;
         Ok((
             input,
             Self {
-                type_declarations,
-                procedure_declarations,
+                global_declarations,
             },
         ))
     }

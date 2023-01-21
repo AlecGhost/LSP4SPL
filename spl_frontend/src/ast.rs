@@ -11,10 +11,22 @@ impl IntLiteral {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq)]
 pub struct Identifier {
     pub value: String,
     pub range: Range<usize>,
+}
+
+impl std::hash::Hash for Identifier {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state)
+    }
+}
+
+impl PartialEq for Identifier {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,8 +96,13 @@ pub struct TypeDeclaration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeExpression {
-    Type(Identifier),
-    ArrayType(Option<u32>, Option<Box<TypeExpression>>),
+    IntType,
+    BoolType,
+    NamedType(Identifier),
+    ArrayType {
+        size: Option<u32>,
+        base_type: Option<Box<TypeExpression>>,
+    },
     Error,
 }
 
@@ -151,7 +168,13 @@ pub struct ProcedureDeclaration {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GlobalDeclaration {
+    Type(TypeDeclaration),
+    Procedure(ProcedureDeclaration),
+    Error,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Program {
-    pub type_declarations: Vec<TypeDeclaration>,
-    pub procedure_declarations: Vec<ProcedureDeclaration>,
+    pub global_declarations: Vec<GlobalDeclaration>,
 }

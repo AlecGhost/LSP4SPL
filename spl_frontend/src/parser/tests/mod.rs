@@ -2,21 +2,27 @@ use super::*;
 use nom::combinator::all_consuming;
 use std::{cell::RefCell, rc::Rc};
 
-#[derive(Clone, Debug)]
-struct LocalBroker(Rc<RefCell<Vec<ParseError>>>);
+#[derive(Debug)]
+struct LocalBroker<E>(Rc<RefCell<Vec<E>>>);
 
-impl LocalBroker {
+impl<E> Clone for LocalBroker<E> {
+    fn clone(&self) -> Self {
+        LocalBroker(Rc::clone(&self.0))
+    }
+}
+
+impl<E: Clone> LocalBroker<E> {
     fn new() -> Self {
         Self(Rc::new(RefCell::new(Vec::new())))
     }
 
-    fn errors<'a>(&self) -> Vec<ParseError> {
+    fn errors<'a>(&self) -> Vec<E> {
         self.0.borrow().clone()
     }
 }
 
-impl DiagnosticsBroker<ParseError> for LocalBroker {
-    fn report_error(&self, error: ParseError) {
+impl<E> DiagnosticsBroker<E> for LocalBroker<E> {
+    fn report_error(&self, error: E) {
         self.0.borrow_mut().push(error);
     }
 }
@@ -25,14 +31,14 @@ trait ToSpan<B> {
     fn to_span(&self) -> Span<B>;
 }
 
-impl ToSpan<LocalBroker> for &str {
-    fn to_span(&self) -> Span<LocalBroker> {
+impl ToSpan<LocalBroker<ParseError>> for &str {
+    fn to_span(&self) -> Span<LocalBroker<ParseError>> {
         Span::new_extra(self, LocalBroker::new())
     }
 }
 
-impl ToSpan<LocalBroker> for String {
-    fn to_span(&self) -> Span<LocalBroker> {
+impl ToSpan<LocalBroker<ParseError>> for String {
+    fn to_span(&self) -> Span<LocalBroker<ParseError>> {
         Span::new_extra(self, LocalBroker::new())
     }
 }
@@ -189,7 +195,7 @@ fn type_declarations() {
         all_consuming(TD::parse)(dec.to_span()).unwrap().1,
         TD {
             name: Some(Identifier::new("a", 5..6)),
-            type_expr: Some(TE::Type(Identifier::new("int", 9..12)))
+            type_expr: Some(TE::IntType)
         },
         "Declaration: {}",
         dec
@@ -200,13 +206,13 @@ fn type_declarations() {
         all_consuming(TD::parse)(dec.to_span()).unwrap().1,
         TD {
             name: Some(Identifier::new("a", 5..6)),
-            type_expr: Some(TE::ArrayType(
-                Some(2),
-                Some(Box::new(TE::ArrayType(
-                    Some(3),
-                    Some(Box::new(TE::Type(Identifier::new("int", 35..38))))
-                )))
-            ))
+            type_expr: Some(TE::ArrayType {
+                size: Some(2),
+                base_type: Some(Box::new(TE::ArrayType {
+                    size: Some(3),
+                    base_type: Some(Box::new(TE::IntType))
+                }))
+            })
         },
         "Declaration: {}",
         dec
@@ -218,10 +224,13 @@ fn type_declarations() {
         td,
         TD {
             name: None,
-            type_expr: Some(TE::ArrayType(
-                None,
-                Some(Box::new(TE::ArrayType(None, None)))
-            ))
+            type_expr: Some(TE::ArrayType {
+                size: None,
+                base_type: Some(Box::new(TE::ArrayType {
+                    size: None,
+                    base_type: None
+                }))
+            })
         },
         "Declaration: {}",
         dec
@@ -348,7 +357,7 @@ fn acker() {
     let (input, program) = all_consuming(Program::parse)(acker.to_span()).unwrap();
 
     // variables for use in assertion
-    let int_type = |range| Some(TypeExpression::Type(Identifier::new("int", range)));
+    let int_type = Some(TypeExpression::IntType);
     let a = |range| Some(Identifier::new("a", range));
     let i = |range| Some(Identifier::new("i", range));
     let j = |range| Some(Identifier::new("j", range));
@@ -388,30 +397,29 @@ fn acker() {
     assert_eq!(
         program,
         Program {
-            type_declarations: Vec::new(),
-            procedure_declarations: vec![
-                ProcedureDeclaration {
+            global_declarations: vec![
+                GlobalDeclaration::Procedure(ProcedureDeclaration {
                     name: Some(Identifier::new("ackermann", 50..59)),
                     parameters: vec![
                         ParameterDeclaration {
                             is_ref: false,
                             name: i(60..61),
-                            type_expr: int_type(63..66)
+                            type_expr: int_type.clone()
                         },
                         ParameterDeclaration {
                             is_ref: false,
                             name: j(68..69),
-                            type_expr: int_type(71..74)
+                            type_expr: int_type.clone()
                         },
                         ParameterDeclaration {
                             is_ref: true,
                             name: k(80..81),
-                            type_expr: int_type(83..86)
+                            type_expr: int_type.clone()
                         },
                     ],
                     variable_declarations: vec![VariableDeclaration {
                         name: a(96..97),
-                        type_expr: int_type(99..102),
+                        type_expr: int_type.clone(),
                     }],
                     statements: vec![Statement::If(IfStatement {
                         condition: Some(Expression::Binary(BinaryExpression {
@@ -475,22 +483,22 @@ fn acker() {
                             })]
                         })))
                     })],
-                },
-                ProcedureDeclaration {
+                }),
+                GlobalDeclaration::Procedure(ProcedureDeclaration {
                     name: Some(Identifier::new("main", 286..290)),
                     parameters: Vec::new(),
                     variable_declarations: vec![
                         VariableDeclaration {
                             name: i(301..302),
-                            type_expr: int_type(304..307),
+                            type_expr: int_type.clone(),
                         },
                         VariableDeclaration {
                             name: j(315..316),
-                            type_expr: int_type(318..321),
+                            type_expr: int_type.clone(),
                         },
                         VariableDeclaration {
                             name: k(329..330),
-                            type_expr: int_type(332..335),
+                            type_expr: int_type.clone(),
                         }
                     ],
                     statements: vec![
@@ -583,11 +591,15 @@ fn acker() {
                             })))
                         })
                     ]
-                },
+                }),
             ],
         },
         "Acker: {}",
         acker
     );
+    let broker = LocalBroker::new();
+    let table = crate::table::build(&program, broker.clone());
+    eprintln!("Table: {:#?}", table);
+    eprintln!("Errors: {:#?}", broker);
     assert!(input.extra.errors().is_empty(), "Acker: {}", acker);
 }
