@@ -1,64 +1,22 @@
 use crate::{
     ast::{Identifier, TypeExpression},
+    error::{BuildError, BuildErrorMessage},
     DiagnosticsBroker,
 };
 pub use build::build;
-use std::{collections::HashMap, ops::Range};
+use std::collections::HashMap;
 
 mod build;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TableError(Range<usize>, ErrorMessage);
+trait BuildErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError> {}
 
-trait TableErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<TableError> {}
-
-impl<T> TableErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<TableError> {}
+impl<T> BuildErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError> {}
 
 impl Identifier {
-    fn to_table_error(&self, msg: impl Fn(String) -> ErrorMessage) -> TableError {
-        TableError(self.range.clone(), msg(self.value.clone()))
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-#[repr(usize)]
-pub enum ErrorMessage {
-    UndefinedType(String) = 101,
-    RedeclarationAsType(String) = 103,
-    MustBeAReferenceParameter(String) = 104,
-    RedeclarationAsProcedure(String) = 105,
-    RedeclarationAsParameter(String) = 106,
-    RedeclarationAsVariable(String) = 107,
-    MainIsMissing = 125,
-    MainIsNotAProcedure = 126,
-    MainMustNotHaveParameters = 127,
-}
-
-impl ToString for ErrorMessage {
-    fn to_string(&self) -> String {
-        match self {
-            Self::UndefinedType(name) => format!("undefined type {}", name),
-            Self::RedeclarationAsType(name) => format!("redeclaration of {} as type", name),
-            Self::MustBeAReferenceParameter(name) => {
-                format!("parameter {} mus be a reference parameter", name)
-            }
-            Self::RedeclarationAsProcedure(name) => {
-                format!("redeclaration of {} as procedure", name)
-            }
-            Self::RedeclarationAsParameter(name) => {
-                format!("redeclaration of {} as parameter", name)
-            }
-            Self::RedeclarationAsVariable(name) => {
-                format!("redeclaration of {} as variable", name)
-            }
-            Self::MainIsMissing => "procedure 'main' is missing".to_string(),
-            Self::MainIsNotAProcedure => "'main' is not a procedure".to_string(),
-            Self::MainMustNotHaveParameters => {
-                "procedure 'main' must not have any parameters".to_string()
-            }
-        }
+    fn to_table_error(&self, msg: impl Fn(String) -> BuildErrorMessage) -> BuildError {
+        BuildError(self.range.clone(), msg(self.value.clone()))
     }
 }
 

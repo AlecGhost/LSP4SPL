@@ -204,12 +204,12 @@ fn type_declarations() {
     assert_eq!(
         input.extra.errors(),
         vec![
-            ParseError(5..5, ErrorMessage::ExpectedToken("identifier".to_string())),
-            ParseError(14..14, ErrorMessage::ExpectedToken("integer".to_string())),
-            ParseError(26..26, ErrorMessage::ExpectedToken("integer".to_string())),
+            ParseError(5..5, ParseErrorMessage::ExpectedToken("identifier".to_string())),
+            ParseError(14..14, ParseErrorMessage::ExpectedToken("integer".to_string())),
+            ParseError(26..26, ParseErrorMessage::ExpectedToken("integer".to_string())),
             ParseError(
                 30..30,
-                ErrorMessage::ExpectedToken("type expression".to_string())
+                ParseErrorMessage::ExpectedToken("type expression".to_string())
             ),
         ],
         "Declaration: {}",
@@ -286,8 +286,8 @@ fn call_statements() {
     assert_eq!(
         input.extra.errors(),
         vec![
-            ParseError(4..4, ErrorMessage::ExpectedToken("expression".to_string())),
-            ParseError(5..5, ErrorMessage::MissingTrailingSemic),
+            ParseError(4..4, ParseErrorMessage::ExpectedToken("expression".to_string())),
+            ParseError(5..5, ParseErrorMessage::MissingTrailingSemic),
         ],
         "CallStatement: {}",
         stmt
@@ -563,9 +563,5 @@ fn acker() {
         "Acker: {}",
         acker
     );
-    let broker = LocalBroker::new();
-    let table = crate::table::build(&program, broker.clone());
-    eprintln!("Table: {:#?}", table);
-    eprintln!("Errors: {:#?}", broker);
     assert!(input.extra.errors().is_empty(), "Acker: {}", acker);
 }

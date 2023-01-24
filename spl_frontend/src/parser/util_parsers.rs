@@ -1,4 +1,5 @@
-use super::{ErrorMessage, IResult, ParseErrorBroker, Span};
+use super::{IResult, ParseErrorBroker, Span};
+use crate::error::ParseErrorMessage;
 use nom::{
     bytes::complete::{tag, take, take_till},
     character::complete::{multispace0, multispace1},
@@ -120,7 +121,7 @@ where
 
 pub(super) fn expect<'a, O, B: ParseErrorBroker, F>(
     mut parser: F,
-    error_msg: ErrorMessage,
+    error_msg: ParseErrorMessage,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Option<O>, B>
 where
     F: MutParser<'a, O, B>,
@@ -130,7 +131,7 @@ where
         Err(_) => {
             // TODO: look into error range reporting
             let pos = input.location_offset();
-            let err = super::ParseError(pos..pos, error_msg.clone());
+            let err = crate::error::ParseError(pos..pos, error_msg.clone());
             input.extra.report_error(err);
             Ok((input, None))
         }

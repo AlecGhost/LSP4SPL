@@ -1,4 +1,4 @@
-use crate::{ast::*, DiagnosticsBroker};
+use crate::{ast::*, DiagnosticsBroker, error::{ParseError, ParseErrorMessage}};
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -13,30 +13,6 @@ use util_parsers::{expect, ignore_until1, keywords, primitives, symbols, ws};
 #[cfg(test)]
 mod tests;
 mod util_parsers;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ParseError(Range<usize>, ErrorMessage);
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ErrorMessage {
-    MissingOpening(char),
-    MissingClosing(char),
-    MissingTrailingSemic,
-    UnexpectedCharacters(String),
-    ExpectedToken(String),
-}
-
-impl ToString for ErrorMessage {
-    fn to_string(&self) -> String {
-        match self {
-            Self::MissingOpening(c) => format!("missing opening `{}`", c),
-            Self::MissingClosing(c) => format!("missing closing `{}`", c),
-            Self::MissingTrailingSemic => "missing trailing `;`".to_string(),
-            Self::UnexpectedCharacters(s) => format!("unexpected `{}`", s),
-            Self::ExpectedToken(t) => format!("expected `{}`", t),
-        }
-    }
-}
 
 trait ParseErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError> {}
 
@@ -99,7 +75,7 @@ impl<B: ParseErrorBroker> Parser<B> for IntLiteral {
                         tag("0x"),
                         expect(
                             hex_digit1,
-                            ErrorMessage::ExpectedToken("Hexadecimal digit".to_string()),
+                            ParseErrorMessage::ExpectedToken("Hexadecimal digit".to_string()),
                         ),
                     ),
                     |opt: Option<Span<B>>| {
@@ -158,9 +134,9 @@ impl<B: ParseErrorBroker> Parser<B> for Expression {
                         symbols::lparen,
                         expect(
                             Expression::parse,
-                            ErrorMessage::ExpectedToken("expression".to_string()),
+                            ParseErrorMessage::ExpectedToken("expression".to_string()),
                         ),
-                        expect(symbols::rparen, ErrorMessage::MissingClosing(')')),
+                        expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
                     ),
                     |opt| opt.unwrap_or(Expression::Error),
                 ),
@@ -192,7 +168,7 @@ impl<B: ParseErrorBroker> Parser<B> for Expression {
         {
             let (input, rhs) = expect(
                 parser,
-                ErrorMessage::ExpectedToken("expression".to_string()),
+                ParseErrorMessage::ExpectedToken("expression".to_string()),
             )(input)?;
             let rhs = rhs.unwrap_or(Expression::Error);
             let exp = Expression::Binary(BinaryExpression {
@@ -249,18 +225,18 @@ impl<B: ParseErrorBroker> Parser<B> for TypeExpression {
             let (input, _) = keywords::array(input)?;
             let (input, _) = expect(
                 symbols::lbracket,
-                ErrorMessage::ExpectedToken("[".to_string()),
+                ParseErrorMessage::ExpectedToken("[".to_string()),
             )(input)?;
             let (input, size) = expect(
                 ws(u32::parse),
-                ErrorMessage::ExpectedToken("integer".to_string()),
+                ParseErrorMessage::ExpectedToken("integer".to_string()),
             )(input)?;
-            let (input, _) = expect(symbols::rbracket, ErrorMessage::MissingClosing(']'))(input)?;
+            let (input, _) = expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']'))(input)?;
             let (input, _) =
-                expect(keywords::of, ErrorMessage::ExpectedToken("of".to_string()))(input)?;
+                expect(keywords::of, ParseErrorMessage::ExpectedToken("of".to_string()))(input)?;
             let (input, type_expr) = expect(
                 TypeExpression::parse,
-                ErrorMessage::ExpectedToken("type expression".to_string()),
+                ParseErrorMessage::ExpectedToken("type expression".to_string()),
             )(input)?;
             Ok((
                 input,
@@ -284,14 +260,14 @@ impl<B: ParseErrorBroker> Parser<B> for TypeDeclaration {
         let (input, _) = keywords::r#type(input)?;
         let (input, name) = expect(
             Identifier::parse,
-            ErrorMessage::ExpectedToken("identifier".to_string()),
+            ParseErrorMessage::ExpectedToken("identifier".to_string()),
         )(input)?;
-        let (input, _) = expect(symbols::eq, ErrorMessage::ExpectedToken("=".to_string()))(input)?;
+        let (input, _) = expect(symbols::eq, ParseErrorMessage::ExpectedToken("=".to_string()))(input)?;
         let (input, type_expr) = expect(
             TypeExpression::parse,
-            ErrorMessage::ExpectedToken("type expression".to_string()),
+            ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
-        let (input, _) = expect(symbols::semic, ErrorMessage::MissingTrailingSemic)(input)?;
+        let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
         Ok((input, Self { name, type_expr }))
     }
 }
@@ -301,15 +277,15 @@ impl<B: ParseErrorBroker> Parser<B> for VariableDeclaration {
         let (input, _) = keywords::var(input)?;
         let (input, name) = expect(
             Identifier::parse,
-            ErrorMessage::ExpectedToken("identifier".to_string()),
+            ParseErrorMessage::ExpectedToken("identifier".to_string()),
         )(input)?;
         let (input, _) =
-            expect(symbols::colon, ErrorMessage::ExpectedToken(":".to_string()))(input)?;
+            expect(symbols::colon, ParseErrorMessage::ExpectedToken(":".to_string()))(input)?;
         let (input, type_expr) = expect(
             TypeExpression::parse,
-            ErrorMessage::ExpectedToken("type expression".to_string()),
+            ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
-        let (input, _) = expect(symbols::semic, ErrorMessage::MissingTrailingSemic)(input)?;
+        let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
         Ok((input, Self { name, type_expr }))
     }
 }
@@ -322,7 +298,7 @@ impl<B: ParseErrorBroker> Parser<B> for ParameterDeclaration {
                     keywords::r#ref,
                     expect(
                         Identifier::parse,
-                        ErrorMessage::ExpectedToken("identifier".to_string()),
+                        ParseErrorMessage::ExpectedToken("identifier".to_string()),
                     ),
                 ),
                 |ident| (true, ident),
@@ -330,10 +306,10 @@ impl<B: ParseErrorBroker> Parser<B> for ParameterDeclaration {
             map(Identifier::parse, |ident| (false, Some(ident))),
         ))(input)?;
         let (input, _) =
-            expect(symbols::colon, ErrorMessage::ExpectedToken(":".to_string()))(input)?;
+            expect(symbols::colon, ParseErrorMessage::ExpectedToken(":".to_string()))(input)?;
         let (input, type_expr) = expect(
             TypeExpression::parse,
-            ErrorMessage::ExpectedToken("type expression".to_string()),
+            ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
         Ok((
             input,
@@ -355,14 +331,14 @@ impl<B: ParseErrorBroker> Parser<B> for CallStatement {
         } else {
             expect(
                 Expression::parse,
-                ErrorMessage::ExpectedToken("expression".to_string()),
+                ParseErrorMessage::ExpectedToken("expression".to_string()),
             )(input)?
         };
         if let Some(argument) = opt_argument {
             arguments.push(argument);
         };
-        let (input, _) = expect(symbols::rparen, ErrorMessage::MissingClosing(')'))(input)?;
-        let (input, _) = expect(symbols::semic, ErrorMessage::MissingTrailingSemic)(input)?;
+        let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
+        let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
         Ok((input, Self { name, arguments }))
     }
 }
@@ -372,9 +348,9 @@ impl<B: ParseErrorBroker> Parser<B> for Assignment {
         let (input, variable) = terminated(Variable::parse, symbols::assign)(input)?;
         let (input, expr) = expect(
             Expression::parse,
-            ErrorMessage::ExpectedToken("expression".to_string()),
+            ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
-        let (input, _) = expect(symbols::semic, ErrorMessage::MissingTrailingSemic)(input)?;
+        let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
         Ok((input, Self { variable, expr }))
     }
 }
@@ -382,21 +358,21 @@ impl<B: ParseErrorBroker> Parser<B> for Assignment {
 impl<B: ParseErrorBroker> Parser<B> for IfStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         let (input, _) = keywords::r#if(input)?;
-        let (input, _) = expect(symbols::lparen, ErrorMessage::MissingOpening('('))(input)?;
+        let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
-            ErrorMessage::ExpectedToken("expression".to_string()),
+            ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
-        let (input, _) = expect(symbols::rparen, ErrorMessage::MissingClosing(')'))(input)?;
+        let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
         let (input, if_branch) = expect(
             Statement::parse,
-            ErrorMessage::ExpectedToken("expression".to_string()),
+            ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
         let (input, else_branch) = opt(preceded(
             keywords::r#else,
             expect(
                 Statement::parse,
-                ErrorMessage::ExpectedToken("statement".to_string()),
+                ParseErrorMessage::ExpectedToken("statement".to_string()),
             ),
         ))(input)?;
         Ok((
@@ -413,15 +389,15 @@ impl<B: ParseErrorBroker> Parser<B> for IfStatement {
 impl<B: ParseErrorBroker> Parser<B> for WhileStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         let (input, _) = keywords::r#while(input)?;
-        let (input, _) = expect(symbols::lparen, ErrorMessage::MissingOpening('('))(input)?;
+        let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
-            ErrorMessage::ExpectedToken("expression".to_string()),
+            ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
-        let (input, _) = expect(symbols::rparen, ErrorMessage::MissingClosing(')'))(input)?;
+        let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
         let (input, stmt) = expect(
             Statement::parse,
-            ErrorMessage::ExpectedToken("expression".to_string()),
+            ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
         Ok((
             input,
@@ -437,7 +413,7 @@ impl<B: ParseErrorBroker> Parser<B> for BlockStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         let (input, _) = symbols::lcurly(input)?;
         let (input, statements) = many0(Statement::parse)(input)?;
-        let (input, _) = expect(symbols::rcurly, ErrorMessage::MissingClosing('}'))(input)?;
+        let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
         Ok((input, Self { statements }))
     }
 }
@@ -460,9 +436,9 @@ impl<B: ParseErrorBroker> Parser<B> for ProcedureDeclaration {
         let (input, _) = keywords::proc(input)?;
         let (input, name) = expect(
             Identifier::parse,
-            ErrorMessage::ExpectedToken("identifier".to_string()),
+            ParseErrorMessage::ExpectedToken("identifier".to_string()),
         )(input)?;
-        let (input, _) = expect(symbols::lparen, ErrorMessage::MissingOpening('('))(input)?;
+        let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, mut parameters) =
             many0(terminated(ParameterDeclaration::parse, symbols::comma))(input)?;
         let (input, opt_parameter) = if parameters.is_empty() {
@@ -470,17 +446,17 @@ impl<B: ParseErrorBroker> Parser<B> for ProcedureDeclaration {
         } else {
             expect(
                 ParameterDeclaration::parse,
-                ErrorMessage::ExpectedToken("parameter declaration".to_string()),
+                ParseErrorMessage::ExpectedToken("parameter declaration".to_string()),
             )(input)?
         };
         if let Some(parameter) = opt_parameter {
             parameters.push(parameter);
         };
-        let (input, _) = expect(symbols::rparen, ErrorMessage::MissingClosing(')'))(input)?;
-        let (input, _) = expect(symbols::lcurly, ErrorMessage::MissingOpening('{'))(input)?;
+        let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
+        let (input, _) = expect(symbols::lcurly, ParseErrorMessage::MissingOpening('{'))(input)?;
         let (input, variable_declarations) = many0(VariableDeclaration::parse)(input)?;
         let (input, statements) = many0(Statement::parse)(input)?;
-        let (input, _) = expect(symbols::rcurly, ErrorMessage::MissingClosing('}'))(input)?;
+        let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
         Ok((
             input,
             Self {
@@ -503,7 +479,7 @@ impl<B: ParseErrorBroker> Parser<B> for GlobalDeclaration {
                 |span| {
                     let err = ParseError(
                         span.to_range(),
-                        ErrorMessage::UnexpectedCharacters(span.fragment().to_string()),
+                        ParseErrorMessage::UnexpectedCharacters(span.fragment().to_string()),
                     );
                     span.extra.report_error(err);
                     Self::Error

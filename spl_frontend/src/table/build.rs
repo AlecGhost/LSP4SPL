@@ -3,7 +3,7 @@ use crate::ast::*;
 
 pub fn build<B>(program: &Program, broker: B) -> SymbolTable
 where
-    B: Clone + std::fmt::Debug + DiagnosticsBroker<TableError>,
+    B: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError>,
 {
     let mut table = SymbolTable::new();
     program.build(&mut table, broker);
@@ -14,7 +14,7 @@ trait TableBuilder<B> {
     fn build(&self, table: &mut SymbolTable, broker: B);
 }
 
-impl<B: TableErrorBroker> TableBuilder<B> for Program {
+impl<B: BuildErrorBroker> TableBuilder<B> for Program {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         self.global_declarations
             .iter()
@@ -23,9 +23,9 @@ impl<B: TableErrorBroker> TableBuilder<B> for Program {
             Some((_, entry)) => {
                 if let Entry::Procedure(main) = entry {
                     if !main.parameters.is_empty() {
-                        broker.report_error(TableError(
+                        broker.report_error(BuildError(
                             0..0,
-                            ErrorMessage::MainMustNotHaveParameters,
+                            BuildErrorMessage::MainMustNotHaveParameters,
                         ));
                     }
                 } else {
@@ -33,13 +33,13 @@ impl<B: TableErrorBroker> TableBuilder<B> for Program {
                 }
             }
             None => {
-                broker.report_error(TableError(0..0, ErrorMessage::MainIsMissing));
+                broker.report_error(BuildError(0..0, BuildErrorMessage::MainIsMissing));
             }
         };
     }
 }
 
-impl<B: TableErrorBroker> TableBuilder<B> for GlobalDeclaration {
+impl<B: BuildErrorBroker> TableBuilder<B> for GlobalDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         match self {
             Self::Type(t) => t.build(table, broker),
@@ -49,29 +49,29 @@ impl<B: TableErrorBroker> TableBuilder<B> for GlobalDeclaration {
     }
 }
 
-impl<B: TableErrorBroker> TableBuilder<B> for TypeDeclaration {
+impl<B: BuildErrorBroker> TableBuilder<B> for TypeDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
             if name.value == "main" {
-                broker.report_error(TableError(
+                broker.report_error(BuildError(
                     name.range.clone(),
-                    ErrorMessage::MainIsNotAProcedure,
+                    BuildErrorMessage::MainIsNotAProcedure,
                 ));
                 return;
             }
             if let Some(t) = get_underlying_type(&self.type_expr) {
                 if table.lookup(t).is_none() {
-                    broker.report_error(t.to_table_error(ErrorMessage::UndefinedType));
+                    broker.report_error(t.to_table_error(BuildErrorMessage::UndefinedType));
                 }
             }
             table.enter(name.clone(), Entry::Type(self.type_expr.clone()), || {
-                broker.report_error(name.to_table_error(ErrorMessage::RedeclarationAsType))
+                broker.report_error(name.to_table_error(BuildErrorMessage::RedeclarationAsType))
             });
         }
     }
 }
 
-impl<B: TableErrorBroker> TableBuilder<B> for ProcedureDeclaration {
+impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
             let mut local_table = SymbolTable::new();
@@ -90,7 +90,7 @@ impl<B: TableErrorBroker> TableBuilder<B> for ProcedureDeclaration {
                 if let Entry::Parameter(entry) | Entry::Variable(entry) = value {
                     if let Some(t) = get_underlying_type(&entry.type_expr) {
                         if table.lookup(t).is_none() {
-                            broker.report_error(t.to_table_error(ErrorMessage::UndefinedType));
+                            broker.report_error(t.to_table_error(BuildErrorMessage::UndefinedType));
                         }
                     }
                 }
@@ -100,13 +100,13 @@ impl<B: TableErrorBroker> TableBuilder<B> for ProcedureDeclaration {
                 parameters,
             };
             table.enter(name.clone(), Entry::Procedure(entry), || {
-                broker.report_error(name.to_table_error(ErrorMessage::RedeclarationAsProcedure));
+                broker.report_error(name.to_table_error(BuildErrorMessage::RedeclarationAsProcedure));
             });
         }
     }
 }
 
-impl<B: TableErrorBroker> TableBuilder<B> for ParameterDeclaration {
+impl<B: BuildErrorBroker> TableBuilder<B> for ParameterDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
             if let Some(type_expr) = &self.type_expr {
@@ -116,25 +116,25 @@ impl<B: TableErrorBroker> TableBuilder<B> for ParameterDeclaration {
                 );
                 if !is_primitive && !self.is_ref {
                     broker
-                        .report_error(name.to_table_error(ErrorMessage::MustBeAReferenceParameter));
+                        .report_error(name.to_table_error(BuildErrorMessage::MustBeAReferenceParameter));
                 }
             }
             table.enter(
                 name.clone(),
                 Entry::Parameter(VariableEntry::from(self.clone())),
-                || broker.report_error(name.to_table_error(ErrorMessage::RedeclarationAsParameter)),
+                || broker.report_error(name.to_table_error(BuildErrorMessage::RedeclarationAsParameter)),
             );
         }
     }
 }
 
-impl<B: TableErrorBroker> TableBuilder<B> for VariableDeclaration {
+impl<B: BuildErrorBroker> TableBuilder<B> for VariableDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
             table.enter(
                 name.clone(),
                 Entry::Variable(VariableEntry::from(self.clone())),
-                || broker.report_error(name.to_table_error(ErrorMessage::RedeclarationAsVariable)),
+                || broker.report_error(name.to_table_error(BuildErrorMessage::RedeclarationAsVariable)),
             );
         }
     }

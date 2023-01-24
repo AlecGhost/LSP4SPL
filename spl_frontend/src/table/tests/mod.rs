@@ -1,11 +1,11 @@
 use crate::{
     ast::{Identifier, TypeExpression},
-    table::{Entry, ErrorMessage, ProcedureEntry, SymbolTable, TableError, VariableEntry},
+    table::{Entry, BuildErrorMessage, ProcedureEntry, SymbolTable, BuildError, VariableEntry},
     test::LocalBroker,
 };
 use std::collections::HashMap;
 
-fn test(src: &str) -> (SymbolTable, LocalBroker<TableError>) {
+fn test(src: &str) -> (SymbolTable, LocalBroker<BuildError>) {
     eprintln!("Testing: {}", src);
     let program = crate::parser::parse(src, LocalBroker::new());
     let broker = LocalBroker::new();
@@ -27,7 +27,7 @@ fn type_decs() {
     );
     assert_eq!(
         broker.errors(),
-        vec![TableError(0..0, ErrorMessage::MainIsMissing)]
+        vec![BuildError(0..0, BuildErrorMessage::MainIsMissing)]
     );
 
     let (table, broker) = test("type a = array [5] of int");
@@ -45,7 +45,7 @@ fn type_decs() {
     );
     assert_eq!(
         broker.errors(),
-        vec![TableError(0..0, ErrorMessage::MainIsMissing)]
+        vec![BuildError(0..0, BuildErrorMessage::MainIsMissing)]
     );
 
     let (table, broker) = test("type a = bool;");
@@ -64,8 +64,8 @@ fn type_decs() {
     assert_eq!(
         broker.errors(),
         vec![
-            TableError(9..13, ErrorMessage::UndefinedType("bool".to_string())),
-            TableError(0..0, ErrorMessage::MainIsMissing)
+            BuildError(9..13, BuildErrorMessage::UndefinedType("bool".to_string())),
+            BuildError(0..0, BuildErrorMessage::MainIsMissing)
         ]
     );
 }
@@ -96,7 +96,7 @@ fn test_main() {
     );
     assert_eq!(
         broker.errors(),
-        vec![TableError(0..0, ErrorMessage::MainIsMissing)]
+        vec![BuildError(0..0, BuildErrorMessage::MainIsMissing)]
     );
 
     let (table, broker) = test("type main = int;");
@@ -109,8 +109,8 @@ fn test_main() {
     assert_eq!(
         broker.errors(),
         vec![
-            TableError(5..9, ErrorMessage::MainIsNotAProcedure),
-            TableError(0..0, ErrorMessage::MainIsMissing)
+            BuildError(5..9, BuildErrorMessage::MainIsNotAProcedure),
+            BuildError(0..0, BuildErrorMessage::MainIsMissing)
         ]
     );
 
@@ -129,7 +129,7 @@ fn test_main() {
     );
     assert_eq!(
         broker.errors(),
-        vec![TableError(5..9, ErrorMessage::MainIsNotAProcedure),]
+        vec![BuildError(5..9, BuildErrorMessage::MainIsNotAProcedure),]
     );
 
     let (table, broker) = test("proc main(a: int) {}");
@@ -158,7 +158,7 @@ fn test_main() {
     );
     assert_eq!(
         broker.errors(),
-        vec![TableError(0..0, ErrorMessage::MainMustNotHaveParameters)]
+        vec![BuildError(0..0, BuildErrorMessage::MainMustNotHaveParameters)]
     );
 }
 
@@ -168,11 +168,11 @@ fn redeclaration() {
     assert_eq!(
         broker.errors(),
         vec![
-            TableError(
+            BuildError(
                 19..20,
-                ErrorMessage::RedeclarationAsProcedure("a".to_string())
+                BuildErrorMessage::RedeclarationAsProcedure("a".to_string())
             ),
-            TableError(0..0, ErrorMessage::MainIsMissing)
+            BuildError(0..0, BuildErrorMessage::MainIsMissing)
         ]
     );
 
@@ -180,8 +180,8 @@ fn redeclaration() {
     assert_eq!(
         broker.errors(),
         vec![
-            TableError(17..18, ErrorMessage::RedeclarationAsType("a".to_string())),
-            TableError(0..0, ErrorMessage::MainIsMissing)
+            BuildError(17..18, BuildErrorMessage::RedeclarationAsType("a".to_string())),
+            BuildError(0..0, BuildErrorMessage::MainIsMissing)
         ]
     );
 
@@ -189,11 +189,11 @@ fn redeclaration() {
     assert_eq!(
         broker.errors(),
         vec![
-            TableError(
+            BuildError(
                 15..16,
-                ErrorMessage::RedeclarationAsParameter("i".to_string())
+                BuildErrorMessage::RedeclarationAsParameter("i".to_string())
             ),
-            TableError(0..0, ErrorMessage::MainIsMissing)
+            BuildError(0..0, BuildErrorMessage::MainIsMissing)
         ]
     );
 
@@ -205,9 +205,9 @@ fn redeclaration() {
     );
     assert_eq!(
         broker.errors(),
-        vec![TableError(
+        vec![BuildError(
             54..55,
-            ErrorMessage::RedeclarationAsVariable("i".to_string())
+            BuildErrorMessage::RedeclarationAsVariable("i".to_string())
         )]
     );
 }
