@@ -2,13 +2,19 @@ use crate::{
     ast::{Identifier, TypeExpression},
     DiagnosticsBroker,
 };
+pub use build::build;
 use std::{collections::HashMap, ops::Range};
 
 mod build;
-pub use build::build;
+#[cfg(test)]
+mod tests;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TableError(Range<usize>, ErrorMessage);
+
+trait TableErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<TableError> {}
+
+impl<T> TableErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<TableError> {}
 
 impl Identifier {
     fn to_table_error(&self, msg: impl Fn(String) -> ErrorMessage) -> TableError {
@@ -27,6 +33,7 @@ pub enum ErrorMessage {
     RedeclarationAsVariable(String) = 107,
     MainIsMissing = 125,
     MainIsNotAProcedure = 126,
+    MainMustNotHaveParameters = 127,
 }
 
 impl ToString for ErrorMessage {
@@ -48,6 +55,9 @@ impl ToString for ErrorMessage {
             }
             Self::MainIsMissing => "procedure 'main' is missing".to_string(),
             Self::MainIsNotAProcedure => "'main' is not a procedure".to_string(),
+            Self::MainMustNotHaveParameters => {
+                "procedure 'main' must not have any parameters".to_string()
+            }
         }
     }
 }
@@ -58,13 +68,13 @@ pub struct VariableEntry {
     pub type_expr: Option<TypeExpression>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcedureEntry {
     pub local_table: SymbolTable,
     pub parameters: Vec<VariableEntry>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Entry {
     Type(Option<TypeExpression>),
     Variable(VariableEntry),
@@ -72,7 +82,7 @@ pub enum Entry {
     Procedure(ProcedureEntry),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SymbolTable {
     entries: HashMap<Identifier, Entry>,
 }
@@ -85,8 +95,9 @@ impl SymbolTable {
     }
 
     fn enter(&mut self, key: Identifier, value: Entry, mut on_error: impl FnMut()) {
-        if let std::collections::hash_map::Entry::Vacant(e) = self.entries.entry(key) {
-            e.insert(value);
+        // TODO: More effective lookup
+        if !self.entries.keys().any(|ident| ident.value == key.value) {
+            self.entries.insert(key, value);
         } else {
             on_error();
         }

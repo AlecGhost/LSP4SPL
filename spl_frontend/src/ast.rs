@@ -11,21 +11,18 @@ impl IntLiteral {
     }
 }
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Identifier {
     pub value: String,
     pub range: Range<usize>,
 }
 
-impl std::hash::Hash for Identifier {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.value.hash(state)
-    }
-}
-
-impl PartialEq for Identifier {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
+impl Identifier {
+    pub(crate) fn new<T: ToString>(value: T, range: Range<usize>) -> Self {
+        Self {
+            value: value.to_string(),
+            range,
+        }
     }
 }
 

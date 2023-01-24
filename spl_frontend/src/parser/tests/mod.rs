@@ -1,31 +1,6 @@
+use crate::test::LocalBroker;
 use super::*;
 use nom::combinator::all_consuming;
-use std::{cell::RefCell, rc::Rc};
-
-#[derive(Debug)]
-struct LocalBroker<E>(Rc<RefCell<Vec<E>>>);
-
-impl<E> Clone for LocalBroker<E> {
-    fn clone(&self) -> Self {
-        LocalBroker(Rc::clone(&self.0))
-    }
-}
-
-impl<E: Clone> LocalBroker<E> {
-    fn new() -> Self {
-        Self(Rc::new(RefCell::new(Vec::new())))
-    }
-
-    fn errors<'a>(&self) -> Vec<E> {
-        self.0.borrow().clone()
-    }
-}
-
-impl<E> DiagnosticsBroker<E> for LocalBroker<E> {
-    fn report_error(&self, error: E) {
-        self.0.borrow_mut().push(error);
-    }
-}
 
 trait ToSpan<B> {
     fn to_span(&self) -> Span<B>;
@@ -40,15 +15,6 @@ impl ToSpan<LocalBroker<ParseError>> for &str {
 impl ToSpan<LocalBroker<ParseError>> for String {
     fn to_span(&self) -> Span<LocalBroker<ParseError>> {
         Span::new_extra(self, LocalBroker::new())
-    }
-}
-
-impl Identifier {
-    fn new<T: ToString>(value: T, range: Range<usize>) -> Self {
-        Self {
-            value: value.to_string(),
-            range,
-        }
     }
 }
 

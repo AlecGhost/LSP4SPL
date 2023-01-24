@@ -1,10 +1,6 @@
 use super::*;
 use crate::ast::*;
 
-trait TableErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<TableError> {}
-
-impl<T> TableErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<TableError> {}
-
 pub fn build<B>(program: &Program, broker: B) -> SymbolTable
 where
     B: Clone + std::fmt::Debug + DiagnosticsBroker<TableError>,
@@ -23,14 +19,23 @@ impl<B: TableErrorBroker> TableBuilder<B> for Program {
         self.global_declarations
             .iter()
             .for_each(|dec| dec.build(table, broker.clone()));
-        if table
-            .entries
-            .keys()
-            .find(|key| key.value == "main")
-            .is_none()
-        {
-            broker.report_error(TableError(0..0, ErrorMessage::MainIsMissing));
-        }
+        match &table.entries.iter().find(|(key, _)| key.value == "main") {
+            Some((_, entry)) => {
+                if let Entry::Procedure(main) = entry {
+                    if !main.parameters.is_empty() {
+                        broker.report_error(TableError(
+                            0..0,
+                            ErrorMessage::MainMustNotHaveParameters,
+                        ));
+                    }
+                } else {
+                    panic!("'main' must be a procedure");
+                }
+            }
+            None => {
+                broker.report_error(TableError(0..0, ErrorMessage::MainIsMissing));
+            }
+        };
     }
 }
 

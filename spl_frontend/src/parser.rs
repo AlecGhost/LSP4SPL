@@ -274,7 +274,6 @@ impl<B: ParseErrorBroker> Parser<B> for TypeExpression {
         alt((
             parse_array_type,
             map(primitives::int, |_| Self::IntType),
-            map(primitives::bool, |_| Self::BoolType),
             map(Identifier::parse, Self::NamedType),
         ))(input)
     }
