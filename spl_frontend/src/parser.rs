@@ -8,11 +8,11 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated},
 };
 use std::ops::Range;
-use util_parsers::{alpha_numeric0, expect, ignore_until1, keywords, primitives, symbols, ws};
+use utility::{alpha_numeric0, expect, ignore_until1, keywords, primitives, symbols, ws};
 
 #[cfg(test)]
 mod tests;
-mod util_parsers;
+mod utility;
 
 trait ParseErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError> {}
 

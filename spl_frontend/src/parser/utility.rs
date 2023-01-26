@@ -160,7 +160,7 @@ where
 
 macro_rules! keyword_parsers {
     ($($name: ident: $pattern: literal),*) => {
-        use crate::parser::{Span, DiagnosticsBroker, util_parsers};
+        use crate::parser::{Span, DiagnosticsBroker, utility};
         use crate::error::ParseError;
         $(
         pub fn $name<B: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError>>(input: Span<B>)
@@ -169,7 +169,7 @@ macro_rules! keyword_parsers {
             use nom::combinator::{peek, eof};
             use nom::branch::alt;
             use nom::sequence::terminated;
-            use util_parsers::{ws, is_alpha_numeric, verify};
+            use utility::{ws, is_alpha_numeric, verify};
             ws(terminated(tag($pattern), peek(alt((eof, verify(take(1u8), |span| !span.starts_with(is_alpha_numeric)))))))(input)
         }
         )*
@@ -178,10 +178,11 @@ macro_rules! keyword_parsers {
 
 macro_rules! symbol_parsers {
     ($($name: ident: $pattern: literal),*) => {
+        use crate::parser::{Span, utility};
         $(
-        pub fn $name<B: Clone>(input: crate::parser::Span<B>) -> nom::IResult<crate::parser::Span<B>, crate::parser::Span<B>> {
+        pub fn $name<B: Clone>(input: Span<B>) -> nom::IResult<Span<B>, Span<B>> {
             use nom::bytes::complete::tag;
-            use crate::parser::util_parsers::ws;
+            use utility::ws;
             ws(tag($pattern))(input)
         }
         )*
