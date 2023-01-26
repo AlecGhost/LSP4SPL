@@ -95,7 +95,8 @@ impl<B: ParseErrorBroker> Parser<B> for IntLiteral {
 impl<B: Clone> Parser<B> for Identifier {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         map(
-            pair(alt((alpha1, tag("_"))), alt((alphanumeric0, tag("_")))),
+            // TODO: fix underscore recognition
+            ws(pair(alt((alpha1, tag("_"))), alt((alphanumeric0, tag("_"))))),
             |pair: (Span<B>, Span<B>)| Self {
                 value: String::new() + *pair.0 + *pair.1,
                 range: pair.0.location_offset()..pair.1.to_range().end,

@@ -1,11 +1,18 @@
 use super::*;
 use crate::ast::*;
 
+#[cfg(test)]
+mod tests;
+
+trait BuildErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError> {}
+
+impl<T> BuildErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError> {}
+
 pub fn build<B>(program: &Program, broker: B) -> SymbolTable
 where
     B: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError>,
 {
-    let mut table = SymbolTable::new();
+    let mut table = SymbolTable::initialized();
     program.build(&mut table, broker);
     table
 }
@@ -60,12 +67,16 @@ impl<B: BuildErrorBroker> TableBuilder<B> for TypeDeclaration {
                 return;
             }
             if let Some(t) = get_underlying_type(&self.type_expr) {
-                if table.lookup(t).is_none() {
-                    broker.report_error(t.to_table_error(BuildErrorMessage::UndefinedType));
+                if let Some(entry) = table.lookup(t) {
+                    if !matches!(entry, Entry::Type(_)) {
+                        broker.report_error(t.to_build_error(BuildErrorMessage::NotAType))
+                    }
+                } else {
+                    broker.report_error(t.to_build_error(BuildErrorMessage::UndefinedType));
                 }
             }
             table.enter(name.clone(), Entry::Type(self.type_expr.clone()), || {
-                broker.report_error(name.to_table_error(BuildErrorMessage::RedeclarationAsType))
+                broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsType))
             });
         }
     }
@@ -87,10 +98,14 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
                 .iter()
                 .for_each(|dec| dec.build(&mut local_table, broker.clone()));
             local_table.entries.values().for_each(|value| {
-                if let Entry::Parameter(entry) | Entry::Variable(entry) = value {
+                if let Entry::Variable(entry) = value {
                     if let Some(t) = get_underlying_type(&entry.type_expr) {
-                        if table.lookup(t).is_none() {
-                            broker.report_error(t.to_table_error(BuildErrorMessage::UndefinedType));
+                        if let Some(entry) = table.lookup(t) {
+                            if !matches!(entry, Entry::Type(_)) {
+                                broker.report_error(t.to_build_error(BuildErrorMessage::NotAType))
+                            }
+                        } else {
+                            broker.report_error(t.to_build_error(BuildErrorMessage::UndefinedType));
                         }
                     }
                 }
@@ -100,7 +115,8 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
                 parameters,
             };
             table.enter(name.clone(), Entry::Procedure(entry), || {
-                broker.report_error(name.to_table_error(BuildErrorMessage::RedeclarationAsProcedure));
+                broker
+                    .report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsProcedure));
             });
         }
     }
@@ -115,14 +131,19 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ParameterDeclaration {
                     TypeExpression::IntType | TypeExpression::BoolType
                 );
                 if !is_primitive && !self.is_ref {
-                    broker
-                        .report_error(name.to_table_error(BuildErrorMessage::MustBeAReferenceParameter));
+                    broker.report_error(
+                        name.to_build_error(BuildErrorMessage::MustBeAReferenceParameter),
+                    );
                 }
             }
             table.enter(
                 name.clone(),
-                Entry::Parameter(VariableEntry::from(self.clone())),
-                || broker.report_error(name.to_table_error(BuildErrorMessage::RedeclarationAsParameter)),
+                Entry::Variable(VariableEntry::from(self.clone())),
+                || {
+                    broker.report_error(
+                        name.to_build_error(BuildErrorMessage::RedeclarationAsParameter),
+                    )
+                },
             );
         }
     }
@@ -134,7 +155,11 @@ impl<B: BuildErrorBroker> TableBuilder<B> for VariableDeclaration {
             table.enter(
                 name.clone(),
                 Entry::Variable(VariableEntry::from(self.clone())),
-                || broker.report_error(name.to_table_error(BuildErrorMessage::RedeclarationAsVariable)),
+                || {
+                    broker.report_error(
+                        name.to_build_error(BuildErrorMessage::RedeclarationAsVariable),
+                    )
+                },
             );
         }
     }

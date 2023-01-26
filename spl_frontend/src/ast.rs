@@ -68,6 +68,10 @@ impl Operator {
             _ => None,
         }
     }
+
+    pub(crate) fn is_arithmatic(&self) -> bool {
+        matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,7 +104,6 @@ pub enum TypeExpression {
         size: Option<u32>,
         base_type: Option<Box<TypeExpression>>,
     },
-    Error,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

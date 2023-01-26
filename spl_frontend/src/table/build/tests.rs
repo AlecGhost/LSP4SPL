@@ -1,6 +1,6 @@
 use crate::{
     ast::{Identifier, TypeExpression},
-    table::{Entry, BuildErrorMessage, ProcedureEntry, SymbolTable, BuildError, VariableEntry},
+    table::{BuildError, BuildErrorMessage, Entry, ProcedureEntry, SymbolTable, VariableEntry},
     test::LocalBroker,
 };
 use std::collections::HashMap;
@@ -18,12 +18,10 @@ fn type_decs() {
     let (table, broker) = test("type a = int;");
     assert_eq!(
         table,
-        SymbolTable {
-            entries: HashMap::from([(
-                Identifier::new("a", 5..6),
-                Entry::Type(Some(TypeExpression::IntType))
-            )])
-        }
+        SymbolTable::initialize(vec![(
+            Identifier::new("a", 5..6),
+            Entry::Type(Some(TypeExpression::IntType))
+        )])
     );
     assert_eq!(
         broker.errors(),
@@ -33,15 +31,13 @@ fn type_decs() {
     let (table, broker) = test("type a = array [5] of int");
     assert_eq!(
         table,
-        SymbolTable {
-            entries: HashMap::from([(
-                Identifier::new("a", 5..6),
-                Entry::Type(Some(TypeExpression::ArrayType {
-                    size: Some(5),
-                    base_type: Some(Box::new(TypeExpression::IntType)),
-                }))
-            )])
-        }
+        SymbolTable::initialize(vec![(
+            Identifier::new("a", 5..6),
+            Entry::Type(Some(TypeExpression::ArrayType {
+                size: Some(5),
+                base_type: Some(Box::new(TypeExpression::IntType)),
+            }))
+        )])
     );
     assert_eq!(
         broker.errors(),
@@ -51,15 +47,13 @@ fn type_decs() {
     let (table, broker) = test("type a = bool;");
     assert_eq!(
         table,
-        SymbolTable {
-            entries: HashMap::from([(
-                Identifier::new("a", 5..6),
-                Entry::Type(Some(TypeExpression::NamedType(Identifier::new(
-                    "bool",
-                    9..13
-                )))),
-            )])
-        }
+        SymbolTable::initialize(vec![(
+            Identifier::new("a", 5..6),
+            Entry::Type(Some(TypeExpression::NamedType(Identifier::new(
+                "bool",
+                9..13
+            )))),
+        )])
     );
     assert_eq!(
         broker.errors(),
@@ -75,37 +69,25 @@ fn test_main() {
     let (table, broker) = test("proc main() {}");
     assert_eq!(
         table,
-        SymbolTable {
-            entries: HashMap::from([(
-                Identifier::new("main", 5..9),
-                Entry::Procedure(ProcedureEntry {
-                    local_table: SymbolTable::new(),
-                    parameters: Vec::new(),
-                })
-            )])
-        }
+        SymbolTable::initialize(vec![(
+            Identifier::new("main", 5..9),
+            Entry::Procedure(ProcedureEntry {
+                local_table: SymbolTable::new(),
+                parameters: Vec::new(),
+            })
+        )])
     );
     assert_eq!(broker.errors(), Vec::new());
 
     let (table, broker) = test("");
-    assert_eq!(
-        table,
-        SymbolTable {
-            entries: HashMap::new()
-        }
-    );
+    assert_eq!(table, SymbolTable::initialized());
     assert_eq!(
         broker.errors(),
         vec![BuildError(0..0, BuildErrorMessage::MainIsMissing)]
     );
 
     let (table, broker) = test("type main = int;");
-    assert_eq!(
-        table,
-        SymbolTable {
-            entries: HashMap::new()
-        }
-    );
+    assert_eq!(table, SymbolTable::initialized());
     assert_eq!(
         broker.errors(),
         vec![
@@ -117,15 +99,13 @@ fn test_main() {
     let (table, broker) = test("type main = int; proc main() {}");
     assert_eq!(
         table,
-        SymbolTable {
-            entries: HashMap::from([(
-                Identifier::new("main", 22..26),
-                Entry::Procedure(ProcedureEntry {
-                    local_table: SymbolTable::new(),
-                    parameters: Vec::new(),
-                })
-            )])
-        }
+        SymbolTable::initialize(vec![(
+            Identifier::new("main", 22..26),
+            Entry::Procedure(ProcedureEntry {
+                local_table: SymbolTable::new(),
+                parameters: Vec::new(),
+            })
+        )])
     );
     assert_eq!(
         broker.errors(),
@@ -135,30 +115,31 @@ fn test_main() {
     let (table, broker) = test("proc main(a: int) {}");
     assert_eq!(
         table,
-        SymbolTable {
-            entries: HashMap::from([(
-                Identifier::new("main", 5..9),
-                Entry::Procedure(ProcedureEntry {
-                    local_table: SymbolTable {
-                        entries: HashMap::from([(
-                            Identifier::new("a", 10..11),
-                            Entry::Parameter(VariableEntry {
-                                is_ref: false,
-                                type_expr: Some(TypeExpression::IntType)
-                            })
-                        )])
-                    },
-                    parameters: vec![VariableEntry {
-                        is_ref: false,
-                        type_expr: Some(TypeExpression::IntType)
-                    }],
-                })
-            )])
-        }
+        SymbolTable::initialize(vec![(
+            Identifier::new("main", 5..9),
+            Entry::Procedure(ProcedureEntry {
+                local_table: SymbolTable {
+                    entries: HashMap::from([(
+                        Identifier::new("a", 10..11),
+                        Entry::Variable(VariableEntry {
+                            is_ref: false,
+                            type_expr: Some(TypeExpression::IntType)
+                        })
+                    )])
+                },
+                parameters: vec![VariableEntry {
+                    is_ref: false,
+                    type_expr: Some(TypeExpression::IntType)
+                }],
+            })
+        )])
     );
     assert_eq!(
         broker.errors(),
-        vec![BuildError(0..0, BuildErrorMessage::MainMustNotHaveParameters)]
+        vec![BuildError(
+            0..0,
+            BuildErrorMessage::MainMustNotHaveParameters
+        )]
     );
 }
 
@@ -180,7 +161,10 @@ fn redeclaration() {
     assert_eq!(
         broker.errors(),
         vec![
-            BuildError(17..18, BuildErrorMessage::RedeclarationAsType("a".to_string())),
+            BuildError(
+                17..18,
+                BuildErrorMessage::RedeclarationAsType("a".to_string())
+            ),
             BuildError(0..0, BuildErrorMessage::MainIsMissing)
         ]
     );

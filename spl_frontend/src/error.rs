@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use crate::ast::Identifier;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParseError(pub Range<usize>, pub ParseErrorMessage);
 
@@ -31,20 +33,22 @@ pub struct BuildError(pub Range<usize>, pub BuildErrorMessage);
 #[repr(usize)]
 pub enum BuildErrorMessage {
     UndefinedType(String) = 101,
-    RedeclarationAsType(String) = 103,
-    MustBeAReferenceParameter(String) = 104,
-    RedeclarationAsProcedure(String) = 105,
-    RedeclarationAsParameter(String) = 106,
-    RedeclarationAsVariable(String) = 107,
+    NotAType(String),
+    RedeclarationAsType(String),
+    MustBeAReferenceParameter(String),
+    RedeclarationAsProcedure(String),
+    RedeclarationAsParameter(String),
+    RedeclarationAsVariable(String),
     MainIsMissing = 125,
-    MainIsNotAProcedure = 126,
-    MainMustNotHaveParameters = 127,
+    MainIsNotAProcedure,
+    MainMustNotHaveParameters,
 }
 
 impl ToString for BuildErrorMessage {
     fn to_string(&self) -> String {
         match self {
             Self::UndefinedType(name) => format!("undefined type {}", name),
+            Self::NotAType(name) => format!("{} is not a type", name),
             Self::RedeclarationAsType(name) => format!("redeclaration of {} as type", name),
             Self::MustBeAReferenceParameter(name) => {
                 format!("parameter {} mus be a reference parameter", name)
@@ -64,5 +68,80 @@ impl ToString for BuildErrorMessage {
                 "procedure 'main' must not have any parameters".to_string()
             }
         }
+    }
+}
+
+impl Identifier {
+    pub fn to_build_error(&self, msg: impl Fn(String) -> BuildErrorMessage) -> BuildError {
+        BuildError(self.range.clone(), msg(self.value.clone()))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticError(pub Range<usize>, pub SemanticErrorMessage);
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[repr(usize)]
+pub enum SemanticErrorMessage {
+    AssignmentHasDifferentTypes = 108,
+    AssignmentRequiresIntegers,
+    IfConditionMustBeBoolean,
+    WhileConditionMustBeBoolean,
+    UndefinedProcedure(String),
+    CallOfNoneProcedure(String),
+    ArgumentsTypeMismatch(String, usize),
+    ArgumentMustBeAVariable(String, usize),
+    TooFewArguments(String),
+    TooManyArguments(String),
+    OperatorDifferentTypes,
+    ComparisonNonInteger,
+    ArithmeticOperatorNonInteger,
+    UndefinedVariable(String),
+    NotAVariable(String),
+    IndexingNonArray,
+    IndexingWithNonInteger,
+}
+
+impl ToString for SemanticErrorMessage {
+    fn to_string(&self) -> String {
+        match self {
+            Self::AssignmentHasDifferentTypes => "assignment has different types".to_string(),
+            Self::AssignmentRequiresIntegers => "assignment requires integer variable".to_string(),
+            Self::IfConditionMustBeBoolean => {
+                "'if' test expression must be of type boolean".to_string()
+            }
+            Self::WhileConditionMustBeBoolean => {
+                "'while' test expression must be of type boolean".to_string()
+            }
+            Self::UndefinedProcedure(name) => format!("undefined procedure {}", name),
+            Self::CallOfNoneProcedure(name) => format!("call of non-procedure {}", name),
+            Self::ArgumentsTypeMismatch(name, index) => {
+                format!("procedure {} argument {} type mismatch", name, index)
+            }
+            Self::ArgumentMustBeAVariable(name, index) => {
+                format!("procedure {} argument {} must be a variable", name, index)
+            }
+            Self::TooFewArguments(name) => {
+                format!("procedure {} called with too few arguments", name)
+            }
+            Self::TooManyArguments(name) => {
+                format!("procedure {} called with too many arguments", name)
+            }
+            Self::OperatorDifferentTypes => "expression combines different types".to_string(),
+            Self::ComparisonNonInteger => "comparison requires integer operands".to_string(),
+            Self::ArithmeticOperatorNonInteger => {
+                "arithmetic operation requires integer operands".to_string()
+            }
+            Self::UndefinedVariable(name) => format!("undefined variable {}", name),
+            Self::NotAVariable(name) => format!("{} is not a variable", name),
+            Self::IndexingNonArray => "illegal indexing a non-array".to_string(),
+            Self::IndexingWithNonInteger => "illegal indexing with a non-integer".to_string(),
+        }
+    }
+}
+
+impl Identifier {
+    pub fn to_semantic_error(&self, msg: impl Fn(String) -> SemanticErrorMessage) -> SemanticError {
+        SemanticError(self.range.clone(), msg(self.value.clone()))
     }
 }
