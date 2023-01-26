@@ -205,8 +205,7 @@ pub(super) mod keywords {
 
 pub(super) mod primitives {
     keyword_parsers!(
-        int: "int",
-        bool: "bool"
+        int: "int"
     );
 }
 

@@ -3,6 +3,8 @@ use crate::{
     table::{BuildError, BuildErrorMessage, Entry, ProcedureEntry, SymbolTable, VariableEntry},
     test::LocalBroker,
 };
+#[cfg(test)]
+use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 
 fn test(src: &str) -> (SymbolTable, LocalBroker<BuildError>) {

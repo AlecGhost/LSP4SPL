@@ -69,7 +69,7 @@ impl Operator {
         }
     }
 
-    pub fn is_arithmatic(&self) -> bool {
+    pub fn is_arithmetic(&self) -> bool {
         matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div)
     }
 }

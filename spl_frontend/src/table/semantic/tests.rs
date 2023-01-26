@@ -3,6 +3,8 @@ use crate::{
     parser, table,
     test::LocalBroker,
 };
+#[cfg(test)]
+use pretty_assertions::assert_eq;
 
 fn test(src: &str) -> Vec<SemanticError> {
     eprintln!("Testing: {}", src);
@@ -184,6 +186,133 @@ fn call_statements() {
         vec![SemanticError(
             128..129,
             SemanticErrorMessage::ArgumentsTypeMismatch("a".to_string(), 1)
+        )]
+    );
+
+    let errors = test(
+        "
+        type a = int;
+        proc main() {
+            a(1);
+        }
+        ",
+    );
+    assert_eq!(
+        errors,
+        vec![SemanticError(
+            57..58,
+            SemanticErrorMessage::CallOfNoneProcedure("a".to_string())
+        )]
+    );
+
+    let errors = test(
+        "
+        proc main() {
+            a(1);
+        }
+        ",
+    );
+    assert_eq!(
+        errors,
+        vec![SemanticError(
+            35..36,
+            SemanticErrorMessage::UndefinedProcedure("a".to_string())
+        )]
+    );
+}
+
+#[test]
+fn comparisons() {
+    let errors = test(
+        "
+        proc main() {
+            if (1 = 1);
+        }
+        ",
+    );
+    assert_eq!(errors, Vec::new());
+
+    let errors = test(
+        "
+        proc main() {
+            if (1);
+        }
+        ",
+    );
+    assert_eq!(
+        errors,
+        vec![SemanticError(
+            0..0,
+            SemanticErrorMessage::IfConditionMustBeBoolean
+        )]
+    );
+
+    let errors = test(
+        "
+        proc main() {
+            while (1);
+        }
+        ",
+    );
+    assert_eq!(
+        errors,
+        vec![SemanticError(
+            0..0,
+            SemanticErrorMessage::WhileConditionMustBeBoolean
+        )]
+    );
+}
+
+#[test]
+fn expressions() {
+    let errors = test(
+        "
+        type matrix = array [3] of array [3] of int;
+        proc main() { 
+            var i: matrix;
+            while (i < i);
+        }
+        ",
+    );
+    assert_eq!(
+        errors,
+        vec![SemanticError(
+            0..0,
+            SemanticErrorMessage::ComparisonNonInteger
+        )]
+    );
+
+    let errors = test(
+        "
+        type matrix = array [3] of array [3] of int;
+        proc main() { 
+            var i: matrix;
+            while (1 < i);
+        }
+        ",
+    );
+    assert_eq!(
+        errors,
+        vec![SemanticError(
+            0..0,
+            SemanticErrorMessage::OperatorDifferentTypes,
+        )]
+    );
+
+    let errors = test(
+        "
+        type matrix = array [3] of array [3] of int;
+        proc main() { 
+            var i: matrix;
+            i := i + i;
+        }
+        ",
+    );
+    assert_eq!(
+        errors,
+        vec![SemanticError(
+            0..0,
+            SemanticErrorMessage::ArithmeticOperatorNonInteger,
         )]
     );
 }

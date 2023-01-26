@@ -1,6 +1,8 @@
 use super::*;
 use crate::test::LocalBroker;
 use nom::combinator::all_consuming;
+#[cfg(test)]
+use pretty_assertions::assert_eq;
 
 trait ToSpan<B> {
     fn to_span(&self) -> Span<B>;

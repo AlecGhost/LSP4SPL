@@ -180,11 +180,13 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for IfStatement {
             .condition
             .as_ref()
             .and_then(|expr| expr.analyze(table, broker.clone()));
-        if condition_type != Some(TypeExpression::BoolType) {
-            broker.report_error(SemanticError(
-                0..0,
-                SemanticErrorMessage::IfConditionMustBeBoolean,
-            ));
+        if let Some(condition_type) = condition_type {
+            if condition_type != TypeExpression::BoolType {
+                broker.report_error(SemanticError(
+                    0..0,
+                    SemanticErrorMessage::IfConditionMustBeBoolean,
+                ));
+            }
         }
         if let Some(stmt) = &self.if_branch {
             stmt.analyze(table, broker.clone());
@@ -201,11 +203,13 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for WhileStatement {
             .condition
             .as_ref()
             .and_then(|expr| expr.analyze(table, broker.clone()));
-        if condition_type != Some(TypeExpression::BoolType) {
-            broker.report_error(SemanticError(
-                0..0,
-                SemanticErrorMessage::WhileConditionMustBeBoolean,
-            ));
+        if let Some(condition_type) = condition_type {
+            if condition_type != TypeExpression::BoolType {
+                broker.report_error(SemanticError(
+                    0..0,
+                    SemanticErrorMessage::WhileConditionMustBeBoolean,
+                ));
+            }
         }
         if let Some(stmt) = &self.statement {
             stmt.analyze(table, broker);
@@ -305,9 +309,11 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for BinaryExpression {
                 0..0,
                 SemanticErrorMessage::OperatorDifferentTypes,
             ));
+            // no immediate return with None
+            // because operator still states the type intention
         }
         if lhs != Some(TypeExpression::IntType) {
-            if self.operator.is_arithmatic() {
+            if self.operator.is_arithmetic() {
                 broker.report_error(SemanticError(
                     0..0,
                     SemanticErrorMessage::ArithmeticOperatorNonInteger,
@@ -319,10 +325,10 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for BinaryExpression {
                 ));
             }
             None
-        } else if self.operator.is_arithmatic() {
+        } else if self.operator.is_arithmetic() {
             Some(TypeExpression::IntType)
         } else {
-            // non arithmatic means comparison
+            // non arithmetic means comparison
             Some(TypeExpression::BoolType)
         }
     }
