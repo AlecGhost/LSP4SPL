@@ -1,8 +1,8 @@
 use super::{IResult, ParseErrorBroker, Span};
 use crate::error::ParseErrorMessage;
 use nom::{
-    bytes::complete::{tag, take, take_till},
-    character::complete::{multispace0, multispace1},
+    bytes::complete::{tag, take, take_till, take_while},
+    character::{complete::multispace0, is_alphanumeric},
     error::ErrorKind,
     multi::many0,
     {InputTake, Offset},
@@ -45,18 +45,12 @@ where
     }
 }
 
-pub(super) fn ws_enclosed<'a, O, B: Clone, F>(
-    mut inner: F,
-) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
-where
-    F: MutParser<'a, O, B>,
-{
-    move |input: Span<B>| {
-        let (input, _) = multispace1(input)?;
-        let (input, result) = inner.parse(input)?;
-        let (input, _) = multispace1(input)?;
-        Ok((input, result))
-    }
+pub(super) fn alpha_numeric0<B: Clone>(input: Span<B>) -> IResult<Span<B>, B> {
+    take_while(is_alpha_numeric)(input)
+}
+
+pub(super) fn is_alpha_numeric(c: char) -> bool {
+    is_alphanumeric(c as u8) || c == '_'
 }
 
 pub(super) fn ignore_until<'a, B: Clone, F>(
@@ -138,18 +132,64 @@ where
     }
 }
 
-macro_rules! simple_parsers {
+pub(super) fn verify<'a, O, B: ParseErrorBroker, F, G>(
+    mut parser: F,
+    verification: G,
+) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
+where
+    F: MutParser<'a, O, B>,
+    G: Fn(&O) -> bool,
+{
+    move |input: Span<B>| match parser.parse(input.clone()) {
+        Ok((input, out)) => {
+            if verification(&out) {
+                Ok((input, out))
+            } else {
+                Err(nom::Err::Error(nom::error::Error::new(
+                    input,
+                    ErrorKind::Verify,
+                )))
+            }
+        }
+        Err(err) => {
+            eprintln!("verify: {:#?}", input);
+            Err(err)
+        }
+    }
+}
+
+macro_rules! keyword_parsers {
     ($($name: ident: $pattern: literal),*) => {
+        use crate::parser::{Span, DiagnosticsBroker, util_parsers};
+        use crate::error::ParseError;
         $(
-        pub(crate) fn $name<B: Clone>(input: crate::parser::Span<B>) -> nom::IResult<crate::parser::Span<B>, crate::parser::Span<B>> {
-            crate::parser::ws(nom::bytes::complete::tag($pattern))(input)
+        pub fn $name<B: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError>>(input: Span<B>)
+        -> nom::IResult<Span<B>, Span<B>> {
+            use nom::bytes::complete::{tag, take};
+            use nom::combinator::{peek, eof};
+            use nom::branch::alt;
+            use nom::sequence::terminated;
+            use util_parsers::{ws, is_alpha_numeric, verify};
+            ws(terminated(tag($pattern), peek(alt((eof, verify(take(1u8), |span| !span.starts_with(is_alpha_numeric)))))))(input)
         }
         )*
     };
 }
 
-pub(crate) mod keywords {
-    simple_parsers!(
+macro_rules! symbol_parsers {
+    ($($name: ident: $pattern: literal),*) => {
+        $(
+        pub fn $name<B: Clone>(input: crate::parser::Span<B>) -> nom::IResult<crate::parser::Span<B>, crate::parser::Span<B>> {
+            use nom::bytes::complete::tag;
+            use crate::parser::util_parsers::ws;
+            ws(tag($pattern))(input)
+        }
+        )*
+    };
+}
+
+pub(super) mod keywords {
+    keyword_parsers!(
         array: "array",
         r#else: "else",
         r#if: "if",
@@ -162,15 +202,15 @@ pub(crate) mod keywords {
     );
 }
 
-pub(crate) mod primitives {
-    simple_parsers!(
+pub(super) mod primitives {
+    keyword_parsers!(
         int: "int",
         bool: "bool"
     );
 }
 
-pub(crate) mod symbols {
-    simple_parsers!(
+pub(super) mod symbols {
+    symbol_parsers!(
         lparen: "(",
         rparen: ")",
         lbracket: "[",

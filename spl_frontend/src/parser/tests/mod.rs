@@ -1,5 +1,5 @@
-use crate::test::LocalBroker;
 use super::*;
+use crate::test::LocalBroker;
 use nom::combinator::all_consuming;
 
 trait ToSpan<B> {
@@ -20,6 +20,71 @@ impl ToSpan<LocalBroker<ParseError>> for String {
 
 fn int_lit(value: u32) -> Box<Expression> {
     Box::new(Expression::IntLiteral(IntLiteral::new(value)))
+}
+
+#[test]
+fn idents() {
+    let i = "ab1";
+    assert_eq!(
+        all_consuming(Identifier::parse)(i.to_span()).unwrap().1,
+        Identifier::new("ab1", 0..3),
+        "Identifier: {}",
+        i
+    );
+
+    let i = "test_ident";
+    assert_eq!(
+        all_consuming(Identifier::parse)(i.to_span()).unwrap().1,
+        Identifier::new("test_ident", 0..10),
+        "Identifier: {}",
+        i
+    );
+
+    let i = "_a";
+    assert_eq!(
+        all_consuming(Identifier::parse)(i.to_span()).unwrap().1,
+        Identifier::new("_a", 0..2),
+        "Identifier: {}",
+        i
+    );
+
+    let i = "1a";
+    assert!(
+        all_consuming(Identifier::parse)(i.to_span()).is_err(),
+        "Identifier: {}",
+        i
+    );
+}
+
+#[test]
+fn keywords() {
+    let kw = "array";
+    assert!(
+        all_consuming(keywords::array)(kw.to_span()).is_ok(),
+        "Keyword: {}",
+        kw
+    );
+
+    let kw = "array_";
+    assert!(
+        all_consuming(keywords::array)(kw.to_span()).is_err(),
+        "Keyword: {}",
+        kw
+    );
+
+    let kw = "type a=int;";
+    assert!(
+        all_consuming(TypeDeclaration::parse)(kw.to_span()).is_ok(),
+        "Keyword: {}",
+        kw
+    );
+
+    let kw = "typea=int;";
+    assert!(
+        all_consuming(TypeDeclaration::parse)(kw.to_span()).is_err(),
+        "Keyword: {}",
+        kw
+    );
 }
 
 #[test]
@@ -204,9 +269,18 @@ fn type_declarations() {
     assert_eq!(
         input.extra.errors(),
         vec![
-            ParseError(5..5, ParseErrorMessage::ExpectedToken("identifier".to_string())),
-            ParseError(14..14, ParseErrorMessage::ExpectedToken("integer".to_string())),
-            ParseError(26..26, ParseErrorMessage::ExpectedToken("integer".to_string())),
+            ParseError(
+                5..5,
+                ParseErrorMessage::ExpectedToken("identifier".to_string())
+            ),
+            ParseError(
+                14..14,
+                ParseErrorMessage::ExpectedToken("integer".to_string())
+            ),
+            ParseError(
+                26..26,
+                ParseErrorMessage::ExpectedToken("integer".to_string())
+            ),
             ParseError(
                 30..30,
                 ParseErrorMessage::ExpectedToken("type expression".to_string())
@@ -286,7 +360,10 @@ fn call_statements() {
     assert_eq!(
         input.extra.errors(),
         vec![
-            ParseError(4..4, ParseErrorMessage::ExpectedToken("expression".to_string())),
+            ParseError(
+                4..4,
+                ParseErrorMessage::ExpectedToken("expression".to_string())
+            ),
             ParseError(5..5, ParseErrorMessage::MissingTrailingSemic),
         ],
         "CallStatement: {}",

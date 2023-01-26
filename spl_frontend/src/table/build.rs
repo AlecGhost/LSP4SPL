@@ -126,11 +126,7 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ParameterDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
             if let Some(type_expr) = &self.type_expr {
-                let is_primitive = matches!(
-                    type_expr,
-                    TypeExpression::IntType | TypeExpression::BoolType
-                );
-                if !is_primitive && !self.is_ref {
+                if !type_expr.is_primitive() && !self.is_ref {
                     broker.report_error(
                         name.to_build_error(BuildErrorMessage::MustBeAReferenceParameter),
                     );

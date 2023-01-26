@@ -2,13 +2,13 @@ use crate::{ast::*, DiagnosticsBroker, error::{ParseError, ParseErrorMessage}};
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{alpha1, alphanumeric0, anychar, digit1, hex_digit1},
+    character::complete::{alpha1, anychar, digit1, hex_digit1},
     combinator::{all_consuming, eof, map, opt, peek},
     multi::many0,
     sequence::{delimited, pair, preceded, terminated},
 };
 use std::ops::Range;
-use util_parsers::{expect, ignore_until1, keywords, primitives, symbols, ws};
+use util_parsers::{alpha_numeric0, expect, ignore_until1, keywords, primitives, symbols, ws};
 
 #[cfg(test)]
 mod tests;
@@ -95,8 +95,7 @@ impl<B: ParseErrorBroker> Parser<B> for IntLiteral {
 impl<B: Clone> Parser<B> for Identifier {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         map(
-            // TODO: fix underscore recognition
-            ws(pair(alt((alpha1, tag("_"))), alt((alphanumeric0, tag("_"))))),
+            ws(pair(alt((alpha1, tag("_"))), alpha_numeric0)),
             |pair: (Span<B>, Span<B>)| Self {
                 value: String::new() + *pair.0 + *pair.1,
                 range: pair.0.location_offset()..pair.1.to_range().end,

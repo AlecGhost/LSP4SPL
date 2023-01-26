@@ -18,7 +18,7 @@ pub struct Identifier {
 }
 
 impl Identifier {
-    pub(crate) fn new<T: ToString>(value: T, range: Range<usize>) -> Self {
+    pub fn new<T: ToString>(value: T, range: Range<usize>) -> Self {
         Self {
             value: value.to_string(),
             range,
@@ -53,7 +53,7 @@ pub enum Operator {
 }
 
 impl Operator {
-    pub(crate) fn new(symbol: &str) -> Option<Self> {
+    pub fn new(symbol: &str) -> Option<Self> {
         match symbol {
             "+" => Some(Self::Add),
             "-" => Some(Self::Sub),
@@ -69,7 +69,7 @@ impl Operator {
         }
     }
 
-    pub(crate) fn is_arithmatic(&self) -> bool {
+    pub fn is_arithmatic(&self) -> bool {
         matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div)
     }
 }
@@ -104,6 +104,12 @@ pub enum TypeExpression {
         size: Option<u32>,
         base_type: Option<Box<TypeExpression>>,
     },
+}
+
+impl TypeExpression {
+    pub fn is_primitive(&self) -> bool {
+        matches!(self, Self::IntType | Self::BoolType)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
