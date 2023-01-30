@@ -1,8 +1,10 @@
-use std::ops::Range;
-
 use crate::ast::Identifier;
+use std::fmt::Display;
+use std::ops::Range;
+use thiserror::Error;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[error("Range {} - {}: {1}", .0.start, .0.end)]
 pub struct ParseError(pub Range<usize>, pub ParseErrorMessage);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -14,19 +16,21 @@ pub enum ParseErrorMessage {
     ExpectedToken(String),
 }
 
-impl ToString for ParseErrorMessage {
-    fn to_string(&self) -> String {
-        match self {
-            Self::MissingOpening(c) => format!("missing opening `{}`", c),
-            Self::MissingClosing(c) => format!("missing closing `{}`", c),
-            Self::MissingTrailingSemic => "missing trailing `;`".to_string(),
-            Self::UnexpectedCharacters(s) => format!("unexpected `{}`", s),
-            Self::ExpectedToken(t) => format!("expected `{}`", t),
-        }
+impl Display for ParseErrorMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
+            Self::MissingOpening(c) => format!("missing opening '{}'", c),
+            Self::MissingClosing(c) => format!("missing closing '{}'", c),
+            Self::MissingTrailingSemic => "missing trailing ';'".to_string(),
+            Self::UnexpectedCharacters(s) => format!("unexpected '{}'", s),
+            Self::ExpectedToken(t) => format!("expected '{}'", t),
+        };
+        writeln!(f, "{}", display)
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[error("Range {} - {}: {1}", .0.start, .0.end)]
 pub struct BuildError(pub Range<usize>, pub BuildErrorMessage);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -44,9 +48,9 @@ pub enum BuildErrorMessage {
     MainMustNotHaveParameters,
 }
 
-impl ToString for BuildErrorMessage {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for BuildErrorMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
             Self::UndefinedType(name) => format!("undefined type {}", name),
             Self::NotAType(name) => format!("{} is not a type", name),
             Self::RedeclarationAsType(name) => format!("redeclaration of {} as type", name),
@@ -67,7 +71,8 @@ impl ToString for BuildErrorMessage {
             Self::MainMustNotHaveParameters => {
                 "procedure 'main' must not have any parameters".to_string()
             }
-        }
+        };
+        writeln!(f, "{}", display)
     }
 }
 
@@ -77,7 +82,8 @@ impl Identifier {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+#[error("Range {} - {}: {1}", .0.start, .0.end)]
 pub struct SemanticError(pub Range<usize>, pub SemanticErrorMessage);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -102,9 +108,9 @@ pub enum SemanticErrorMessage {
     IndexingWithNonInteger,
 }
 
-impl ToString for SemanticErrorMessage {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for SemanticErrorMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
             Self::AssignmentHasDifferentTypes => "assignment has different types".to_string(),
             Self::AssignmentRequiresIntegers => "assignment requires integer variable".to_string(),
             Self::IfConditionMustBeBoolean => {
@@ -136,7 +142,8 @@ impl ToString for SemanticErrorMessage {
             Self::NotAVariable(name) => format!("{} is not a variable", name),
             Self::IndexingNonArray => "illegal indexing a non-array".to_string(),
             Self::IndexingWithNonInteger => "illegal indexing with a non-integer".to_string(),
-        }
+        };
+        writeln!(f, "{}", display)
     }
 }
 

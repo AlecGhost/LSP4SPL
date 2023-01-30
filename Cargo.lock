@@ -629,6 +629,7 @@ dependencies = [
  "nom",
  "nom_locate",
  "pretty_assertions",
+ "thiserror",
  "tokio",
 ]
 
