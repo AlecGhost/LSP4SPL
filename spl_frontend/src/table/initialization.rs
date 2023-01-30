@@ -1,6 +1,6 @@
-use super::SymbolTable;
+use super::{DataType, SymbolTable};
 use crate::{
-    ast::{Identifier, TypeExpression},
+    ast::Identifier,
     table::{Entry, ProcedureEntry, VariableEntry},
 };
 use std::collections::HashMap;
@@ -21,7 +21,7 @@ impl SymbolTable {
                     Identifier::new("printi", 0..0),
                     procedure_entry(vec![VariableEntry {
                         is_ref: false,
-                        type_expr: Some(TypeExpression::IntType),
+                        data_type: Some(DataType::Int),
                     }]),
                 ),
                 // printc(i: int)
@@ -29,7 +29,7 @@ impl SymbolTable {
                     Identifier::new("printc", 0..0),
                     procedure_entry(vec![VariableEntry {
                         is_ref: false,
-                        type_expr: Some(TypeExpression::IntType),
+                        data_type: Some(DataType::Int),
                     }]),
                 ),
                 // readi(ref i: int)
@@ -37,7 +37,7 @@ impl SymbolTable {
                     Identifier::new("readi", 0..0),
                     procedure_entry(vec![VariableEntry {
                         is_ref: true,
-                        type_expr: Some(TypeExpression::IntType),
+                        data_type: Some(DataType::Int),
                     }]),
                 ),
                 // readc(ref i: int)
@@ -45,7 +45,7 @@ impl SymbolTable {
                     Identifier::new("readc", 0..0),
                     procedure_entry(vec![VariableEntry {
                         is_ref: true,
-                        type_expr: Some(TypeExpression::IntType),
+                        data_type: Some(DataType::Int),
                     }]),
                 ),
                 // exit()
@@ -55,7 +55,7 @@ impl SymbolTable {
                     Identifier::new("time", 0..0),
                     procedure_entry(vec![VariableEntry {
                         is_ref: true,
-                        type_expr: Some(TypeExpression::IntType),
+                        data_type: Some(DataType::Int),
                     }]),
                 ),
                 // clearAll(color: int)
@@ -63,7 +63,7 @@ impl SymbolTable {
                     Identifier::new("time", 0..0),
                     procedure_entry(vec![VariableEntry {
                         is_ref: false,
-                        type_expr: Some(TypeExpression::IntType),
+                        data_type: Some(DataType::Int),
                     }]),
                 ),
                 // setPixel(x: int, y: int, color: int)
@@ -72,15 +72,15 @@ impl SymbolTable {
                     procedure_entry(vec![
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                     ]),
                 ),
@@ -90,23 +90,23 @@ impl SymbolTable {
                     procedure_entry(vec![
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                     ]),
                 ),
@@ -116,19 +116,19 @@ impl SymbolTable {
                     procedure_entry(vec![
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                         VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType),
+                            data_type: Some(DataType::Int),
                         },
                     ]),
                 ),

@@ -1,6 +1,8 @@
 use crate::{
-    ast::{Identifier, TypeExpression},
-    table::{BuildError, BuildErrorMessage, Entry, ProcedureEntry, SymbolTable, VariableEntry},
+    ast::Identifier,
+    table::{
+        BuildError, BuildErrorMessage, DataType, Entry, ProcedureEntry, SymbolTable, VariableEntry,
+    },
     test::LocalBroker,
 };
 #[cfg(test)]
@@ -22,7 +24,7 @@ fn type_decs() {
         table,
         SymbolTable::initialize(vec![(
             Identifier::new("a", 5..6),
-            Entry::Type(Some(TypeExpression::IntType))
+            Entry::Type(Some(DataType::Int))
         )])
     );
     assert_eq!(
@@ -35,9 +37,10 @@ fn type_decs() {
         table,
         SymbolTable::initialize(vec![(
             Identifier::new("a", 5..6),
-            Entry::Type(Some(TypeExpression::ArrayType {
-                size: Some(5),
-                base_type: Some(Box::new(TypeExpression::IntType)),
+            Entry::Type(Some(DataType::Array {
+                size: 5,
+                base_type: Box::new(DataType::Int),
+                creator: Identifier::new("a", 5..6),
             }))
         )])
     );
@@ -49,13 +52,7 @@ fn type_decs() {
     let (table, broker) = test("type a = bool;");
     assert_eq!(
         table,
-        SymbolTable::initialize(vec![(
-            Identifier::new("a", 5..6),
-            Entry::Type(Some(TypeExpression::NamedType(Identifier::new(
-                "bool",
-                9..13
-            )))),
-        )])
+        SymbolTable::initialize(vec![(Identifier::new("a", 5..6), Entry::Type(None),)])
     );
     assert_eq!(
         broker.errors(),
@@ -125,13 +122,13 @@ fn test_main() {
                         Identifier::new("a", 10..11),
                         Entry::Variable(VariableEntry {
                             is_ref: false,
-                            type_expr: Some(TypeExpression::IntType)
+                            data_type: Some(DataType::Int)
                         })
                     )])
                 },
                 parameters: vec![VariableEntry {
                     is_ref: false,
-                    type_expr: Some(TypeExpression::IntType)
+                    data_type: Some(DataType::Int)
                 }],
             })
         )])

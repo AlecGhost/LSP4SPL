@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Identifier, TypeExpression},
+    ast::Identifier,
     error::{BuildError, BuildErrorMessage},
     DiagnosticsBroker,
 };
@@ -8,13 +8,26 @@ pub use semantic::analyze;
 use std::collections::HashMap;
 
 mod build;
-mod semantic;
 mod initialization;
+mod semantic;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DataType {
+    Int,
+    Bool,
+    Array { size: u32, base_type: Box<Self>, creator: Identifier },
+}
+
+impl DataType {
+    fn is_primitive(&self) -> bool {
+        matches!(self, Self::Int | Self::Bool)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableEntry {
     pub is_ref: bool,
-    pub type_expr: Option<TypeExpression>,
+    pub data_type: Option<DataType>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,9 +38,13 @@ pub struct ProcedureEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Entry {
-    Type(Option<TypeExpression>),
+    Type(Option<DataType>),
     Variable(VariableEntry),
     Procedure(ProcedureEntry),
+}
+
+trait Table {
+    fn lookup(&self, key: &Identifier) -> Option<&Entry>;
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -50,11 +67,29 @@ impl SymbolTable {
             on_error();
         }
     }
+}
 
+impl Table for SymbolTable {
     fn lookup(&self, key: &Identifier) -> Option<&Entry> {
         self.entries
             .iter()
             .find(|(k, _)| k.value == key.value)
             .map(|(_, v)| v)
+    }
+}
+
+#[derive(Debug)]
+struct LookupTable<'a> {
+    local_table: &'a SymbolTable,
+    global_table: &'a SymbolTable,
+}
+
+impl<'a> Table for LookupTable<'a> {
+    fn lookup(&self, key: &Identifier) -> Option<&Entry> {
+        let mut value = self.local_table.lookup(key);
+        if value.is_none() {
+            value = self.global_table.lookup(key);
+        }
+        value
     }
 }

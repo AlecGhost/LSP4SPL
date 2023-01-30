@@ -1,9 +1,8 @@
-use super::{Entry, SymbolTable};
+use super::{DataType, Entry, LookupTable, SymbolTable, Table};
 use crate::{
     ast::{
         ArrayAccess, Assignment, BinaryExpression, BlockStatement, CallStatement, Expression,
-        GlobalDeclaration, Identifier, IfStatement, Program, Statement, TypeExpression, Variable,
-        WhileStatement,
+        GlobalDeclaration, IfStatement, Program, Statement, Variable, WhileStatement,
     },
     error::{SemanticError, SemanticErrorMessage},
     DiagnosticsBroker,
@@ -17,22 +16,6 @@ trait SemanticErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<SemanticE
 
 impl<T> SemanticErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<SemanticError>
 {}
-
-#[derive(Debug)]
-struct LookupTable<'a> {
-    local_table: &'a SymbolTable,
-    global_table: &'a SymbolTable,
-}
-
-impl<'a> LookupTable<'a> {
-    fn lookup(&self, key: &Identifier) -> Option<&Entry> {
-        let mut value = self.local_table.lookup(key);
-        if value.is_none() {
-            value = self.global_table.lookup(key);
-        }
-        value
-    }
-}
 
 pub fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker<SemanticError>>(
     program: &Program,
@@ -67,7 +50,7 @@ trait AnalyzeStatement<B> {
 }
 
 trait AnalyzeExpression<B> {
-    fn analyze(&self, table: &LookupTable, broker: B) -> Option<TypeExpression>;
+    fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType>;
 }
 
 impl<B: SemanticErrorBroker> AnalyzeStatement<B> for Statement {
@@ -95,7 +78,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for Assignment {
                         0..0,
                         SemanticErrorMessage::AssignmentHasDifferentTypes,
                     ));
-                } else if !matches!(left, TypeExpression::IntType) {
+                } else if !matches!(left, DataType::Int) {
                     broker.report_error(SemanticError(
                         0..0,
                         SemanticErrorMessage::AssignmentRequiresIntegers,
@@ -148,7 +131,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for CallStatement {
                             ),
                         ));
                     }
-                    if arg.analyze(table, broker.clone()) != param.type_expr {
+                    if arg.analyze(table, broker.clone()) != param.data_type {
                         broker.report_error(SemanticError(
                             self.name.range.clone(),
                             SemanticErrorMessage::ArgumentsTypeMismatch(
@@ -181,7 +164,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for IfStatement {
             .as_ref()
             .and_then(|expr| expr.analyze(table, broker.clone()));
         if let Some(condition_type) = condition_type {
-            if condition_type != TypeExpression::BoolType {
+            if condition_type != DataType::Bool {
                 broker.report_error(SemanticError(
                     0..0,
                     SemanticErrorMessage::IfConditionMustBeBoolean,
@@ -204,7 +187,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for WhileStatement {
             .as_ref()
             .and_then(|expr| expr.analyze(table, broker.clone()));
         if let Some(condition_type) = condition_type {
-            if condition_type != TypeExpression::BoolType {
+            if condition_type != DataType::Bool {
                 broker.report_error(SemanticError(
                     0..0,
                     SemanticErrorMessage::WhileConditionMustBeBoolean,
@@ -218,34 +201,14 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for WhileStatement {
 }
 
 impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Variable {
-    fn analyze(&self, table: &LookupTable, broker: B) -> Option<TypeExpression> {
+    fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType> {
         match self {
             Self::ArrayAccess(a) => a.analyze(table, broker),
             Self::NamedVariable(named) => {
                 if let Some(entry) = table.lookup(named) {
                     match entry {
                         Entry::Variable(v) => {
-                            if let Some(TypeExpression::NamedType(mut named_type)) =
-                                v.type_expr.clone()
-                            {
-                                while let Some(entry) = table.global_table.lookup(&named_type) {
-                                    if let Entry::Type(t) = entry {
-                                        match t.clone() {
-                                            Some(TypeExpression::NamedType(ident)) => {
-                                                named_type = ident
-                                            }
-                                            type_expr => return type_expr,
-                                        };
-                                    } else {
-                                        // already reported at build stage
-                                        return None;
-                                    }
-                                }
-                                // already reported at build stage
-                                None
-                            } else {
-                                v.type_expr.clone()
-                            }
+                            v.data_type.clone()
                         }
                         _ => {
                             broker.report_error(
@@ -266,9 +229,9 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Variable {
 }
 
 impl<B: SemanticErrorBroker> AnalyzeExpression<B> for ArrayAccess {
-    fn analyze(&self, table: &LookupTable, broker: B) -> Option<TypeExpression> {
+    fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType> {
         let index_type = self.index.analyze(table, broker.clone());
-        if index_type != Some(TypeExpression::IntType) {
+        if index_type != Some(DataType::Int) {
             broker.report_error(SemanticError(
                 0..0,
                 SemanticErrorMessage::IndexingWithNonInteger,
@@ -276,7 +239,11 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for ArrayAccess {
         };
         if let Some(array_type) = self.array.analyze(table, broker.clone()) {
             match array_type {
-                TypeExpression::ArrayType { size: _, base_type } => base_type.map(|boxed| *boxed),
+                DataType::Array {
+                    size: _,
+                    base_type,
+                    creator: _,
+                } => Some(*base_type),
                 _ => {
                     broker
                         .report_error(SemanticError(0..0, SemanticErrorMessage::IndexingNonArray));
@@ -290,9 +257,9 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for ArrayAccess {
 }
 
 impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Expression {
-    fn analyze(&self, table: &LookupTable, broker: B) -> Option<TypeExpression> {
+    fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType> {
         match self {
-            Self::IntLiteral(_) => Some(TypeExpression::IntType),
+            Self::IntLiteral(_) => Some(DataType::Int),
             Self::Variable(v) => v.analyze(table, broker),
             Self::Binary(b) => b.analyze(table, broker),
             Self::Error => None,
@@ -301,7 +268,7 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Expression {
 }
 
 impl<B: SemanticErrorBroker> AnalyzeExpression<B> for BinaryExpression {
-    fn analyze(&self, table: &LookupTable, broker: B) -> Option<TypeExpression> {
+    fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType> {
         let lhs = self.lhs.analyze(table, broker.clone());
         let rhs = self.rhs.analyze(table, broker.clone());
         if lhs != rhs {
@@ -312,7 +279,7 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for BinaryExpression {
             // no immediate return with None
             // because operator still states the type intention
         }
-        if lhs != Some(TypeExpression::IntType) {
+        if lhs != Some(DataType::Int) {
             if self.operator.is_arithmetic() {
                 broker.report_error(SemanticError(
                     0..0,
@@ -326,10 +293,10 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for BinaryExpression {
             }
             None
         } else if self.operator.is_arithmetic() {
-            Some(TypeExpression::IntType)
+            Some(DataType::Int)
         } else {
             // non arithmetic means comparison
-            Some(TypeExpression::BoolType)
+            Some(DataType::Bool)
         }
     }
 }

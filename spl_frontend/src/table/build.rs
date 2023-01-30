@@ -66,18 +66,16 @@ impl<B: BuildErrorBroker> TableBuilder<B> for TypeDeclaration {
                 ));
                 return;
             }
-            if let Some(t) = get_underlying_type(&self.type_expr) {
-                if let Some(entry) = table.lookup(t) {
-                    if !matches!(entry, Entry::Type(_)) {
-                        broker.report_error(t.to_build_error(BuildErrorMessage::NotAType))
-                    }
-                } else {
-                    broker.report_error(t.to_build_error(BuildErrorMessage::UndefinedType));
-                }
-            }
-            table.enter(name.clone(), Entry::Type(self.type_expr.clone()), || {
-                broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsType))
-            });
+            table.enter(
+                name.clone(),
+                Entry::Type(get_data_type(
+                    &self.type_expr,
+                    &self.name,
+                    table,
+                    broker.clone(),
+                )),
+                || broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsType)),
+            );
         }
     }
 }
@@ -89,27 +87,11 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
             let parameters = self
                 .parameters
                 .iter()
-                .map(|param| VariableEntry::from(param.clone()))
+                .map(|param| build_parameter(param, table, &mut local_table, broker.clone()))
                 .collect();
-            self.parameters
-                .iter()
-                .for_each(|dec| dec.build(&mut local_table, broker.clone()));
             self.variable_declarations
                 .iter()
-                .for_each(|dec| dec.build(&mut local_table, broker.clone()));
-            local_table.entries.values().for_each(|value| {
-                if let Entry::Variable(entry) = value {
-                    if let Some(t) = get_underlying_type(&entry.type_expr) {
-                        if let Some(entry) = table.lookup(t) {
-                            if !matches!(entry, Entry::Type(_)) {
-                                broker.report_error(t.to_build_error(BuildErrorMessage::NotAType))
-                            }
-                        } else {
-                            broker.report_error(t.to_build_error(BuildErrorMessage::UndefinedType));
-                        }
-                    }
-                }
-            });
+                .for_each(|dec| build_variable(dec, table, &mut local_table, broker.clone()));
             let entry = ProcedureEntry {
                 local_table,
                 parameters,
@@ -122,74 +104,100 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
     }
 }
 
-impl<B: BuildErrorBroker> TableBuilder<B> for ParameterDeclaration {
-    fn build(&self, table: &mut SymbolTable, broker: B) {
-        if let Some(name) = &self.name {
-            if let Some(type_expr) = &self.type_expr {
-                if !type_expr.is_primitive() && !self.is_ref {
-                    broker.report_error(
-                        name.to_build_error(BuildErrorMessage::MustBeAReferenceParameter),
-                    );
+fn build_parameter<B: BuildErrorBroker>(
+    param: &ParameterDeclaration,
+    global_table: &SymbolTable,
+    local_table: &mut SymbolTable,
+    broker: B,
+) -> VariableEntry {
+    let param_entry = VariableEntry {
+        is_ref: param.is_ref,
+        data_type: get_data_type(&param.type_expr, &param.name, global_table, broker.clone()),
+    };
+    if let Some(name) = &param.name {
+        if let Some(data_type) = &param_entry.data_type {
+            if !data_type.is_primitive() && !param.is_ref {
+                broker.report_error(
+                    name.to_build_error(BuildErrorMessage::MustBeAReferenceParameter),
+                );
+            }
+        }
+        local_table.enter(name.clone(), Entry::Variable(param_entry.clone()), || {
+            broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsParameter))
+        });
+    };
+    param_entry
+}
+
+fn build_variable<B: BuildErrorBroker>(
+    var: &VariableDeclaration,
+    global_table: &SymbolTable,
+    local_table: &mut SymbolTable,
+    broker: B,
+) {
+    let entry = VariableEntry {
+        is_ref: false,
+        data_type: get_data_type(
+            &var.type_expr,
+            &var.name,
+            &LookupTable {
+                global_table,
+                local_table,
+            },
+            broker.clone(),
+        ),
+    };
+    if let Some(name) = &var.name {
+        local_table.enter(name.clone(), Entry::Variable(entry), || {
+            broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsVariable))
+        });
+    }
+}
+
+fn get_data_type<T: Table, B: BuildErrorBroker>(
+    type_expr: &Option<TypeExpression>,
+    caller: &Option<Identifier>,
+    table: &T,
+    broker: B,
+) -> Option<DataType> {
+    if let Some(type_expr) = type_expr {
+        use TypeExpression::*;
+        match type_expr {
+            IntType => Some(DataType::Int),
+            ArrayType { size, base_type } => {
+                if let (Some(size), Some(base_type)) = (
+                    size,
+                    get_data_type(
+                        &base_type.clone().map(|boxed| *boxed),
+                        caller,
+                        table,
+                        broker,
+                    ),
+                ) {
+                    caller.as_ref().map(|creator| DataType::Array {
+                        size: *size,
+                        base_type: Box::new(base_type),
+                        creator: creator.clone(),
+                    })
+                } else {
+                    None
                 }
             }
-            table.enter(
-                name.clone(),
-                Entry::Variable(VariableEntry::from(self.clone())),
-                || {
-                    broker.report_error(
-                        name.to_build_error(BuildErrorMessage::RedeclarationAsParameter),
-                    )
-                },
-            );
-        }
-    }
-}
-
-impl<B: BuildErrorBroker> TableBuilder<B> for VariableDeclaration {
-    fn build(&self, table: &mut SymbolTable, broker: B) {
-        if let Some(name) = &self.name {
-            table.enter(
-                name.clone(),
-                Entry::Variable(VariableEntry::from(self.clone())),
-                || {
-                    broker.report_error(
-                        name.to_build_error(BuildErrorMessage::RedeclarationAsVariable),
-                    )
-                },
-            );
-        }
-    }
-}
-
-impl From<ParameterDeclaration> for VariableEntry {
-    fn from(value: ParameterDeclaration) -> Self {
-        Self {
-            is_ref: value.is_ref,
-            type_expr: value.type_expr,
-        }
-    }
-}
-
-impl From<VariableDeclaration> for VariableEntry {
-    fn from(value: VariableDeclaration) -> Self {
-        Self {
-            is_ref: false,
-            type_expr: value.type_expr,
-        }
-    }
-}
-
-fn get_underlying_type(type_expr: &Option<TypeExpression>) -> Option<&Identifier> {
-    if let Some(type_expr) = type_expr {
-        let mut type_expr = type_expr;
-        while let TypeExpression::ArrayType { size: _, base_type } = type_expr {
-            if let Some(next_level) = base_type {
-                type_expr = next_level;
+            NamedType(name) => {
+                if let Some(entry) = table.lookup(name) {
+                    if let Entry::Type(t) = entry {
+                        t.clone()
+                    } else {
+                        broker.report_error(name.to_build_error(BuildErrorMessage::NotAType));
+                        None
+                    }
+                } else {
+                    broker.report_error(name.to_build_error(BuildErrorMessage::UndefinedType));
+                    None
+                }
             }
         }
-        if let TypeExpression::NamedType(ident) = type_expr {
-            return Some(ident);
-        }
+    } else {
+        None
     }
-    None
 }

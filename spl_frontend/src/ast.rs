@@ -98,18 +98,11 @@ pub struct TypeDeclaration {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeExpression {
     IntType,
-    BoolType,
     NamedType(Identifier),
     ArrayType {
         size: Option<u32>,
         base_type: Option<Box<TypeExpression>>,
     },
-}
-
-impl TypeExpression {
-    pub fn is_primitive(&self) -> bool {
-        matches!(self, Self::IntType | Self::BoolType)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
