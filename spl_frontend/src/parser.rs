@@ -1,4 +1,8 @@
-use crate::{ast::*, DiagnosticsBroker, error::{ParseError, ParseErrorMessage}};
+use crate::{
+    ast::*,
+    error::{ParseError, ParseErrorMessage},
+    DiagnosticsBroker,
+};
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -49,12 +53,12 @@ trait Parser<B>: Sized {
     fn parse(input: Span<B>) -> IResult<Self, B>;
 }
 
-impl<B: Clone> Parser<B> for Option<char> {
+impl<B: ParseErrorBroker> Parser<B> for char {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         let (input, _) = tag("'")(input)?;
         let (input, c) = alt((map(tag("\\n"), |_| '\n'), anychar))(input)?;
-        let (input, _) = tag("'")(input)?;
-        Ok((input, Some(c)))
+        let (input, _) = expect(tag("'"), ParseErrorMessage::MissingClosing('\''))(input)?;
+        Ok((input, c))
     }
 }
 
@@ -84,7 +88,7 @@ impl<B: ParseErrorBroker> Parser<B> for IntLiteral {
                         })
                     },
                 ),
-                map(Option::parse, |opt: Option<char>| opt.map(|c| c as u32)),
+                map(char::parse, |c| Some(c as u32)),
                 map(u32::parse, Some),
             ))),
             |opt| Self { value: opt },
@@ -228,12 +232,15 @@ impl<B: ParseErrorBroker> Parser<B> for TypeExpression {
                 ParseErrorMessage::ExpectedToken("[".to_string()),
             )(input)?;
             let (input, size) = expect(
-                ws(u32::parse),
-                ParseErrorMessage::ExpectedToken("integer".to_string()),
+                map(ws(IntLiteral::parse), |int_lit| int_lit.value),
+                ParseErrorMessage::ExpectedToken("int literal".to_string()),
             )(input)?;
-            let (input, _) = expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']'))(input)?;
             let (input, _) =
-                expect(keywords::of, ParseErrorMessage::ExpectedToken("of".to_string()))(input)?;
+                expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']'))(input)?;
+            let (input, _) = expect(
+                keywords::of,
+                ParseErrorMessage::ExpectedToken("of".to_string()),
+            )(input)?;
             let (input, type_expr) = expect(
                 TypeExpression::parse,
                 ParseErrorMessage::ExpectedToken("type expression".to_string()),
@@ -241,7 +248,7 @@ impl<B: ParseErrorBroker> Parser<B> for TypeExpression {
             Ok((
                 input,
                 TypeExpression::ArrayType {
-                    size,
+                    size: size.flatten(),
                     base_type: type_expr.map(Box::new),
                 },
             ))
@@ -262,7 +269,10 @@ impl<B: ParseErrorBroker> Parser<B> for TypeDeclaration {
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
         )(input)?;
-        let (input, _) = expect(symbols::eq, ParseErrorMessage::ExpectedToken("=".to_string()))(input)?;
+        let (input, _) = expect(
+            symbols::eq,
+            ParseErrorMessage::ExpectedToken("=".to_string()),
+        )(input)?;
         let (input, type_expr) = expect(
             TypeExpression::parse,
             ParseErrorMessage::ExpectedToken("type expression".to_string()),
@@ -279,8 +289,10 @@ impl<B: ParseErrorBroker> Parser<B> for VariableDeclaration {
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
         )(input)?;
-        let (input, _) =
-            expect(symbols::colon, ParseErrorMessage::ExpectedToken(":".to_string()))(input)?;
+        let (input, _) = expect(
+            symbols::colon,
+            ParseErrorMessage::ExpectedToken(":".to_string()),
+        )(input)?;
         let (input, type_expr) = expect(
             TypeExpression::parse,
             ParseErrorMessage::ExpectedToken("type expression".to_string()),
@@ -305,8 +317,10 @@ impl<B: ParseErrorBroker> Parser<B> for ParameterDeclaration {
             ),
             map(Identifier::parse, |ident| (false, Some(ident))),
         ))(input)?;
-        let (input, _) =
-            expect(symbols::colon, ParseErrorMessage::ExpectedToken(":".to_string()))(input)?;
+        let (input, _) = expect(
+            symbols::colon,
+            ParseErrorMessage::ExpectedToken(":".to_string()),
+        )(input)?;
         let (input, type_expr) = expect(
             TypeExpression::parse,
             ParseErrorMessage::ExpectedToken("type expression".to_string()),

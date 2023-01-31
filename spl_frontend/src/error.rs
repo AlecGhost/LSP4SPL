@@ -51,20 +51,20 @@ pub enum BuildErrorMessage {
 impl Display for BuildErrorMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let display = match self {
-            Self::UndefinedType(name) => format!("undefined type {}", name),
-            Self::NotAType(name) => format!("{} is not a type", name),
-            Self::RedeclarationAsType(name) => format!("redeclaration of {} as type", name),
+            Self::UndefinedType(name) => format!("undefined type '{}'", name),
+            Self::NotAType(name) => format!("'{}' is not a type", name),
+            Self::RedeclarationAsType(name) => format!("redeclaration of '{}' as type", name),
             Self::MustBeAReferenceParameter(name) => {
-                format!("parameter {} mus be a reference parameter", name)
+                format!("parameter '{}' mus be a reference parameter", name)
             }
             Self::RedeclarationAsProcedure(name) => {
-                format!("redeclaration of {} as procedure", name)
+                format!("redeclaration of '{}' as procedure", name)
             }
             Self::RedeclarationAsParameter(name) => {
-                format!("redeclaration of {} as parameter", name)
+                format!("redeclaration of '{}' as parameter", name)
             }
             Self::RedeclarationAsVariable(name) => {
-                format!("redeclaration of {} as variable", name)
+                format!("redeclaration of '{}' as variable", name)
             }
             Self::MainIsMissing => "procedure 'main' is missing".to_string(),
             Self::MainIsNotAProcedure => "'main' is not a procedure".to_string(),
@@ -119,27 +119,27 @@ impl Display for SemanticErrorMessage {
             Self::WhileConditionMustBeBoolean => {
                 "'while' test expression must be of type boolean".to_string()
             }
-            Self::UndefinedProcedure(name) => format!("undefined procedure {}", name),
-            Self::CallOfNoneProcedure(name) => format!("call of non-procedure {}", name),
+            Self::UndefinedProcedure(name) => format!("undefined procedure '{}'", name),
+            Self::CallOfNoneProcedure(name) => format!("call of non-procedure '{}'", name),
             Self::ArgumentsTypeMismatch(name, index) => {
-                format!("procedure {} argument {} type mismatch", name, index)
+                format!("procedure '{}' argument {} type mismatch", name, index)
             }
             Self::ArgumentMustBeAVariable(name, index) => {
-                format!("procedure {} argument {} must be a variable", name, index)
+                format!("procedure '{}' argument {} must be a variable", name, index)
             }
             Self::TooFewArguments(name) => {
-                format!("procedure {} called with too few arguments", name)
+                format!("procedure '{}' called with too few arguments", name)
             }
             Self::TooManyArguments(name) => {
-                format!("procedure {} called with too many arguments", name)
+                format!("procedure '{}' called with too many arguments", name)
             }
             Self::OperatorDifferentTypes => "expression combines different types".to_string(),
             Self::ComparisonNonInteger => "comparison requires integer operands".to_string(),
             Self::ArithmeticOperatorNonInteger => {
                 "arithmetic operation requires integer operands".to_string()
             }
-            Self::UndefinedVariable(name) => format!("undefined variable {}", name),
-            Self::NotAVariable(name) => format!("{} is not a variable", name),
+            Self::UndefinedVariable(name) => format!("undefined variable '{}'", name),
+            Self::NotAVariable(name) => format!("'{}' is not a variable", name),
             Self::IndexingNonArray => "illegal indexing a non-array".to_string(),
             Self::IndexingWithNonInteger => "illegal indexing with a non-integer".to_string(),
         };

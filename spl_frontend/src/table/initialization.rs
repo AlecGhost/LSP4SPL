@@ -60,7 +60,7 @@ impl SymbolTable {
                 ),
                 // clearAll(color: int)
                 (
-                    Identifier::new("time", 0..0),
+                    Identifier::new("clearAll", 0..0),
                     procedure_entry(vec![VariableEntry {
                         is_ref: false,
                         data_type: Some(DataType::Int),
