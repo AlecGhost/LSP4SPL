@@ -27,8 +27,8 @@ impl<B: BuildErrorBroker> TableBuilder<B> for Program {
             .iter()
             .for_each(|dec| dec.build(table, broker.clone()));
         match &table.entries.iter().find(|(key, _)| key.value == "main") {
-            Some((_, entry)) => {
-                if let Entry::Procedure(main) = entry {
+            Some((_, ranged_entry)) => {
+                if let Entry::Procedure(main) = &ranged_entry.entry {
                     if !main.parameters.is_empty() {
                         broker.report_error(BuildError(
                             0..0,
@@ -68,12 +68,15 @@ impl<B: BuildErrorBroker> TableBuilder<B> for TypeDeclaration {
             }
             table.enter(
                 name.clone(),
-                Entry::Type(get_data_type(
-                    &self.type_expr,
-                    &self.name,
-                    table,
-                    broker.clone(),
-                )),
+                RangedEntry {
+                    range: self.range.clone(),
+                    entry: Entry::Type(get_data_type(
+                        &self.type_expr,
+                        &self.name,
+                        table,
+                        broker.clone(),
+                    )),
+                },
                 || broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsType)),
             );
         }
@@ -96,10 +99,18 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
                 local_table,
                 parameters,
             };
-            table.enter(name.clone(), Entry::Procedure(entry), || {
-                broker
-                    .report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsProcedure));
-            });
+            table.enter(
+                name.clone(),
+                RangedEntry {
+                    range: self.range.clone(),
+                    entry: Entry::Procedure(entry),
+                },
+                || {
+                    broker.report_error(
+                        name.to_build_error(BuildErrorMessage::RedeclarationAsProcedure),
+                    );
+                },
+            );
         }
     }
 }
@@ -122,7 +133,7 @@ fn build_parameter<B: BuildErrorBroker>(
                 );
             }
         }
-        local_table.enter(name.clone(), Entry::Variable(param_entry.clone()), || {
+        local_table.enter(name.clone(), RangedEntry { range: param.range.clone(), entry: Entry::Variable(param_entry.clone()) }, || {
             broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsParameter))
         });
     };
@@ -148,7 +159,7 @@ fn build_variable<B: BuildErrorBroker>(
         ),
     };
     if let Some(name) = &var.name {
-        local_table.enter(name.clone(), Entry::Variable(entry), || {
+        local_table.enter(name.clone(), RangedEntry { range: var.range.clone(), entry: Entry::Variable(entry) }, || {
             broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsVariable))
         });
     }
@@ -184,8 +195,8 @@ fn get_data_type<T: Table, B: BuildErrorBroker>(
                 }
             }
             NamedType(name) => {
-                if let Some(entry) = table.lookup(name) {
-                    if let Entry::Type(t) = entry {
+                if let Some(ranged_entry) = table.lookup(name) {
+                    if let Entry::Type(t) = &ranged_entry.entry {
                         t.clone()
                     } else {
                         broker.report_error(name.to_build_error(BuildErrorMessage::NotAType));

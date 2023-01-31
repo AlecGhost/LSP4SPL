@@ -364,6 +364,7 @@ impl<B: ParseErrorBroker> Parser<B> for VariableDeclaration {
 
 impl<B: ParseErrorBroker> Parser<B> for ParameterDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, (is_ref, name)) = alt((
             map(
                 preceded(
@@ -385,12 +386,14 @@ impl<B: ParseErrorBroker> Parser<B> for ParameterDeclaration {
             TypeExpression::parse,
             ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
+        let end = input.location_offset();
         Ok((
             input,
             Self {
                 is_ref,
                 name,
                 type_expr,
+                range: start..end,
             },
         ))
     }

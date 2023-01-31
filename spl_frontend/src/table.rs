@@ -5,7 +5,7 @@ use crate::{
 };
 pub use build::build;
 pub use semantic::analyze;
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Range};
 
 mod build;
 mod initialization;
@@ -47,13 +47,19 @@ pub enum Entry {
     Procedure(ProcedureEntry),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RangedEntry {
+    pub range: Range<usize>,
+    pub entry: Entry,
+}
+
 trait Table {
-    fn lookup(&self, key: &Identifier) -> Option<&Entry>;
+    fn lookup(&self, key: &Identifier) -> Option<&RangedEntry>;
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct SymbolTable {
-    entries: HashMap<Identifier, Entry>,
+    entries: HashMap<Identifier, RangedEntry>,
 }
 
 impl SymbolTable {
@@ -63,7 +69,7 @@ impl SymbolTable {
         }
     }
 
-    fn enter(&mut self, key: Identifier, value: Entry, mut on_error: impl FnMut()) {
+    fn enter(&mut self, key: Identifier, value: RangedEntry, mut on_error: impl FnMut()) {
         // TODO: More effective lookup
         if !self.entries.keys().any(|ident| ident.value == key.value) {
             self.entries.insert(key, value);
@@ -74,7 +80,7 @@ impl SymbolTable {
 }
 
 impl Table for SymbolTable {
-    fn lookup(&self, key: &Identifier) -> Option<&Entry> {
+    fn lookup(&self, key: &Identifier) -> Option<&RangedEntry> {
         self.entries
             .iter()
             .find(|(k, _)| k.value == key.value)
@@ -89,7 +95,7 @@ struct LookupTable<'a> {
 }
 
 impl<'a> Table for LookupTable<'a> {
-    fn lookup(&self, key: &Identifier) -> Option<&Entry> {
+    fn lookup(&self, key: &Identifier) -> Option<&RangedEntry> {
         let mut value = self.local_table.lookup(key);
         if value.is_none() {
             value = self.global_table.lookup(key);

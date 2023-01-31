@@ -1,17 +1,20 @@
 use super::{DataType, SymbolTable};
 use crate::{
     ast::Identifier,
-    table::{Entry, ProcedureEntry, VariableEntry},
+    table::{Entry, ProcedureEntry, RangedEntry, VariableEntry},
 };
 use std::collections::HashMap;
 
 impl SymbolTable {
     pub fn initialized() -> Self {
-        fn procedure_entry(parameters: Vec<VariableEntry>) -> Entry {
-            Entry::Procedure(ProcedureEntry {
-                local_table: SymbolTable::new(),
-                parameters,
-            })
+        fn procedure_entry(parameters: Vec<VariableEntry>) -> RangedEntry {
+            RangedEntry {
+                range: 0..0,
+                entry: Entry::Procedure(ProcedureEntry {
+                    local_table: SymbolTable::new(),
+                    parameters,
+                }),
+            }
         }
 
         Self {
@@ -136,7 +139,7 @@ impl SymbolTable {
         }
     }
 
-    pub fn initialize(entries: Vec<(Identifier, Entry)>) -> Self {
+    pub fn initialize(entries: Vec<(Identifier, RangedEntry)>) -> Self {
         let mut table = Self::initialized();
         for (k, v) in entries {
             table.entries.insert(k, v);

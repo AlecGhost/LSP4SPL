@@ -32,8 +32,8 @@ pub fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker<SemanticError>>(
         })
         .for_each(|proc| {
             if let Some(name) = &proc.name {
-                let entry = table.lookup(name).expect("Named declaration without entry");
-                if let Entry::Procedure(proc_entry) = entry {
+                let ranged_entry = table.lookup(name).expect("Named declaration without entry");
+                if let Entry::Procedure(proc_entry) = &ranged_entry.entry {
                     let lookup_table = &LookupTable {
                         local_table: &proc_entry.local_table,
                         global_table: table,
@@ -101,8 +101,8 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for BlockStatement {
 
 impl<B: SemanticErrorBroker> AnalyzeStatement<B> for CallStatement {
     fn analyze(&self, table: &LookupTable, broker: B) {
-        if let Some(entry) = table.lookup(&self.name) {
-            if let Entry::Procedure(proc_entry) = entry {
+        if let Some(ranged_entry) = table.lookup(&self.name) {
+            if let Entry::Procedure(proc_entry) = &ranged_entry.entry {
                 let arg_len = self.arguments.len();
                 let param_len = proc_entry.parameters.len();
                 match arg_len.cmp(&param_len) {
@@ -203,8 +203,8 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Variable {
         match self {
             Self::ArrayAccess(a) => a.analyze(table, broker),
             Self::NamedVariable(named) => {
-                if let Some(entry) = table.lookup(named) {
-                    match entry {
+                if let Some(ranged_entry) = table.lookup(named) {
+                    match &ranged_entry.entry {
                         Entry::Variable(v) => v.data_type.clone(),
                         _ => {
                             broker.report_error(

@@ -129,90 +129,104 @@ fn expressions() {
         "Expression: {}",
         expr
     );
-    // let expr = "1 / 2 + 3";
-    // assert_eq!(
-    //     all_consuming(E::parse)(expr.to_span()).unwrap().1,
-    //     E::Binary(BinaryExpression {
-    //         operator: Operator::Add,
-    //         lhs: Box::new(E::Binary(BinaryExpression {
-    //             operator: Operator::Div,
-    //             lhs: int_lit(1),
-    //             rhs: int_lit(2)
-    //         })),
-    //         rhs: int_lit(3),
-    //     }),
-    //     "Expression: {}",
-    //     expr
-    // );
-    // let expr = "1 * 2 / 3 * 4";
-    // assert_eq!(
-    //     all_consuming(E::parse)(expr.to_span()).unwrap().1,
-    //     E::Binary(BinaryExpression {
-    //         operator: Operator::Mul,
-    //         lhs: Box::new(E::Binary(BinaryExpression {
-    //             operator: Operator::Div,
-    //             lhs: Box::new(E::Binary(BinaryExpression {
-    //                 operator: Operator::Mul,
-    //                 lhs: int_lit(1),
-    //                 rhs: int_lit(2),
-    //             })),
-    //             rhs: int_lit(3),
-    //         })),
-    //         rhs: int_lit(4),
-    //     }),
-    //     "Expression: {}",
-    //     expr
-    // );
-    // let expr = "1 - 2 + 3 - 4";
-    // assert_eq!(
-    //     all_consuming(E::parse)(expr.to_span()).unwrap().1,
-    //     E::Binary(BinaryExpression {
-    //         operator: Operator::Sub,
-    //         lhs: Box::new(E::Binary(BinaryExpression {
-    //             operator: Operator::Add,
-    //             lhs: Box::new(E::Binary(BinaryExpression {
-    //                 operator: Operator::Sub,
-    //                 lhs: int_lit(1),
-    //                 rhs: int_lit(2),
-    //             })),
-    //             rhs: int_lit(3),
-    //         })),
-    //         rhs: int_lit(4),
-    //     }),
-    //     "Expression: {}",
-    //     expr
-    // );
-    // let expr = "(1 + 2) * 3 = 4 + 5 * 6 / 6";
-    // assert_eq!(
-    //     all_consuming(E::parse)(expr.to_span()).unwrap().1,
-    //     E::Binary(BinaryExpression {
-    //         operator: Operator::Equ,
-    //         lhs: Box::new(Expression::Binary(BinaryExpression {
-    //             operator: Operator::Mul,
-    //             lhs: Box::new(E::Binary(BinaryExpression {
-    //                 operator: Operator::Add,
-    //                 lhs: int_lit(1),
-    //                 rhs: int_lit(2)
-    //             })),
-    //             rhs: int_lit(3),
-    //         })),
-    //         rhs: Box::new(Expression::Binary(BinaryExpression {
-    //             operator: Operator::Add,
-    //             lhs: int_lit(4),
-    //             rhs: Box::new(E::Binary(BinaryExpression {
-    //                 operator: Operator::Div,
-    //                 lhs: Box::new(E::Binary(BinaryExpression {
-    //                     operator: Operator::Mul,
-    //                     lhs: int_lit(5),
-    //                     rhs: int_lit(6)
-    //                 })),
-    //                 rhs: int_lit(6),
-    //             }))
-    //         }))
-    //     }),
-    //     "Expression: {}",
-    //     expr
-    // );
+    let expr = "1 / 2 + 3";
+    assert_eq!(
+        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        E::Binary(BinaryExpression {
+            operator: Operator::Add,
+            lhs: Box::new(E::Binary(BinaryExpression {
+                operator: Operator::Div,
+                lhs: int_lit(1, 0..1),
+                rhs: int_lit(2, 4..5),
+                range: 0..5,
+            })),
+            rhs: int_lit(3, 8..9),
+            range: 0..9,
+        }),
+        "Expression: {}",
+        expr
+    );
+    let expr = "1 * 2 / 3 * 4";
+    assert_eq!(
+        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        E::Binary(BinaryExpression {
+            operator: Operator::Mul,
+            lhs: Box::new(E::Binary(BinaryExpression {
+                operator: Operator::Div,
+                lhs: Box::new(E::Binary(BinaryExpression {
+                    operator: Operator::Mul,
+                    lhs: int_lit(1, 0..1),
+                    rhs: int_lit(2, 4..5),
+                    range: 0..5,
+                })),
+                rhs: int_lit(3, 8..9),
+                range: 0..9,
+            })),
+            rhs: int_lit(4, 12..13),
+            range: 0..13,
+        }),
+        "Expression: {}",
+        expr
+    );
+    let expr = "1 - 2 + 3 - 4";
+    assert_eq!(
+        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        E::Binary(BinaryExpression {
+            operator: Operator::Sub,
+            lhs: Box::new(E::Binary(BinaryExpression {
+                operator: Operator::Add,
+                lhs: Box::new(E::Binary(BinaryExpression {
+                    operator: Operator::Sub,
+                    lhs: int_lit(1, 0..1),
+                    rhs: int_lit(2, 4..5),
+                    range: 0..5,
+                })),
+                rhs: int_lit(3, 8..9),
+                range: 0..9,
+            })),
+            rhs: int_lit(4, 12..13),
+            range: 0..13,
+        }),
+        "Expression: {}",
+        expr
+    );
+    let expr = "(1 + 2) * 3 = 4 + 5 * 6 / 6";
+    assert_eq!(
+        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        E::Binary(BinaryExpression {
+            operator: Operator::Equ,
+            lhs: Box::new(Expression::Binary(BinaryExpression {
+                operator: Operator::Mul,
+                lhs: Box::new(E::Binary(BinaryExpression {
+                    operator: Operator::Add,
+                    lhs: int_lit(1, 1..2),
+                    rhs: int_lit(2, 5..6),
+                    range: 1..6,
+                })),
+                rhs: int_lit(3, 10..11),
+                range: 1..11,
+            })),
+            rhs: Box::new(Expression::Binary(BinaryExpression {
+                operator: Operator::Add,
+                lhs: int_lit(4, 14..15),
+                rhs: Box::new(E::Binary(BinaryExpression {
+                    operator: Operator::Div,
+                    lhs: Box::new(E::Binary(BinaryExpression {
+                        operator: Operator::Mul,
+                        lhs: int_lit(5, 18..19),
+                        rhs: int_lit(6, 22..23),
+                        range: 18..23,
+                    })),
+                    rhs: int_lit(6, 26..27),
+                    range: 18..27,
+                })),
+                range: 14..27,
+            })),
+            range: 1..27,
+        }),
+        "Expression: {}",
+        expr
+    );
     let expr = "a < b > c";
     assert!(
         all_consuming(E::parse)(expr.to_span()).is_err(),
@@ -464,17 +478,20 @@ fn acker() {
                         ParameterDeclaration {
                             is_ref: false,
                             name: i(60..61),
-                            type_expr: int_type.clone()
+                            type_expr: int_type.clone(),
+                            range: 60..66,
                         },
                         ParameterDeclaration {
                             is_ref: false,
                             name: j(68..69),
-                            type_expr: int_type.clone()
+                            type_expr: int_type.clone(),
+                            range: 68..74,
                         },
                         ParameterDeclaration {
                             is_ref: true,
                             name: k(80..81),
-                            type_expr: int_type.clone()
+                            type_expr: int_type.clone(),
+                            range: 76..86,
                         },
                     ],
                     variable_declarations: vec![VariableDeclaration {

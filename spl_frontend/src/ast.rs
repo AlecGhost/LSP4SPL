@@ -155,6 +155,7 @@ pub struct ParameterDeclaration {
     pub is_ref: bool,
     pub name: Option<Identifier>,
     pub type_expr: Option<TypeExpression>,
+    pub range: Range<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
