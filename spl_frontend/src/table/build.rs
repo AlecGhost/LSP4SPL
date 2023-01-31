@@ -51,7 +51,7 @@ impl<B: BuildErrorBroker> TableBuilder<B> for GlobalDeclaration {
         match self {
             Self::Type(t) => t.build(table, broker),
             Self::Procedure(p) => p.build(table, broker),
-            Self::Error => {}
+            Self::Error(_) => {}
         }
     }
 }

@@ -62,7 +62,7 @@ fn arrays() {
     assert_eq!(
         errors,
         vec![SemanticError(
-            0..0,
+            115..134,
             SemanticErrorMessage::AssignmentHasDifferentTypes
         ),]
     );
@@ -77,7 +77,7 @@ fn arrays() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(0..0, SemanticErrorMessage::IndexingNonArray)]
+        vec![SemanticError(59..63, SemanticErrorMessage::IndexingNonArray)]
     );
 
     let errors = test(
@@ -91,7 +91,7 @@ fn arrays() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(0..0, SemanticErrorMessage::IndexingNonArray)]
+        vec![SemanticError(115..125, SemanticErrorMessage::IndexingNonArray)]
     );
 
     let errors = test(
@@ -106,7 +106,7 @@ fn arrays() {
     assert_eq!(
         errors,
         vec![SemanticError(
-            0..0,
+            115..121,
             SemanticErrorMessage::IndexingWithNonInteger
         )]
     );
@@ -126,15 +126,13 @@ fn call_statements() {
 
     let errors = test(
         "
-        proc a(i: int) {} proc main() {
-            a();
-        }
+        proc a(i: int) {} proc main() {a();}
         ",
     );
     assert_eq!(
         errors,
         vec![SemanticError(
-            53..54,
+            40..44,
             SemanticErrorMessage::TooFewArguments("a".to_string())
         )]
     );
@@ -142,15 +140,13 @@ fn call_statements() {
     let errors = test(
         "
         proc a(i: int) {}
-        proc main() {
-            a(1, 2);
-        }
+        proc main() {a(1, 2);}
         ",
     );
     assert_eq!(
         errors,
         vec![SemanticError(
-            61..62,
+            48..56,
             SemanticErrorMessage::TooManyArguments("a".to_string())
         )]
     );
@@ -158,15 +154,13 @@ fn call_statements() {
     let errors = test(
         "
         proc a(ref i: int) {}
-        proc main() {
-            a(1);
-        }
+        proc main() {a(1);}
         ",
     );
     assert_eq!(
         errors,
         vec![SemanticError(
-            65..66,
+            52..57,
             SemanticErrorMessage::ArgumentMustBeAVariable("a".to_string(), 1)
         )]
     );
@@ -184,7 +178,7 @@ fn call_statements() {
     assert_eq!(
         errors,
         vec![SemanticError(
-            128..129,
+            128..142,
             SemanticErrorMessage::ArgumentsTypeMismatch("a".to_string(), 1)
         )]
     );
@@ -200,7 +194,7 @@ fn call_statements() {
     assert_eq!(
         errors,
         vec![SemanticError(
-            57..58,
+            57..71,
             SemanticErrorMessage::CallOfNoneProcedure("a".to_string())
         )]
     );
@@ -215,7 +209,7 @@ fn call_statements() {
     assert_eq!(
         errors,
         vec![SemanticError(
-            35..36,
+            35..49,
             SemanticErrorMessage::UndefinedProcedure("a".to_string())
         )]
     );
@@ -234,30 +228,26 @@ fn comparisons() {
 
     let errors = test(
         "
-        proc main() {
-            if (1);
-        }
+        proc main() {if (1);}
         ",
     );
     assert_eq!(
         errors,
         vec![SemanticError(
-            0..0,
+            22..27,
             SemanticErrorMessage::IfConditionMustBeBoolean
         )]
     );
 
     let errors = test(
         "
-        proc main() {
-            while (1);
-        }
+        proc main() {while (1);}
         ",
     );
     assert_eq!(
         errors,
         vec![SemanticError(
-            0..0,
+            22..30,
             SemanticErrorMessage::WhileConditionMustBeBoolean
         )]
     );
@@ -277,7 +267,7 @@ fn expressions() {
     assert_eq!(
         errors,
         vec![SemanticError(
-            0..0,
+            123..128,
             SemanticErrorMessage::ComparisonNonInteger
         )]
     );
@@ -294,7 +284,7 @@ fn expressions() {
     assert_eq!(
         errors,
         vec![SemanticError(
-            0..0,
+            123..128,
             SemanticErrorMessage::OperatorDifferentTypes,
         )]
     );
@@ -311,7 +301,7 @@ fn expressions() {
     assert_eq!(
         errors,
         vec![SemanticError(
-            0..0,
+            121..126,
             SemanticErrorMessage::ArithmeticOperatorNonInteger,
         )]
     );

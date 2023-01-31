@@ -3,8 +3,12 @@ use std::fmt::Display;
 use std::ops::Range;
 use thiserror::Error;
 
+pub trait DisplayError {
+    fn display(&self, src: &str) -> String;
+}
+
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("Range {} - {}: {1}", .0.start, .0.end)]
+#[error("{1}")]
 pub struct ParseError(pub Range<usize>, pub ParseErrorMessage);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -23,14 +27,14 @@ impl Display for ParseErrorMessage {
             Self::MissingClosing(c) => format!("missing closing '{}'", c),
             Self::MissingTrailingSemic => "missing trailing ';'".to_string(),
             Self::UnexpectedCharacters(s) => format!("unexpected '{}'", s),
-            Self::ExpectedToken(t) => format!("expected '{}'", t),
+            Self::ExpectedToken(t) => format!("expected {}", t),
         };
         writeln!(f, "{}", display)
     }
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("Range {} - {}: {1}", .0.start, .0.end)]
+#[error("{1}")]
 pub struct BuildError(pub Range<usize>, pub BuildErrorMessage);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -55,7 +59,7 @@ impl Display for BuildErrorMessage {
             Self::NotAType(name) => format!("'{}' is not a type", name),
             Self::RedeclarationAsType(name) => format!("redeclaration of '{}' as type", name),
             Self::MustBeAReferenceParameter(name) => {
-                format!("parameter '{}' mus be a reference parameter", name)
+                format!("parameter '{}' must be a reference parameter", name)
             }
             Self::RedeclarationAsProcedure(name) => {
                 format!("redeclaration of '{}' as procedure", name)
@@ -83,8 +87,25 @@ impl Identifier {
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("Range {} - {}: {1}", .0.start, .0.end)]
+#[error("{1}")]
 pub struct SemanticError(pub Range<usize>, pub SemanticErrorMessage);
+
+impl DisplayError for SemanticError {
+    fn display(&self, src: &str) -> String {
+        if self.0.is_empty()
+            || matches!(
+                self.1,
+                SemanticErrorMessage::UndefinedVariable(_)
+                    | SemanticErrorMessage::UndefinedProcedure(_)
+                    | SemanticErrorMessage::NotAVariable(_)
+            )
+        {
+            format!("{}", self.1)
+        } else {
+            format!("{} <= {}", &src[self.0.to_owned()].trim(), self.1)
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(usize)]

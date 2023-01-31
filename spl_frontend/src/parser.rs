@@ -9,7 +9,7 @@ use nom::{
     character::complete::{alpha1, anychar, digit1, hex_digit1},
     combinator::{all_consuming, eof, map, opt, peek},
     multi::many0,
-    sequence::{delimited, pair, preceded, terminated},
+    sequence::{pair, preceded, terminated, tuple},
 };
 use std::ops::Range;
 use utility::{
@@ -26,7 +26,7 @@ impl<T> ParseErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBro
 
 // source: https://github.com/ebkalderon/example-fault-tolerant-parser/blob/master/src/main.rs
 // see also: https://eyalkalderon.com/blog/nom-error-recovery/
-trait ToRange {
+pub(crate) trait ToRange {
     fn to_range(&self) -> Range<usize>;
 }
 
@@ -55,46 +55,67 @@ trait Parser<B>: Sized {
     fn parse(input: Span<B>) -> IResult<Self, B>;
 }
 
-impl<B: ParseErrorBroker> Parser<B> for char {
+impl<B: ParseErrorBroker> Parser<B> for Char {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, _) = tag("'")(input)?;
         let (input, c) = alt((map(tag("\\n"), |_| '\n'), anychar))(input)?;
         let (input, _) = expect(tag("'"), ParseErrorMessage::MissingClosing('\''))(input)?;
-        Ok((input, c))
+        let end = input.location_offset() - 1;
+        Ok((
+            input,
+            Self {
+                value: c,
+                range: start..end,
+            },
+        ))
     }
 }
 
-impl<B: Clone> Parser<B> for u32 {
+impl<B: Clone> Parser<B> for Digit {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        ws(alt((map(digit1, |span: Span<B>| {
-            span.parse().expect("Parsing digit failed")
-        }),)))(input)
+        ws(map(digit1, |span: Span<B>| Self {
+            value: span.parse().expect("Parsing digit failed"),
+            range: span.to_range(),
+        }))(input)
     }
 }
 
 impl<B: ParseErrorBroker> Parser<B> for IntLiteral {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        map(
-            ws(alt((
-                map(
-                    preceded(
-                        tag("0x"),
-                        expect(
-                            hex_digit1,
-                            ParseErrorMessage::ExpectedToken("Hexadecimal digit".to_string()),
-                        ),
+        ws(alt((
+            map(
+                pair(
+                    tag("0x"),
+                    expect(
+                        hex_digit1,
+                        ParseErrorMessage::ExpectedToken("Hexadecimal digit".to_string()),
                     ),
-                    |opt: Option<Span<B>>| {
-                        opt.map(|span: Span<B>| {
-                            u32::from_str_radix(&span, 16).expect("Parsing hex digit failed")
-                        })
-                    },
                 ),
-                map(char::parse, |c| Some(c as u32)),
-                map(u32::parse, Some),
-            ))),
-            |opt| Self { value: opt },
-        )(input)
+                |pair| {
+                    let end = if let Some(span) = &pair.1 {
+                        span.to_range().end
+                    } else {
+                        pair.0.to_range().end
+                    };
+                    let value = pair.1.map(|span| {
+                        u32::from_str_radix(&span, 16).expect("Parsing hex digit failed")
+                    });
+                    Self {
+                        value,
+                        range: pair.0.to_range().start..end,
+                    }
+                },
+            ),
+            map(Char::parse, |char| Self {
+                value: Some(char.value as u32),
+                range: char.range,
+            }),
+            map(Digit::parse, |digit| Self {
+                value: Some(digit.value),
+                range: digit.range,
+            }),
+        )))(input)
     }
 }
 
@@ -113,15 +134,18 @@ impl<B: Clone> Parser<B> for Identifier {
 impl<B: ParseErrorBroker> Parser<B> for Variable {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         let (input, mut name) = map(Identifier::parse, Self::NamedVariable)(input)?;
-        let (input, accesses) = many0(delimited(
+        let (input, accesses) = many0(tuple((
             symbols::lbracket,
             Expression::parse,
             symbols::rbracket,
-        ))(input)?;
+        )))(input)?;
         for access in accesses {
+            let expression = access.1;
+            let range = name.to_range().start..access.2.to_range().end;
             name = Self::ArrayAccess(ArrayAccess {
                 array: Box::new(name),
-                index: Box::new(access),
+                index: Box::new(expression),
+                range,
             });
         }
         Ok((input, name))
@@ -136,15 +160,22 @@ impl<B: ParseErrorBroker> Parser<B> for Expression {
                 map(IntLiteral::parse, Expression::IntLiteral),
                 map(Variable::parse, Expression::Variable),
                 map(
-                    delimited(
+                    tuple((
                         symbols::lparen,
                         expect(
                             Expression::parse,
                             ParseErrorMessage::ExpectedToken("expression".to_string()),
                         ),
                         expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-                    ),
-                    |opt| opt.unwrap_or(Expression::Error),
+                    )),
+                    |tuple| {
+                        let paren = tuple.0;
+                        let expr = tuple.1;
+                        expr.unwrap_or_else(|| {
+                            let after_paren = paren.to_range().end;
+                            Expression::Error(after_paren..after_paren)
+                        })
+                    },
                 ),
             ))(input)
         }
@@ -153,11 +184,15 @@ impl<B: ParseErrorBroker> Parser<B> for Expression {
             // Unary := Primary | "-" Primary
             alt((
                 parse_primary,
-                map(preceded(tag("-"), parse_unary), |exp| {
+                map(pair(tag("-"), parse_unary), |pair| {
+                    let minus = pair.0;
+                    let primary = pair.1;
+                    let range = minus.to_range().start..primary.to_range().end;
                     Expression::Binary(BinaryExpression {
                         operator: Operator::Sub,
-                        lhs: Box::new(Expression::IntLiteral(IntLiteral::new(0))),
-                        rhs: Box::new(exp),
+                        lhs: Box::new(Expression::IntLiteral(IntLiteral::new(0, minus.to_range()))),
+                        rhs: Box::new(primary),
+                        range,
                     })
                 }),
             ))(input)
@@ -176,11 +211,16 @@ impl<B: ParseErrorBroker> Parser<B> for Expression {
                 parser,
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             )(input)?;
-            let rhs = rhs.unwrap_or(Expression::Error);
+            let rhs = rhs.unwrap_or_else(|| {
+                let start = input.location_offset();
+                Expression::Error(start..start)
+            });
+            let range = lhs.to_range().start..rhs.to_range().end;
             let exp = Expression::Binary(BinaryExpression {
                 operator: Operator::new(op).expect("Operator conversion failed"),
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
+                range,
             });
             Ok((input, exp))
         }
@@ -266,6 +306,7 @@ impl<B: ParseErrorBroker> Parser<B> for TypeExpression {
 
 impl<B: ParseErrorBroker> Parser<B> for TypeDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, _) = keywords::r#type(input)?;
         let (input, name) = expect(
             Identifier::parse,
@@ -280,12 +321,21 @@ impl<B: ParseErrorBroker> Parser<B> for TypeDeclaration {
             ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
         let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
-        Ok((input, Self { name, type_expr }))
+        let end = input.location_offset();
+        Ok((
+            input,
+            Self {
+                name,
+                type_expr,
+                range: start..end,
+            },
+        ))
     }
 }
 
 impl<B: ParseErrorBroker> Parser<B> for VariableDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, _) = keywords::var(input)?;
         let (input, name) = expect(
             Identifier::parse,
@@ -300,7 +350,15 @@ impl<B: ParseErrorBroker> Parser<B> for VariableDeclaration {
             ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
         let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
-        Ok((input, Self { name, type_expr }))
+        let end = input.location_offset();
+        Ok((
+            input,
+            Self {
+                name,
+                type_expr,
+                range: start..end,
+            },
+        ))
     }
 }
 
@@ -340,6 +398,7 @@ impl<B: ParseErrorBroker> Parser<B> for ParameterDeclaration {
 
 impl<B: ParseErrorBroker> Parser<B> for CallStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, name) = terminated(Identifier::parse, symbols::lparen)(input)?;
         let (input, mut arguments) = many0(terminated(Expression::parse, symbols::comma))(input)?;
         let (input, opt_argument) = if arguments.is_empty() {
@@ -355,24 +414,42 @@ impl<B: ParseErrorBroker> Parser<B> for CallStatement {
         };
         let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
         let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
-        Ok((input, Self { name, arguments }))
+        let end = input.location_offset();
+        Ok((
+            input,
+            Self {
+                name,
+                arguments,
+                range: start..end,
+            },
+        ))
     }
 }
 
 impl<B: ParseErrorBroker> Parser<B> for Assignment {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, variable) = terminated(Variable::parse, symbols::assign)(input)?;
         let (input, expr) = expect(
             Expression::parse,
             ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
         let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
-        Ok((input, Self { variable, expr }))
+        let end = input.location_offset();
+        Ok((
+            input,
+            Self {
+                variable,
+                expr,
+                range: start..end,
+            },
+        ))
     }
 }
 
 impl<B: ParseErrorBroker> Parser<B> for IfStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, _) = keywords::r#if(input)?;
         let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
@@ -391,12 +468,14 @@ impl<B: ParseErrorBroker> Parser<B> for IfStatement {
                 ParseErrorMessage::ExpectedToken("statement".to_string()),
             ),
         ))(input)?;
+        let end = input.location_offset();
         Ok((
             input,
             Self {
                 condition,
                 if_branch: if_branch.map(Box::new),
                 else_branch: else_branch.flatten().map(Box::new),
+                range: start..end,
             },
         ))
     }
@@ -404,6 +483,7 @@ impl<B: ParseErrorBroker> Parser<B> for IfStatement {
 
 impl<B: ParseErrorBroker> Parser<B> for WhileStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, _) = keywords::r#while(input)?;
         let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
@@ -415,11 +495,13 @@ impl<B: ParseErrorBroker> Parser<B> for WhileStatement {
             Statement::parse,
             ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
+        let end = input.location_offset();
         Ok((
             input,
             Self {
                 condition,
                 statement: stmt.map(Box::new),
+                range: start..end,
             },
         ))
     }
@@ -427,10 +509,18 @@ impl<B: ParseErrorBroker> Parser<B> for WhileStatement {
 
 impl<B: ParseErrorBroker> Parser<B> for BlockStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, _) = symbols::lcurly(input)?;
         let (input, statements) = many0(Statement::parse)(input)?;
         let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
-        Ok((input, Self { statements }))
+        let end = input.location_offset();
+        Ok((
+            input,
+            Self {
+                statements,
+                range: start..end,
+            },
+        ))
     }
 }
 
@@ -479,6 +569,7 @@ impl<B: ParseErrorBroker> Parser<B> for Statement {
 
 impl<B: ParseErrorBroker> Parser<B> for ProcedureDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
+        let start = input.location_offset();
         let (input, _) = keywords::proc(input)?;
         let (input, name) = expect(
             Identifier::parse,
@@ -503,6 +594,7 @@ impl<B: ParseErrorBroker> Parser<B> for ProcedureDeclaration {
         let (input, variable_declarations) = many0(VariableDeclaration::parse)(input)?;
         let (input, statements) = many0(Statement::parse)(input)?;
         let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
+        let end = input.location_offset();
         Ok((
             input,
             Self {
@@ -510,6 +602,7 @@ impl<B: ParseErrorBroker> Parser<B> for ProcedureDeclaration {
                 parameters,
                 variable_declarations,
                 statements,
+                range: start..end,
             },
         ))
     }
@@ -528,7 +621,7 @@ impl<B: ParseErrorBroker> Parser<B> for GlobalDeclaration {
                         ParseErrorMessage::UnexpectedCharacters(span.fragment().to_string()),
                     );
                     span.extra.report_error(err);
-                    Self::Error
+                    Self::Error(span.to_range())
                 },
             ),
         ))(input)

@@ -15,7 +15,11 @@ mod semantic;
 pub enum DataType {
     Int,
     Bool,
-    Array { size: u32, base_type: Box<Self>, creator: Identifier },
+    Array {
+        size: u32,
+        base_type: Box<Self>,
+        creator: Identifier,
+    },
 }
 
 impl DataType {
