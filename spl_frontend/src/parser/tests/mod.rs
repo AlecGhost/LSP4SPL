@@ -277,11 +277,11 @@ fn type_declarations() {
             ),
             ParseError(
                 14..14,
-                ParseErrorMessage::ExpectedToken("integer".to_string())
+                ParseErrorMessage::ExpectedToken("int literal".to_string())
             ),
             ParseError(
                 26..26,
-                ParseErrorMessage::ExpectedToken("integer".to_string())
+                ParseErrorMessage::ExpectedToken("int literal".to_string())
             ),
             ParseError(
                 30..30,

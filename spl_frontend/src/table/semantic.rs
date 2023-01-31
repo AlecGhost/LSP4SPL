@@ -62,6 +62,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for Statement {
             Self::If(stmt) => stmt.analyze(table, broker),
             Self::While(stmt) => stmt.analyze(table, broker),
             Self::Empty => {}
+            Self::Error => {}
         };
     }
 }
@@ -207,9 +208,7 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Variable {
             Self::NamedVariable(named) => {
                 if let Some(entry) = table.lookup(named) {
                     match entry {
-                        Entry::Variable(v) => {
-                            v.data_type.clone()
-                        }
+                        Entry::Variable(v) => v.data_type.clone(),
                         _ => {
                             broker.report_error(
                                 named.to_semantic_error(SemanticErrorMessage::NotAVariable),

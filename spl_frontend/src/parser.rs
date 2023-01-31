@@ -12,7 +12,9 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated},
 };
 use std::ops::Range;
-use utility::{alpha_numeric0, expect, ignore_until1, keywords, primitives, symbols, ws};
+use utility::{
+    alpha_numeric0, expect, ignore_until, ignore_until1, keywords, primitives, symbols, ws,
+};
 
 #[cfg(test)]
 mod tests;
@@ -441,6 +443,36 @@ impl<B: ParseErrorBroker> Parser<B> for Statement {
             map(BlockStatement::parse, Self::Block),
             map(Assignment::parse, Self::Assignment),
             map(CallStatement::parse, Self::Call),
+            map(
+                pair(
+                    Variable::parse,
+                    ignore_until::<B, _>(peek(alt((
+                        symbols::lcurly,
+                        symbols::rcurly,
+                        symbols::semic,
+                        eof,
+                    )))),
+                ),
+                |pair| {
+                    let mut var = pair.0;
+                    loop {
+                        match var {
+                            Variable::NamedVariable(ident) => {
+                                let span = pair.1;
+                                let err = ParseError(
+                                    ident.range.start..span.to_range().end,
+                                    ParseErrorMessage::UnexpectedCharacters(
+                                        ident.value + span.fragment(),
+                                    ),
+                                );
+                                span.extra.report_error(err);
+                                return Self::Error;
+                            }
+                            Variable::ArrayAccess(a) => var = *a.array,
+                        }
+                    }
+                },
+            ),
         ))(input)
     }
 }

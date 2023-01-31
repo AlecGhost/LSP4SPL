@@ -156,6 +156,7 @@ pub enum Statement {
     If(IfStatement),
     While(WhileStatement),
     Block(BlockStatement),
+    Error,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
