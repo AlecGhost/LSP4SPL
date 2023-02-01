@@ -11,7 +11,7 @@ pub trait DiagnosticsBroker: Clone + std::fmt::Debug {
     fn report_error(&self, error: SplError);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LocalBroker(Rc<RefCell<Vec<SplError>>>);
 
 impl Clone for LocalBroker {
@@ -21,10 +21,6 @@ impl Clone for LocalBroker {
 }
 
 impl LocalBroker {
-    pub fn new() -> Self {
-        Self(Rc::new(RefCell::new(Vec::new())))
-    }
-
     pub fn errors(&self) -> Vec<SplError> {
         self.0.borrow().clone()
     }

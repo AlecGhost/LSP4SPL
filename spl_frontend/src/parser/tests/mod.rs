@@ -1,5 +1,5 @@
 use super::*;
-use crate::test::LocalBroker;
+use crate::LocalBroker;
 use nom::combinator::all_consuming;
 #[cfg(test)]
 use pretty_assertions::assert_eq;
@@ -8,15 +8,15 @@ trait ToSpan<B> {
     fn to_span(&self) -> Span<B>;
 }
 
-impl ToSpan<LocalBroker<ParseError>> for &str {
-    fn to_span(&self) -> Span<LocalBroker<ParseError>> {
-        Span::new_extra(self, LocalBroker::new())
+impl ToSpan<LocalBroker> for &str {
+    fn to_span(&self) -> Span<LocalBroker> {
+        Span::new_extra(self, LocalBroker::default())
     }
 }
 
-impl ToSpan<LocalBroker<ParseError>> for String {
-    fn to_span(&self) -> Span<LocalBroker<ParseError>> {
-        Span::new_extra(self, LocalBroker::new())
+impl ToSpan<LocalBroker> for String {
+    fn to_span(&self) -> Span<LocalBroker> {
+        Span::new_extra(self, LocalBroker::default())
     }
 }
 
@@ -291,21 +291,21 @@ fn type_declarations() {
     assert_eq!(
         input.extra.errors(),
         vec![
-            ParseError(
+            SplError(
                 5..5,
-                ParseErrorMessage::ExpectedToken("identifier".to_string())
+                ParseErrorMessage::ExpectedToken("identifier".to_string()).to_string()
             ),
-            ParseError(
+            SplError(
                 14..14,
-                ParseErrorMessage::ExpectedToken("int literal".to_string())
+                ParseErrorMessage::ExpectedToken("int literal".to_string()).to_string()
             ),
-            ParseError(
+            SplError(
                 26..26,
-                ParseErrorMessage::ExpectedToken("int literal".to_string())
+                ParseErrorMessage::ExpectedToken("int literal".to_string()).to_string()
             ),
-            ParseError(
+            SplError(
                 30..30,
-                ParseErrorMessage::ExpectedToken("type expression".to_string())
+                ParseErrorMessage::ExpectedToken("type expression".to_string()).to_string()
             ),
         ],
         "Declaration: {}",
@@ -386,11 +386,11 @@ fn call_statements() {
     assert_eq!(
         input.extra.errors(),
         vec![
-            ParseError(
+            SplError(
                 4..4,
-                ParseErrorMessage::ExpectedToken("expression".to_string())
+                ParseErrorMessage::ExpectedToken("expression".to_string()).to_string()
             ),
-            ParseError(5..5, ParseErrorMessage::MissingTrailingSemic),
+            SplError(5..5, ParseErrorMessage::MissingTrailingSemic.to_string()),
         ],
         "CallStatement: {}",
         stmt

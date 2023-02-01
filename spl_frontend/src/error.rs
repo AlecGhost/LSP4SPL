@@ -1,7 +1,6 @@
 use std::fmt::Display;
 use std::ops::Range;
 use thiserror::Error;
-
 use crate::ast::Identifier;
 
 pub trait DisplayError {

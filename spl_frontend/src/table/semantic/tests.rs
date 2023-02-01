@@ -1,20 +1,19 @@
 use crate::{
-    error::{SemanticError, SemanticErrorMessage},
-    parser, table,
-    test::LocalBroker,
+    error::{SemanticErrorMessage, SplError},
+    parser, table, LocalBroker,
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 
-fn test(src: &str) -> Vec<SemanticError> {
+fn test(src: &str) -> Vec<SplError> {
     eprintln!("Testing: {}", src);
-    let parse_broker = LocalBroker::new();
+    let parse_broker = LocalBroker::default();
     let program = parser::parse(src, parse_broker.clone());
     assert_eq!(parse_broker.errors(), Vec::new(), "parsing failed");
-    let build_broker = LocalBroker::new();
+    let build_broker = LocalBroker::default();
     let table = table::build(&program, build_broker.clone());
     assert_eq!(build_broker.errors(), Vec::new(), "building failed");
-    let semantic_broker = LocalBroker::new();
+    let semantic_broker = LocalBroker::default();
     table::semantic::analyze(&program, &table, semantic_broker.clone());
     semantic_broker.errors()
 }
@@ -61,9 +60,9 @@ fn arrays() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
+        vec![SplError(
             115..134,
-            SemanticErrorMessage::AssignmentHasDifferentTypes
+            SemanticErrorMessage::AssignmentHasDifferentTypes.to_string()
         ),]
     );
 
@@ -77,7 +76,10 @@ fn arrays() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(59..63, SemanticErrorMessage::IndexingNonArray)]
+        vec![SplError(
+            59..60,
+            SemanticErrorMessage::IndexingNonArray.to_string()
+        )]
     );
 
     let errors = test(
@@ -91,7 +93,10 @@ fn arrays() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(115..125, SemanticErrorMessage::IndexingNonArray)]
+        vec![SplError(
+            115..122,
+            SemanticErrorMessage::IndexingNonArray.to_string()
+        )]
     );
 
     let errors = test(
@@ -105,9 +110,9 @@ fn arrays() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
-            115..121,
-            SemanticErrorMessage::IndexingWithNonInteger
+        vec![SplError(
+            117..120,
+            SemanticErrorMessage::IndexingWithNonInteger.to_string()
         )]
     );
 }
@@ -131,9 +136,9 @@ fn call_statements() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
+        vec![SplError(
             40..44,
-            SemanticErrorMessage::TooFewArguments("a".to_string())
+            SemanticErrorMessage::TooFewArguments("a".to_string()).to_string()
         )]
     );
 
@@ -145,9 +150,9 @@ fn call_statements() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
+        vec![SplError(
             48..56,
-            SemanticErrorMessage::TooManyArguments("a".to_string())
+            SemanticErrorMessage::TooManyArguments("a".to_string()).to_string()
         )]
     );
 
@@ -159,9 +164,9 @@ fn call_statements() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
-            52..57,
-            SemanticErrorMessage::ArgumentMustBeAVariable("a".to_string(), 1)
+        vec![SplError(
+            52..53,
+            SemanticErrorMessage::ArgumentMustBeAVariable("a".to_string(), 1).to_string()
         )]
     );
 
@@ -177,9 +182,9 @@ fn call_statements() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
-            128..142,
-            SemanticErrorMessage::ArgumentsTypeMismatch("a".to_string(), 1)
+        vec![SplError(
+            128..129,
+            SemanticErrorMessage::ArgumentsTypeMismatch("a".to_string(), 1).to_string()
         )]
     );
 
@@ -193,9 +198,9 @@ fn call_statements() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
+        vec![SplError(
             57..71,
-            SemanticErrorMessage::CallOfNoneProcedure("a".to_string())
+            SemanticErrorMessage::CallOfNoneProcedure("a".to_string()).to_string()
         )]
     );
 
@@ -208,9 +213,9 @@ fn call_statements() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
+        vec![SplError(
             35..49,
-            SemanticErrorMessage::UndefinedProcedure("a".to_string())
+            SemanticErrorMessage::UndefinedProcedure("a".to_string()).to_string()
         )]
     );
 }
@@ -226,29 +231,21 @@ fn comparisons() {
     );
     assert_eq!(errors, Vec::new());
 
-    let errors = test(
-        "
-        proc main() {if (1);}
-        ",
-    );
+    let errors = test("proc main() {if (1);}");
     assert_eq!(
         errors,
-        vec![SemanticError(
-            22..27,
-            SemanticErrorMessage::IfConditionMustBeBoolean
+        vec![SplError(
+            17..18,
+            SemanticErrorMessage::IfConditionMustBeBoolean.to_string()
         )]
     );
 
-    let errors = test(
-        "
-        proc main() {while (1);}
-        ",
-    );
+    let errors = test("proc main() {while (1);}");
     assert_eq!(
         errors,
-        vec![SemanticError(
-            22..30,
-            SemanticErrorMessage::WhileConditionMustBeBoolean
+        vec![SplError(
+            20..21,
+            SemanticErrorMessage::WhileConditionMustBeBoolean.to_string()
         )]
     );
 }
@@ -266,9 +263,9 @@ fn expressions() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
+        vec![SplError(
             123..128,
-            SemanticErrorMessage::ComparisonNonInteger
+            SemanticErrorMessage::ComparisonNonInteger.to_string()
         )]
     );
 
@@ -283,9 +280,9 @@ fn expressions() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
+        vec![SplError(
             123..128,
-            SemanticErrorMessage::OperatorDifferentTypes,
+            SemanticErrorMessage::OperatorDifferentTypes.to_string(),
         )]
     );
 
@@ -300,9 +297,9 @@ fn expressions() {
     );
     assert_eq!(
         errors,
-        vec![SemanticError(
+        vec![SplError(
             121..126,
-            SemanticErrorMessage::ArithmeticOperatorNonInteger,
+            SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
         )]
     );
 }
