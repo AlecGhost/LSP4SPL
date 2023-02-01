@@ -1,5 +1,5 @@
-use super::{IResult, ParseErrorBroker, Span};
-use crate::error::ParseErrorMessage;
+use super::{IResult, Span};
+use crate::{error::ParseErrorMessage, DiagnosticsBroker};
 use nom::{
     bytes::complete::{tag, take, take_till, take_while},
     character::{complete::multispace0, is_alphanumeric},
@@ -113,7 +113,7 @@ where
     }
 }
 
-pub(super) fn expect<'a, O, B: ParseErrorBroker, F>(
+pub(super) fn expect<'a, O, B: DiagnosticsBroker, F>(
     mut parser: F,
     error_msg: ParseErrorMessage,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Option<O>, B>
@@ -125,14 +125,14 @@ where
         Err(_) => {
             // TODO: look into error range reporting
             let pos = input.location_offset();
-            let err = crate::error::ParseError(pos..pos, error_msg.clone());
+            let err = crate::error::SplError(pos..pos, error_msg.to_string());
             input.extra.report_error(err);
             Ok((input, None))
         }
     }
 }
 
-pub(super) fn verify<'a, O, B: ParseErrorBroker, F, G>(
+pub(super) fn verify<'a, O, B: DiagnosticsBroker, F, G>(
     mut parser: F,
     verification: G,
 ) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
@@ -151,19 +151,15 @@ where
                 )))
             }
         }
-        Err(err) => {
-            eprintln!("verify: {:#?}", input);
-            Err(err)
-        }
+        Err(err) => Err(err),
     }
 }
 
 macro_rules! keyword_parsers {
     ($($name: ident: $pattern: literal),*) => {
         use crate::parser::{Span, DiagnosticsBroker, utility};
-        use crate::error::ParseError;
         $(
-        pub fn $name<B: Clone + std::fmt::Debug + DiagnosticsBroker<ParseError>>(input: Span<B>)
+        pub fn $name<B: DiagnosticsBroker>(input: Span<B>)
         -> nom::IResult<Span<B>, Span<B>> {
             use nom::bytes::complete::{tag, take};
             use nom::combinator::{peek, eof};

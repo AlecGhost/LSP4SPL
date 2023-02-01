@@ -1,8 +1,4 @@
-use crate::{
-    ast::Identifier,
-    error::{BuildError, BuildErrorMessage},
-    DiagnosticsBroker,
-};
+use crate::{ast::Identifier, error::BuildErrorMessage, DiagnosticsBroker};
 pub use build::build;
 pub use semantic::analyze;
 use std::{collections::HashMap, ops::Range};

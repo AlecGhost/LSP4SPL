@@ -1,39 +1,37 @@
 #![allow(dead_code)]
+use error::SplError;
+use std::{cell::RefCell, rc::Rc};
+
 pub mod ast;
+pub mod error;
 pub mod parser;
 pub mod table;
-pub mod error;
 
-pub trait DiagnosticsBroker<E> {
-    fn report_error(&self, error: E);
+pub trait DiagnosticsBroker: Clone + std::fmt::Debug {
+    fn report_error(&self, error: SplError);
 }
 
-pub(crate) mod test {
-    use std::{rc::Rc, cell::RefCell};
-    use crate::DiagnosticsBroker;
+#[derive(Debug)]
+pub struct LocalBroker(Rc<RefCell<Vec<SplError>>>);
 
-    #[derive(Debug)]
-    pub(crate) struct LocalBroker<E>(Rc<RefCell<Vec<E>>>);
+impl Clone for LocalBroker {
+    fn clone(&self) -> Self {
+        LocalBroker(Rc::clone(&self.0))
+    }
+}
 
-    impl<E> Clone for LocalBroker<E> {
-        fn clone(&self) -> Self {
-            LocalBroker(Rc::clone(&self.0))
-        }
+impl LocalBroker {
+    pub fn new() -> Self {
+        Self(Rc::new(RefCell::new(Vec::new())))
     }
 
-    impl<E: Clone> LocalBroker<E> {
-        pub fn new() -> Self {
-            Self(Rc::new(RefCell::new(Vec::new())))
-        }
-
-        pub fn errors(&self) -> Vec<E> {
-            self.0.borrow().clone()
-        }
+    pub fn errors(&self) -> Vec<SplError> {
+        self.0.borrow().clone()
     }
+}
 
-    impl<E> DiagnosticsBroker<E> for LocalBroker<E> {
-        fn report_error(&self, error: E) {
-            self.0.borrow_mut().push(error);
-        }
+impl DiagnosticsBroker for LocalBroker {
+    fn report_error(&self, error: SplError) {
+        self.0.borrow_mut().push(error);
     }
 }

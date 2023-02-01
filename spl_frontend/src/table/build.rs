@@ -1,16 +1,12 @@
 use super::*;
-use crate::ast::*;
+use crate::{ast::*, error::SplError};
 
 #[cfg(test)]
 mod tests;
 
-trait BuildErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError> {}
-
-impl<T> BuildErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError> {}
-
 pub fn build<B>(program: &Program, broker: B) -> SymbolTable
 where
-    B: Clone + std::fmt::Debug + DiagnosticsBroker<BuildError>,
+    B: Clone + std::fmt::Debug + DiagnosticsBroker,
 {
     let mut table = SymbolTable::initialized();
     program.build(&mut table, broker);
@@ -21,7 +17,7 @@ trait TableBuilder<B> {
     fn build(&self, table: &mut SymbolTable, broker: B);
 }
 
-impl<B: BuildErrorBroker> TableBuilder<B> for Program {
+impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         self.global_declarations
             .iter()
@@ -30,9 +26,9 @@ impl<B: BuildErrorBroker> TableBuilder<B> for Program {
             Some((_, ranged_entry)) => {
                 if let Entry::Procedure(main) = &ranged_entry.entry {
                     if !main.parameters.is_empty() {
-                        broker.report_error(BuildError(
+                        broker.report_error(SplError(
                             0..0,
-                            BuildErrorMessage::MainMustNotHaveParameters,
+                            BuildErrorMessage::MainMustNotHaveParameters.to_string(),
                         ));
                     }
                 } else {
@@ -40,13 +36,13 @@ impl<B: BuildErrorBroker> TableBuilder<B> for Program {
                 }
             }
             None => {
-                broker.report_error(BuildError(0..0, BuildErrorMessage::MainIsMissing));
+                broker.report_error(SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()));
             }
         };
     }
 }
 
-impl<B: BuildErrorBroker> TableBuilder<B> for GlobalDeclaration {
+impl<B: DiagnosticsBroker> TableBuilder<B> for GlobalDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         match self {
             Self::Type(t) => t.build(table, broker),
@@ -56,13 +52,13 @@ impl<B: BuildErrorBroker> TableBuilder<B> for GlobalDeclaration {
     }
 }
 
-impl<B: BuildErrorBroker> TableBuilder<B> for TypeDeclaration {
+impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
             if name.value == "main" {
-                broker.report_error(BuildError(
+                broker.report_error(SplError(
                     name.range.clone(),
-                    BuildErrorMessage::MainIsNotAProcedure,
+                    BuildErrorMessage::MainIsNotAProcedure.to_string(),
                 ));
                 return;
             }
@@ -77,13 +73,13 @@ impl<B: BuildErrorBroker> TableBuilder<B> for TypeDeclaration {
                         broker.clone(),
                     )),
                 },
-                || broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsType)),
+                || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsType)),
             );
         }
     }
 }
 
-impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
+impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
             let mut local_table = SymbolTable::new();
@@ -107,7 +103,7 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
                 },
                 || {
                     broker.report_error(
-                        name.to_build_error(BuildErrorMessage::RedeclarationAsProcedure),
+                        name.to_error(BuildErrorMessage::RedeclarationAsProcedure),
                     );
                 },
             );
@@ -115,7 +111,7 @@ impl<B: BuildErrorBroker> TableBuilder<B> for ProcedureDeclaration {
     }
 }
 
-fn build_parameter<B: BuildErrorBroker>(
+fn build_parameter<B: DiagnosticsBroker>(
     param: &ParameterDeclaration,
     global_table: &SymbolTable,
     local_table: &mut SymbolTable,
@@ -129,18 +125,18 @@ fn build_parameter<B: BuildErrorBroker>(
         if let Some(data_type) = &param_entry.data_type {
             if !data_type.is_primitive() && !param.is_ref {
                 broker.report_error(
-                    name.to_build_error(BuildErrorMessage::MustBeAReferenceParameter),
+                    name.to_error(BuildErrorMessage::MustBeAReferenceParameter),
                 );
             }
         }
         local_table.enter(name.clone(), RangedEntry { range: param.range.clone(), entry: Entry::Variable(param_entry.clone()) }, || {
-            broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsParameter))
+            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter))
         });
     };
     param_entry
 }
 
-fn build_variable<B: BuildErrorBroker>(
+fn build_variable<B: DiagnosticsBroker>(
     var: &VariableDeclaration,
     global_table: &SymbolTable,
     local_table: &mut SymbolTable,
@@ -160,12 +156,12 @@ fn build_variable<B: BuildErrorBroker>(
     };
     if let Some(name) = &var.name {
         local_table.enter(name.clone(), RangedEntry { range: var.range.clone(), entry: Entry::Variable(entry) }, || {
-            broker.report_error(name.to_build_error(BuildErrorMessage::RedeclarationAsVariable))
+            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable))
         });
     }
 }
 
-fn get_data_type<T: Table, B: BuildErrorBroker>(
+fn get_data_type<T: Table, B: DiagnosticsBroker>(
     type_expr: &Option<TypeExpression>,
     caller: &Option<Identifier>,
     table: &T,
@@ -199,11 +195,11 @@ fn get_data_type<T: Table, B: BuildErrorBroker>(
                     if let Entry::Type(t) = &ranged_entry.entry {
                         t.clone()
                     } else {
-                        broker.report_error(name.to_build_error(BuildErrorMessage::NotAType));
+                        broker.report_error(name.to_error(BuildErrorMessage::NotAType));
                         None
                     }
                 } else {
-                    broker.report_error(name.to_build_error(BuildErrorMessage::UndefinedType));
+                    broker.report_error(name.to_error(BuildErrorMessage::UndefinedType));
                     None
                 }
             }

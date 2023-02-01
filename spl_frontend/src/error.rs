@@ -1,7 +1,8 @@
-use crate::ast::Identifier;
 use std::fmt::Display;
 use std::ops::Range;
 use thiserror::Error;
+
+use crate::ast::Identifier;
 
 pub trait DisplayError {
     fn display(&self, src: &str) -> String;
@@ -9,7 +10,17 @@ pub trait DisplayError {
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("{1}")]
-pub struct ParseError(pub Range<usize>, pub ParseErrorMessage);
+pub struct SplError(pub Range<usize>, pub String);
+
+impl Identifier {
+    pub fn to_error<M, T>(&self, msg: M) -> SplError
+    where
+        M: Fn(String) -> T,
+        T: ToString,
+    {
+        SplError(self.range.clone(), msg(self.value.clone()).to_string())
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ParseErrorMessage {
@@ -32,10 +43,6 @@ impl Display for ParseErrorMessage {
         writeln!(f, "{}", display)
     }
 }
-
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("{1}")]
-pub struct BuildError(pub Range<usize>, pub BuildErrorMessage);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(usize)]
@@ -77,33 +84,6 @@ impl Display for BuildErrorMessage {
             }
         };
         writeln!(f, "{}", display)
-    }
-}
-
-impl Identifier {
-    pub fn to_build_error(&self, msg: impl Fn(String) -> BuildErrorMessage) -> BuildError {
-        BuildError(self.range.clone(), msg(self.value.clone()))
-    }
-}
-
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
-#[error("{1}")]
-pub struct SemanticError(pub Range<usize>, pub SemanticErrorMessage);
-
-impl DisplayError for SemanticError {
-    fn display(&self, src: &str) -> String {
-        if self.0.is_empty()
-            || matches!(
-                self.1,
-                SemanticErrorMessage::UndefinedVariable(_)
-                    | SemanticErrorMessage::UndefinedProcedure(_)
-                    | SemanticErrorMessage::NotAVariable(_)
-            )
-        {
-            format!("{}", self.1)
-        } else {
-            format!("{} <= {}", &src[self.0.to_owned()].trim(), self.1)
-        }
     }
 }
 
@@ -165,11 +145,5 @@ impl Display for SemanticErrorMessage {
             Self::IndexingWithNonInteger => "illegal indexing with a non-integer".to_string(),
         };
         writeln!(f, "{}", display)
-    }
-}
-
-impl Identifier {
-    pub fn to_semantic_error(&self, msg: impl Fn(String) -> SemanticErrorMessage) -> SemanticError {
-        SemanticError(self.range.clone(), msg(self.value.clone()))
     }
 }

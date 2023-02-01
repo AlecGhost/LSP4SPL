@@ -4,7 +4,7 @@ use crate::{
         ArrayAccess, Assignment, BinaryExpression, BlockStatement, CallStatement, Expression,
         GlobalDeclaration, IfStatement, Program, Statement, Variable, WhileStatement,
     },
-    error::{SemanticError, SemanticErrorMessage},
+    error::{SplError, SemanticErrorMessage},
     parser::ToRange,
     DiagnosticsBroker,
 };
@@ -13,12 +13,7 @@ use std::cmp::Ordering;
 #[cfg(test)]
 mod tests;
 
-trait SemanticErrorBroker: Clone + std::fmt::Debug + DiagnosticsBroker<SemanticError> {}
-
-impl<T> SemanticErrorBroker for T where T: Clone + std::fmt::Debug + DiagnosticsBroker<SemanticError>
-{}
-
-pub fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker<SemanticError>>(
+pub fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker>(
     program: &Program,
     table: &SymbolTable,
     broker: B,
@@ -54,7 +49,7 @@ trait AnalyzeExpression<B> {
     fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType>;
 }
 
-impl<B: SemanticErrorBroker> AnalyzeStatement<B> for Statement {
+impl<B: DiagnosticsBroker> AnalyzeStatement<B> for Statement {
     fn analyze(&self, table: &LookupTable, broker: B) {
         match self {
             Self::Assignment(stmt) => stmt.analyze(table, broker),
@@ -68,7 +63,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for Statement {
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeStatement<B> for Assignment {
+impl<B: DiagnosticsBroker> AnalyzeStatement<B> for Assignment {
     fn analyze(&self, table: &LookupTable, broker: B) {
         if let Some(expr) = &self.expr {
             let left = self.variable.analyze(table, broker.clone());
@@ -76,14 +71,14 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for Assignment {
             // only analyze further if type information for both sides is available
             if let (Some(left), Some(right)) = (left, right) {
                 if left != right {
-                    broker.report_error(SemanticError(
+                    broker.report_error(SplError(
                         self.range.clone(),
-                        SemanticErrorMessage::AssignmentHasDifferentTypes,
+                        SemanticErrorMessage::AssignmentHasDifferentTypes.to_string(),
                     ));
                 } else if !matches!(left, DataType::Int) {
-                    broker.report_error(SemanticError(
+                    broker.report_error(SplError(
                         self.range.clone(),
-                        SemanticErrorMessage::AssignmentRequiresIntegers,
+                        SemanticErrorMessage::AssignmentRequiresIntegers.to_string(),
                     ));
                 }
             }
@@ -91,7 +86,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for Assignment {
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeStatement<B> for BlockStatement {
+impl<B: DiagnosticsBroker> AnalyzeStatement<B> for BlockStatement {
     fn analyze(&self, table: &LookupTable, broker: B) {
         self.statements
             .iter()
@@ -99,7 +94,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for BlockStatement {
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeStatement<B> for CallStatement {
+impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
     fn analyze(&self, table: &LookupTable, broker: B) {
         if let Some(ranged_entry) = table.lookup(&self.name) {
             if let Entry::Procedure(proc_entry) = &ranged_entry.entry {
@@ -107,15 +102,15 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for CallStatement {
                 let param_len = proc_entry.parameters.len();
                 match arg_len.cmp(&param_len) {
                     Ordering::Less => {
-                        broker.report_error(SemanticError(
+                        broker.report_error(SplError(
                             self.range.clone(),
-                            SemanticErrorMessage::TooFewArguments(self.name.value.clone()),
+                            SemanticErrorMessage::TooFewArguments(self.name.value.clone()).to_string(),
                         ));
                     }
                     Ordering::Greater => {
-                        broker.report_error(SemanticError(
+                        broker.report_error(SplError(
                             self.range.clone(),
-                            SemanticErrorMessage::TooManyArguments(self.name.value.clone()),
+                            SemanticErrorMessage::TooManyArguments(self.name.value.clone()).to_string(),
                         ));
                     }
                     Ordering::Equal => {}
@@ -124,49 +119,49 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for CallStatement {
                     std::iter::zip(&self.arguments, &proc_entry.parameters).enumerate()
                 {
                     if param.is_ref && !matches!(arg, Expression::Variable(_)) {
-                        broker.report_error(SemanticError(
-                            self.range.clone(),
+                        broker.report_error(SplError(
+                            self.name.range.clone(),
                             SemanticErrorMessage::ArgumentMustBeAVariable(
                                 self.name.value.clone(),
                                 // enumeration starts with 1
                                 i + 1,
-                            ),
+                            ).to_string(),
                         ));
                     }
                     if arg.analyze(table, broker.clone()) != param.data_type {
-                        broker.report_error(SemanticError(
-                            self.range.clone(),
+                        broker.report_error(SplError(
+                            self.name.range.clone(),
                             SemanticErrorMessage::ArgumentsTypeMismatch(
                                 self.name.value.clone(),
                                 // enumeration starts with 1
                                 i + 1,
-                            ),
+                            ).to_string(),
                         ));
                     }
                 }
             } else {
-                broker.report_error(SemanticError(
+                broker.report_error(SplError(
                     self.range.clone(),
-                    SemanticErrorMessage::CallOfNoneProcedure(self.name.value.clone()),
+                    SemanticErrorMessage::CallOfNoneProcedure(self.name.value.clone()).to_string(),
                 ));
             }
         } else {
-            broker.report_error(SemanticError(
+            broker.report_error(SplError(
                 self.range.clone(),
-                SemanticErrorMessage::UndefinedProcedure(self.name.value.clone()),
+                SemanticErrorMessage::UndefinedProcedure(self.name.value.clone()).to_string(),
             ));
         }
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeStatement<B> for IfStatement {
+impl<B: DiagnosticsBroker> AnalyzeStatement<B> for IfStatement {
     fn analyze(&self, table: &LookupTable, broker: B) {
         if let Some(condition) = &self.condition {
             if let Some(condition_type) = condition.analyze(table, broker.clone()) {
                 if condition_type != DataType::Bool {
-                    broker.report_error(SemanticError(
-                        self.range.start..condition.to_range().end,
-                        SemanticErrorMessage::IfConditionMustBeBoolean,
+                    broker.report_error(SplError(
+                        condition.to_range(),
+                        SemanticErrorMessage::IfConditionMustBeBoolean.to_string(),
                     ));
                 }
             }
@@ -180,14 +175,14 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for IfStatement {
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeStatement<B> for WhileStatement {
+impl<B: DiagnosticsBroker> AnalyzeStatement<B> for WhileStatement {
     fn analyze(&self, table: &LookupTable, broker: B) {
         if let Some(condition) = &self.condition {
             if let Some(condition_type) = condition.analyze(table, broker.clone()) {
                 if condition_type != DataType::Bool {
-                    broker.report_error(SemanticError(
-                        self.range.start..condition.to_range().end,
-                        SemanticErrorMessage::WhileConditionMustBeBoolean,
+                    broker.report_error(SplError(
+                        condition.to_range(),
+                        SemanticErrorMessage::WhileConditionMustBeBoolean.to_string(),
                     ));
                 }
             }
@@ -198,7 +193,7 @@ impl<B: SemanticErrorBroker> AnalyzeStatement<B> for WhileStatement {
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Variable {
+impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Variable {
     fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType> {
         match self {
             Self::ArrayAccess(a) => a.analyze(table, broker),
@@ -208,14 +203,14 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Variable {
                         Entry::Variable(v) => v.data_type.clone(),
                         _ => {
                             broker.report_error(
-                                named.to_semantic_error(SemanticErrorMessage::NotAVariable),
+                                named.to_error(SemanticErrorMessage::NotAVariable),
                             );
                             None
                         }
                     }
                 } else {
                     broker.report_error(
-                        named.to_semantic_error(SemanticErrorMessage::UndefinedVariable),
+                        named.to_error(SemanticErrorMessage::UndefinedVariable),
                     );
                     None
                 }
@@ -224,13 +219,13 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Variable {
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeExpression<B> for ArrayAccess {
+impl<B: DiagnosticsBroker> AnalyzeExpression<B> for ArrayAccess {
     fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType> {
         let index_type = self.index.analyze(table, broker.clone());
         if index_type != Some(DataType::Int) {
-            broker.report_error(SemanticError(
-                self.range.clone(),
-                SemanticErrorMessage::IndexingWithNonInteger,
+            broker.report_error(SplError(
+                self.index.to_range(),
+                SemanticErrorMessage::IndexingWithNonInteger.to_string(),
             ));
         };
         if let Some(array_type) = self.array.analyze(table, broker.clone()) {
@@ -241,9 +236,9 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for ArrayAccess {
                     creator: _,
                 } => Some(*base_type),
                 _ => {
-                    broker.report_error(SemanticError(
-                        self.range.clone(),
-                        SemanticErrorMessage::IndexingNonArray,
+                    broker.report_error(SplError(
+                        self.array.to_range(),
+                        SemanticErrorMessage::IndexingNonArray.to_string(),
                     ));
                     None
                 }
@@ -254,7 +249,7 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for ArrayAccess {
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Expression {
+impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Expression {
     fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType> {
         match self {
             Self::IntLiteral(_) => Some(DataType::Int),
@@ -265,28 +260,28 @@ impl<B: SemanticErrorBroker> AnalyzeExpression<B> for Expression {
     }
 }
 
-impl<B: SemanticErrorBroker> AnalyzeExpression<B> for BinaryExpression {
+impl<B: DiagnosticsBroker> AnalyzeExpression<B> for BinaryExpression {
     fn analyze(&self, table: &LookupTable, broker: B) -> Option<DataType> {
         let lhs = self.lhs.analyze(table, broker.clone());
         let rhs = self.rhs.analyze(table, broker.clone());
         if lhs != rhs {
-            broker.report_error(SemanticError(
+            broker.report_error(SplError(
                 self.range.clone(),
-                SemanticErrorMessage::OperatorDifferentTypes,
+                SemanticErrorMessage::OperatorDifferentTypes.to_string(),
             ));
             // no immediate return with None
             // because operator still states the type intention
         }
         if lhs != Some(DataType::Int) {
             if self.operator.is_arithmetic() {
-                broker.report_error(SemanticError(
+                broker.report_error(SplError(
                     self.range.clone(),
-                    SemanticErrorMessage::ArithmeticOperatorNonInteger,
+                    SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
                 ));
             } else {
-                broker.report_error(SemanticError(
+                broker.report_error(SplError(
                     self.range.clone(),
-                    SemanticErrorMessage::ComparisonNonInteger,
+                    SemanticErrorMessage::ComparisonNonInteger.to_string(),
                 ));
             }
             None
