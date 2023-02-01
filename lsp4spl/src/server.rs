@@ -1,5 +1,5 @@
 use crate::{
-    document::{self, DocumentStatus},
+    document::{self, DocumentRequest},
     error::{ErrorCode, ResponseError},
     io::{self, LSCodec, Message, Response},
 };
@@ -10,10 +10,16 @@ use serde_json::Value;
 use tokio::sync::mpsc::{self, Sender};
 use tokio_util::codec::FramedRead;
 
+#[derive(Clone, Debug, Default)]
+struct ClientDetails {
+    diagnostics: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct LanguageServer {
     server_info: Option<ServerInfo>,
     server_capabilities: ServerCapabilities,
+    client_details: ClientDetails,
 }
 
 impl LanguageServer {
@@ -21,37 +27,48 @@ impl LanguageServer {
         Self {
             server_info,
             server_capabilities,
+            client_details: ClientDetails::default(),
         }
     }
 
-    fn initialize(&self, _params: InitializeParams) -> InitializeResult {
+    fn initialize(&mut self, params: InitializeParams) -> InitializeResult {
+        self.client_details.diagnostics = params
+            .capabilities
+            .text_document
+            .and_then(|caps| caps.publish_diagnostics)
+            .is_some();
         InitializeResult {
             capabilities: self.server_capabilities.clone(),
             server_info: self.server_info.clone(),
         }
     }
 
-    pub async fn run(self) {
+    pub async fn run(mut self) {
+        let mut handles = vec![];
         // spawn thread which handles sending back messages to the client
         let stdout = tokio::io::stdout();
         let (iotx, iorx) = mpsc::channel(32);
-        let responder_handle = tokio::spawn(io::responder(stdout, iorx));
+        handles.push(tokio::spawn(io::responder(stdout, iorx)));
 
-        // spawn thread which handles document synchronization
-        let (doctx, docrx) = mpsc::channel(32);
-        let document_broker_handle = tokio::spawn(document::broker(docrx));
-
-        // Decode messages, while stdin is not closed
+        // decode messages, while stdin is not closed
         let stdin = tokio::io::stdin();
         let mut framed_read = FramedRead::new(stdin, LSCodec::new());
 
-        // Initialization phase
-        if let Err(err) = phases::initialization(&self, &mut framed_read, iotx.clone()).await {
+        // initialization phase
+        if let Err(err) = phases::initialization(&mut self, &mut framed_read, iotx.clone()).await {
             log::error!("Unexpected error occured during initialization: {:#?}", err);
             panic!("Unexpected error occured during initialization: {:#?}", err);
         }
 
-        // Main phase
+        // spawn thread which handles document synchronization
+        let (doctx, docrx) = mpsc::channel(32);
+        handles.push(tokio::spawn(document::broker(
+            docrx,
+            iotx.clone(),
+            self.client_details.diagnostics,
+        )));
+
+        // main phase
         while let Some(frame) = framed_read.next().await {
             match frame {
                 Ok(message) => match message {
@@ -68,7 +85,9 @@ impl LanguageServer {
                                 // exit main phase
                                 let (_, response) = request.split();
                                 let response = response.into_result_response(Value::Null);
-                                iotx.send(response).await.expect("Cannot send messages");
+                                iotx.send(Message::Response(response))
+                                    .await
+                                    .expect("Cannot send messages");
                                 break;
                             }
                             unknown_method => {
@@ -80,25 +99,27 @@ impl LanguageServer {
                                 ))
                             }
                         };
-                        iotx.send(response).await.expect("Cannot send messages");
+                        iotx.send(Message::Response(response))
+                            .await
+                            .expect("Cannot send messages");
                     }
                     Message::Notification(notification) => {
                         async fn match_notification(
                             notification: io::Notification,
-                            doctx: Sender<DocumentStatus>,
+                            doctx: Sender<DocumentRequest>,
                         ) -> Result<()> {
                             match notification.method.as_str() {
                                 DidOpenTextDocument::METHOD => {
                                     let params = serde_json::from_value(notification.params)?;
-                                    document::did_open(doctx.clone(), params).await?;
+                                    document::open(doctx.clone(), params).await?;
                                 }
                                 DidChangeTextDocument::METHOD => {
                                     let params = serde_json::from_value(notification.params)?;
-                                    document::did_change(doctx.clone(), params).await?;
+                                    document::change(doctx.clone(), params).await?;
                                 }
                                 DidCloseTextDocument::METHOD => {
                                     let params = serde_json::from_value(notification.params)?;
-                                    document::did_close(doctx.clone(), params).await?;
+                                    document::close(doctx.clone(), params).await?;
                                 }
                                 Exit::METHOD => std::process::exit(1), // ungraceful exit
                                 _ => { /* drop all other notifications */ }
@@ -110,6 +131,9 @@ impl LanguageServer {
                             log::warn!("Error occured during notification handling: {:#?}", err);
                         }
                     }
+                    Message::Response(_) => {
+                        panic!("Cannot handle responses")
+                    }
                 },
                 Err(err) => {
                     log::error!("Recieved frame with error: {:?}", err);
@@ -118,14 +142,15 @@ impl LanguageServer {
             };
         }
 
-        // Shutdown phase
+        // shutdown phase
         if let Err(err) = phases::shutdown(&mut framed_read, iotx).await {
             log::error!("Unexpected error occured during shutdown: {:#?}", err);
             panic!("Unexpected error occured during shutdown: {:#?}", err);
         }
         drop(doctx);
-        responder_handle.await.unwrap();
-        document_broker_handle.await.unwrap();
+        for handle in handles {
+            handle.await.unwrap()
+        }
         // tokio::join!(responder_handle, document_broker_handle);
     }
 }
@@ -143,9 +168,9 @@ mod phases {
     use tokio_util::codec::FramedRead;
 
     pub(super) async fn initialization(
-        ls: &LanguageServer,
+        ls: &mut LanguageServer,
         framed_read: &mut FramedRead<Stdin, LSCodec>,
-        iotx: Sender<Response>,
+        iotx: Sender<Message>,
     ) -> Result<()> {
         while let Some(frame) = framed_read.next().await {
             let message = frame?;
@@ -156,7 +181,7 @@ mod phases {
                         let params = serde_json::from_value(params)?;
                         let result = ls.initialize(params);
                         let response = response.into_result_response(result);
-                        iotx.send(response).await?;
+                        iotx.send(Message::Response(response)).await?;
                         break;
                     } else {
                         let (_, response) = request.split();
@@ -165,12 +190,15 @@ mod phases {
                             "Server not initialized".to_string(),
                         ))
                     };
-                    iotx.send(response).await?;
+                    iotx.send(Message::Response(response)).await?;
                 }
                 Message::Notification(notification) => {
                     if notification.method.as_str() == Exit::METHOD {
                         std::process::exit(1) // ungraceful exit
                     }
+                }
+                Message::Response(_) => {
+                    panic!("Cannot handle responses")
                 }
             };
         }
@@ -184,13 +212,16 @@ mod phases {
                         ErrorCode::ServerNotInitialized,
                         "Server not initialized".to_string(),
                     ));
-                    iotx.send(response).await?;
+                    iotx.send(Message::Response(response)).await?;
                 }
                 Message::Notification(notification) => match notification.method.as_str() {
                     Initialized::METHOD => break, // Server is properly initialized and can start working
                     Exit::METHOD => std::process::exit(1), // ungraceful exit
                     _ => { /* drop all other notifications */ }
                 },
+                Message::Response(_) => {
+                    panic!("Cannot handle responses")
+                }
             };
         }
         Ok(())
@@ -198,7 +229,7 @@ mod phases {
 
     pub(super) async fn shutdown(
         framed_read: &mut FramedRead<Stdin, LSCodec>,
-        tx: Sender<Response>,
+        tx: Sender<Message>,
     ) -> Result<()> {
         while let Some(frame) = framed_read.next().await {
             let message = frame?;
@@ -210,13 +241,16 @@ mod phases {
                         ErrorCode::InvalidRequest,
                         "Server shutting down. No further requests allowed".to_string(),
                     ));
-                    tx.send(response).await?;
+                    tx.send(Message::Response(response)).await?;
                 }
                 Message::Notification(notification) => {
                     // only waiting for exit notification
                     if notification.method.as_str() == Exit::METHOD {
                         break;
                     }
+                }
+                Message::Response(_) => {
+                    panic!("Cannot handle responses")
                 }
             };
         }

@@ -6,10 +6,13 @@ use serde_json::Value;
 use tokio::sync::mpsc::Receiver;
 use tokio_util::codec::{Decoder, Encoder, FramedWrite};
 
+const RPC_VERSION: &str = "2.0";
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub(super) enum Message {
     Request(Request),
+    Response(Response),
     Notification(Notification),
 }
 
@@ -50,7 +53,7 @@ impl PreparedResponse {
 
     pub fn into_result_response<T: Serialize>(self, value: T) -> Response {
         Response {
-            jsonrpc: "2.0".to_string(),
+            jsonrpc: RPC_VERSION.to_string(),
             id: self.id,
             answer: ResponseAnswer::Result {
                 result: value.to_value(),
@@ -60,7 +63,7 @@ impl PreparedResponse {
 
     pub fn into_error_response(self, error: ResponseError) -> Response {
         Response {
-            jsonrpc: "2.0".to_string(),
+            jsonrpc: RPC_VERSION.to_string(),
             id: self.id,
             answer: ResponseAnswer::Error { error },
         }
@@ -73,6 +76,16 @@ pub(super) struct Notification {
     pub method: String,
     #[serde(default)]
     pub params: Value,
+}
+
+impl Notification {
+    pub fn new(method: String, params: Value) -> Self {
+        Self {
+            jsonrpc: RPC_VERSION.to_string(),
+            method,
+            params,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -132,9 +145,9 @@ impl Decoder for LSCodec {
     }
 }
 
-impl Encoder<Response> for LSCodec {
+impl Encoder<Message> for LSCodec {
     type Error = CodecError;
-    fn encode(&mut self, item: Response, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Message, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let content = serde_json::to_string(&item)?;
         let length = content.len();
         let encoded = format!("Content-Length: {}\r\n\r\n{}", length, content);
@@ -145,7 +158,7 @@ impl Encoder<Response> for LSCodec {
     }
 }
 
-pub(super) async fn responder(stdout: tokio::io::Stdout, mut rx: Receiver<Response>) {
+pub(super) async fn responder(stdout: tokio::io::Stdout, mut rx: Receiver<Message>) {
     let mut framed_write = FramedWrite::new(stdout, LSCodec::new());
     while let Some(response) = rx.recv().await {
         if let Err(err) = framed_write.send(response).await {

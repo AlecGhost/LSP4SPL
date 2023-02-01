@@ -320,6 +320,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "simplelog",
+ "spl_frontend",
  "thiserror",
  "tokio",
  "tokio-util",
