@@ -94,6 +94,20 @@ impl LanguageServer {
                                     iotx.send(Message::Response(response)).await?;
                                     return Ok(());
                                 }
+                                GotoDeclaration::METHOD => {
+                                    let (params, response) = request.split();
+                                    let params = serde_json::from_value(params)?;
+                                    let goto_declaration =
+                                        features::goto::declaration(doctx.clone(), params).await?;
+                                    response.into_result_response(goto_declaration)
+                                }
+                                GotoDefinition::METHOD => {
+                                    let (params, response) = request.split();
+                                    let params = serde_json::from_value(params)?;
+                                    let goto_definition =
+                                        features::goto::definition(doctx.clone(), params).await?;
+                                    response.into_result_response(goto_definition)
+                                }
                                 HoverRequest::METHOD => {
                                     let (params, response) = request.split();
                                     let params = serde_json::from_value(params)?;

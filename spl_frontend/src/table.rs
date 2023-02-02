@@ -53,6 +53,7 @@ pub struct RangedEntry {
 
 pub trait Table {
     fn lookup(&self, key: &Identifier) -> Option<&RangedEntry>;
+    fn entry(&self, key: &Identifier) -> Option<(&Identifier, &RangedEntry)>;
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -84,6 +85,10 @@ impl Table for SymbolTable {
             .find(|(k, _)| k.value == key.value)
             .map(|(_, v)| v)
     }
+
+    fn entry(&self, key: &Identifier) -> Option<(&Identifier, &RangedEntry)> {
+        self.entries.iter().find(|(k, _)| k.value == key.value)
+    }
 }
 
 #[derive(Debug)]
@@ -99,6 +104,14 @@ impl<'a> Table for LookupTable<'a> {
             value = self.global_table.lookup(key);
         }
         value
+    }
+
+    fn entry(&self, key: &Identifier) -> Option<(&Identifier, &RangedEntry)> {
+        let mut result = self.local_table.entry(key);
+        if result.is_none() {
+            result = self.global_table.entry(key);
+        }
+        result
     }
 }
 

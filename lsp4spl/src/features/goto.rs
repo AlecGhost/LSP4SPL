@@ -1,25 +1,16 @@
 use super::DocumentPrelude;
 use crate::document::{convert_range, DocumentRequest};
 use color_eyre::eyre::Result;
-use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind, Range};
+use lsp_types::{request::GotoDeclarationParams, GotoDefinitionParams, Location};
 use spl_frontend::table::{Entry, LookupTable, Table};
 use tokio::sync::mpsc::Sender;
 
-fn create_hover(entry: &Entry, range: Range) -> Hover {
-    Hover {
-        contents: HoverContents::Markup(MarkupContent {
-            kind: MarkupKind::Markdown,
-            value: entry.to_string(),
-        }),
-        range: Some(range),
-    }
-}
-
-pub(crate) async fn hover(
+pub(crate) async fn declaration(
     doctx: Sender<DocumentRequest>,
-    params: HoverParams,
-) -> Result<Option<Hover>> {
+    params: GotoDeclarationParams,
+) -> Result<Option<Location>> {
     let doc_params = params.text_document_position_params;
+    let uri = doc_params.text_document.uri.clone();
     if let Some(DocumentPrelude {
         doc_info,
         index: _,
@@ -29,11 +20,11 @@ pub(crate) async fn hover(
     {
         match &entry {
             Entry::Type(_) => {
-                if let Some(ranged_entry) = doc_info.table.lookup(&ident) {
-                    return Ok(Some(create_hover(
-                        &ranged_entry.entry,
-                        convert_range(&ident.range, &doc_info.text),
-                    )));
+                if let Some((key, _)) = doc_info.table.entry(&ident) {
+                    return Ok(Some(Location {
+                        uri,
+                        range: convert_range(&key.range, &doc_info.text),
+                    }));
                 }
             }
             Entry::Procedure(p) => {
@@ -41,11 +32,11 @@ pub(crate) async fn hover(
                     global_table: &doc_info.table,
                     local_table: &p.local_table,
                 };
-                if let Some(ranged_entry) = lookup_table.lookup(&ident) {
-                    return Ok(Some(create_hover(
-                        &ranged_entry.entry,
-                        convert_range(&ident.range, &doc_info.text),
-                    )));
+                if let Some((key, _)) = lookup_table.entry(&ident) {
+                    return Ok(Some(Location {
+                        uri,
+                        range: convert_range(&key.range, &doc_info.text),
+                    }));
                 }
             }
             Entry::Variable(v) => {
@@ -55,4 +46,12 @@ pub(crate) async fn hover(
         }
     }
     Ok(None)
+}
+
+pub(crate) async fn definition(
+    doctx: Sender<DocumentRequest>,
+    params: GotoDefinitionParams,
+) -> Result<Option<Location>> {
+    // in SPL, there is no conceptual difference between declaration and definition
+    declaration(doctx, params).await
 }
