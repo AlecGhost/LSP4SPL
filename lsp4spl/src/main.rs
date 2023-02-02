@@ -3,7 +3,7 @@ use color_eyre::eyre::Result;
 use lsp_types::{
     DeclarationCapability, HoverProviderCapability, OneOf, ServerCapabilities, ServerInfo,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    TypeDefinitionProviderCapability,
+    TypeDefinitionProviderCapability, ImplementationProviderCapability,
 };
 use server::LanguageServer;
 use simplelog::{Config, LevelFilter, WriteLogger};
@@ -39,7 +39,7 @@ async fn main() {
             signature_help_provider: None,
             definition_provider: Some(OneOf::Left(true)),
             type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
-            implementation_provider: None,
+            implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
             references_provider: None,
             document_highlight_provider: None,
             document_symbol_provider: None,

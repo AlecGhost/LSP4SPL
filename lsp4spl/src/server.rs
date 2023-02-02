@@ -108,6 +108,13 @@ impl LanguageServer {
                                         features::goto::definition(doctx.clone(), params).await?;
                                     response.into_result_response(goto_definition)
                                 }
+                                GotoImplementation::METHOD => {
+                                    let (params, response) = request.split();
+                                    let params = serde_json::from_value(params)?;
+                                    let goto_implementation =
+                                        features::goto::implementation(doctx.clone(), params).await?;
+                                    response.into_result_response(goto_implementation)
+                                }
                                 GotoTypeDefinition::METHOD => {
                                     let (params, response) = request.split();
                                     let params = serde_json::from_value(params)?;

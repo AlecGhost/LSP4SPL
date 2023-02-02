@@ -118,13 +118,13 @@ impl<'a> Table for LookupTable<'a> {
 impl Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let display = match self {
-            Self::Int => format!("int"),
-            Self::Bool => format!("boolean"),
+            Self::Int => "int".to_string(),
+            Self::Bool => "boolean".to_string(),
             Self::Array {
                 size,
                 base_type,
                 creator: _,
-            } => format!("array [{}] of {}", size, base_type.to_string()),
+            } => format!("array [{}] of {}", size, base_type),
         };
         write!(f, "{}", display)
     }
@@ -139,11 +139,11 @@ impl Display for VariableEntry {
             self.name
                 .as_ref()
                 .map(|ident| ident.to_string())
-                .unwrap_or("_".to_string()),
+                .unwrap_or_else(|| "_".to_string()),
             self.data_type
                 .as_ref()
                 .map(|dt| dt.to_string())
-                .unwrap_or("_".to_string())
+                .unwrap_or_else(|| "_".to_string())
         )
     }
 }
@@ -156,7 +156,7 @@ impl Display for ProcedureEntry {
             self.name
                 .as_ref()
                 .map(|ident| ident.to_string())
-                .unwrap_or("_".to_string()),
+                .unwrap_or_else(|| "_".to_string()),
             self.parameters
                 .iter()
                 .map(|param| param.to_string())
@@ -173,7 +173,7 @@ impl Display for Entry {
             Entry::Type(t) => t
                 .as_ref()
                 .map(|dt| dt.to_string())
-                .unwrap_or("_".to_string()),
+                .unwrap_or_else(|| "_".to_string()),
             Entry::Variable(v) => v.to_string(),
         };
         write!(f, "{}", display)

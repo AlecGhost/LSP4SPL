@@ -2,7 +2,7 @@ use super::DocumentPrelude;
 use crate::document::{convert_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{
-    request::{GotoDeclarationParams, GotoTypeDefinitionParams},
+    request::{GotoDeclarationParams, GotoImplementationParams, GotoTypeDefinitionParams},
     GotoDefinitionParams, Location,
 };
 use spl_frontend::table::{DataType, Entry, LookupTable, Table};
@@ -50,11 +50,12 @@ pub(crate) async fn declaration(
     Ok(None)
 }
 
+/// Calls `goto::declaration` because in SPL, there is no conceptual difference
+/// between declaration and definition
 pub(crate) async fn definition(
     doctx: Sender<DocumentRequest>,
     params: GotoDefinitionParams,
 ) -> Result<Option<Location>> {
-    // in SPL, there is no conceptual difference between declaration and definition
     declaration(doctx, params).await
 }
 
@@ -103,25 +104,61 @@ pub(crate) async fn type_definition(
                         }
                         Entry::Procedure(_) => { /* no type definition */ }
                         Entry::Variable(v) => {
-                            if let Some(dt) = &v.data_type {
-                                match dt {
-                                    DataType::Array {
-                                        size: _,
-                                        base_type: _,
-                                        creator,
-                                    } => {
-                                        return Ok(Some(Location {
-                                            uri,
-                                            range: convert_range(&creator.range, &doc_info.text),
-                                        }));
-                                    }
-                                    _ => { /* cannot look up primitive type */ }
-                                }
+                            if let Some(DataType::Array {
+                                size: _,
+                                base_type: _,
+                                creator,
+                            }) = &v.data_type
+                            {
+                                return Ok(Some(Location {
+                                    uri,
+                                    range: convert_range(&creator.range, &doc_info.text),
+                                }));
                             }
+                            /* cannot look up primitive types */
                         }
                     }
                 }
             }
+            Entry::Variable(v) => {
+                log::error!("Found illegal variable in global table {:#?}", v);
+                panic!("Found illegal variable in global table {:#?}", v);
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Essentially the same as `goto::declaration`, but only for procedures
+pub(crate) async fn implementation(
+    doctx: Sender<DocumentRequest>,
+    params: GotoImplementationParams,
+) -> Result<Option<Location>> {
+    let doc_params = params.text_document_position_params;
+    let uri = doc_params.text_document.uri.clone();
+    if let Some(DocumentPrelude {
+        doc_info,
+        ident,
+        entry,
+    }) = super::document_prelude(doc_params, doctx).await?
+    {
+        match &entry {
+            Entry::Procedure(p) => {
+                let lookup_table = LookupTable {
+                    global_table: &doc_info.table,
+                    local_table: &p.local_table,
+                };
+                if let Some((key, ranged_entry)) = lookup_table.entry(&ident) {
+                    if let Entry::Procedure(_) = ranged_entry.entry {
+                        return Ok(Some(Location {
+                            uri,
+                            range: convert_range(&key.range, &doc_info.text),
+                        }));
+                    }
+                    /* no implementation for types and variables */
+                }
+            }
+            Entry::Type(_) => { /* no implementation for types */ }
             Entry::Variable(v) => {
                 log::error!("Found illegal variable in global table {:#?}", v);
                 panic!("Found illegal variable in global table {:#?}", v);
