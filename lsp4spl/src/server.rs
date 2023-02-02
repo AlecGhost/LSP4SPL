@@ -108,6 +108,14 @@ impl LanguageServer {
                                         features::goto::definition(doctx.clone(), params).await?;
                                     response.into_result_response(goto_definition)
                                 }
+                                GotoTypeDefinition::METHOD => {
+                                    let (params, response) = request.split();
+                                    let params = serde_json::from_value(params)?;
+                                    let goto_type_definition =
+                                        features::goto::type_definition(doctx.clone(), params)
+                                            .await?;
+                                    response.into_result_response(goto_type_definition)
+                                }
                                 HoverRequest::METHOD => {
                                     let (params, response) = request.split();
                                     let params = serde_json::from_value(params)?;

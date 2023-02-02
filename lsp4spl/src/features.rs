@@ -18,7 +18,6 @@ async fn get_doc_info(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option
 
 struct DocumentPrelude {
     doc_info: DocumentInfo,
-    index: usize,
     ident: Identifier,
     entry: Entry,
 }
@@ -42,7 +41,6 @@ async fn document_prelude(
                     let entry = ranged_entry.entry.clone();
                     return Ok(Some(DocumentPrelude {
                         doc_info,
-                        index,
                         ident,
                         entry,
                     }));

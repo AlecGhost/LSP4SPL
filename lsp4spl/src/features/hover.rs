@@ -22,7 +22,6 @@ pub(crate) async fn hover(
     let doc_params = params.text_document_position_params;
     if let Some(DocumentPrelude {
         doc_info,
-        index: _,
         ident,
         entry,
     }) = super::document_prelude(doc_params, doctx).await?

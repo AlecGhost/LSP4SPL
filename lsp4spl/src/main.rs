@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 use color_eyre::eyre::Result;
 use lsp_types::{
-    HoverProviderCapability, ServerCapabilities, ServerInfo, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextDocumentSyncOptions, DeclarationCapability, OneOf,
+    DeclarationCapability, HoverProviderCapability, OneOf, ServerCapabilities, ServerInfo,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    TypeDefinitionProviderCapability,
 };
 use server::LanguageServer;
 use simplelog::{Config, LevelFilter, WriteLogger};
@@ -37,7 +38,7 @@ async fn main() {
             completion_provider: None,
             signature_help_provider: None,
             definition_provider: Some(OneOf::Left(true)),
-            type_definition_provider: None,
+            type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
             implementation_provider: None,
             references_provider: None,
             document_highlight_provider: None,
