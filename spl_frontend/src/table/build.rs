@@ -92,6 +92,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
                 .iter()
                 .for_each(|dec| build_variable(dec, table, &mut local_table, broker.clone()));
             let entry = ProcedureEntry {
+                name: self.name.clone(),
                 local_table,
                 parameters,
             };
@@ -102,9 +103,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
                     entry: Entry::Procedure(entry),
                 },
                 || {
-                    broker.report_error(
-                        name.to_error(BuildErrorMessage::RedeclarationAsProcedure),
-                    );
+                    broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsProcedure));
                 },
             );
         }
@@ -118,20 +117,24 @@ fn build_parameter<B: DiagnosticsBroker>(
     broker: B,
 ) -> VariableEntry {
     let param_entry = VariableEntry {
+        name: param.name.clone(),
         is_ref: param.is_ref,
         data_type: get_data_type(&param.type_expr, &param.name, global_table, broker.clone()),
     };
     if let Some(name) = &param.name {
         if let Some(data_type) = &param_entry.data_type {
             if !data_type.is_primitive() && !param.is_ref {
-                broker.report_error(
-                    name.to_error(BuildErrorMessage::MustBeAReferenceParameter),
-                );
+                broker.report_error(name.to_error(BuildErrorMessage::MustBeAReferenceParameter));
             }
         }
-        local_table.enter(name.clone(), RangedEntry { range: param.range.clone(), entry: Entry::Variable(param_entry.clone()) }, || {
-            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter))
-        });
+        local_table.enter(
+            name.clone(),
+            RangedEntry {
+                range: param.range.clone(),
+                entry: Entry::Variable(param_entry.clone()),
+            },
+            || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter)),
+        );
     };
     param_entry
 }
@@ -143,6 +146,7 @@ fn build_variable<B: DiagnosticsBroker>(
     broker: B,
 ) {
     let entry = VariableEntry {
+        name: var.name.clone(),
         is_ref: false,
         data_type: get_data_type(
             &var.type_expr,
@@ -155,9 +159,14 @@ fn build_variable<B: DiagnosticsBroker>(
         ),
     };
     if let Some(name) = &var.name {
-        local_table.enter(name.clone(), RangedEntry { range: var.range.clone(), entry: Entry::Variable(entry) }, || {
-            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable))
-        });
+        local_table.enter(
+            name.clone(),
+            RangedEntry {
+                range: var.range.clone(),
+                entry: Entry::Variable(entry),
+            },
+            || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable)),
+        );
     }
 }
 

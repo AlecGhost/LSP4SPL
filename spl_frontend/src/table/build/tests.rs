@@ -1,9 +1,10 @@
 use crate::{
     ast::Identifier,
+    error::SplError,
     table::{
         BuildErrorMessage, DataType, Entry, ProcedureEntry, RangedEntry, SymbolTable, VariableEntry,
     },
-    LocalBroker, error::SplError,
+    LocalBroker,
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
@@ -69,7 +70,10 @@ fn type_decs() {
     assert_eq!(
         broker.errors(),
         vec![
-            SplError(9..13, BuildErrorMessage::UndefinedType("bool".to_string()).to_string()),
+            SplError(
+                9..13,
+                BuildErrorMessage::UndefinedType("bool".to_string()).to_string()
+            ),
             SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())
         ]
     );
@@ -85,6 +89,7 @@ fn test_main() {
             RangedEntry {
                 range: 0..14,
                 entry: Entry::Procedure(ProcedureEntry {
+                    name: Some(Identifier::new("main", 5..9)),
                     local_table: SymbolTable::new(),
                     parameters: Vec::new(),
                 }),
@@ -118,6 +123,7 @@ fn test_main() {
             RangedEntry {
                 range: 17..31,
                 entry: Entry::Procedure(ProcedureEntry {
+                    name: Some(Identifier::new("main", 22..26),),
                     local_table: SymbolTable::new(),
                     parameters: Vec::new(),
                 }),
@@ -126,7 +132,10 @@ fn test_main() {
     );
     assert_eq!(
         broker.errors(),
-        vec![SplError(5..9, BuildErrorMessage::MainIsNotAProcedure.to_string()),]
+        vec![SplError(
+            5..9,
+            BuildErrorMessage::MainIsNotAProcedure.to_string()
+        ),]
     );
 
     let (table, broker) = test("proc main(a: int) {}");
@@ -137,12 +146,14 @@ fn test_main() {
             RangedEntry {
                 range: 0..20,
                 entry: Entry::Procedure(ProcedureEntry {
+                    name: Some(Identifier::new("main", 5..9),),
                     local_table: SymbolTable {
                         entries: HashMap::from([(
                             Identifier::new("a", 10..11),
                             RangedEntry {
                                 range: 10..16,
                                 entry: Entry::Variable(VariableEntry {
+                                    name: Some(Identifier::new("a", 10..11)),
                                     is_ref: false,
                                     data_type: Some(DataType::Int)
                                 }),
@@ -150,6 +161,7 @@ fn test_main() {
                         )])
                     },
                     parameters: vec![VariableEntry {
+                        name: Some(Identifier::new("a", 10..11)),
                         is_ref: false,
                         data_type: Some(DataType::Int)
                     }],

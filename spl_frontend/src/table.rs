@@ -1,7 +1,7 @@
 use crate::{ast::Identifier, error::BuildErrorMessage, DiagnosticsBroker};
 pub use build::build;
 pub use semantic::analyze;
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, fmt::Display, ops::Range};
 
 mod build;
 mod initialization;
@@ -26,12 +26,14 @@ impl DataType {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableEntry {
+    pub name: Option<Identifier>,
     pub is_ref: bool,
     pub data_type: Option<DataType>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcedureEntry {
+    pub name: Option<Identifier>,
     pub local_table: SymbolTable,
     pub parameters: Vec<VariableEntry>,
 }
@@ -49,13 +51,13 @@ pub struct RangedEntry {
     pub entry: Entry,
 }
 
-trait Table {
+pub trait Table {
     fn lookup(&self, key: &Identifier) -> Option<&RangedEntry>;
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct SymbolTable {
-    entries: HashMap<Identifier, RangedEntry>,
+    pub entries: HashMap<Identifier, RangedEntry>,
 }
 
 impl SymbolTable {
@@ -85,9 +87,9 @@ impl Table for SymbolTable {
 }
 
 #[derive(Debug)]
-struct LookupTable<'a> {
-    local_table: &'a SymbolTable,
-    global_table: &'a SymbolTable,
+pub struct LookupTable<'a> {
+    pub local_table: &'a SymbolTable,
+    pub global_table: &'a SymbolTable,
 }
 
 impl<'a> Table for LookupTable<'a> {
@@ -97,5 +99,70 @@ impl<'a> Table for LookupTable<'a> {
             value = self.global_table.lookup(key);
         }
         value
+    }
+}
+
+impl Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
+            Self::Int => format!("int"),
+            Self::Bool => format!("boolean"),
+            Self::Array {
+                size,
+                base_type,
+                creator: _,
+            } => format!("array [{}] of {}", size, base_type.to_string()),
+        };
+        write!(f, "{}", display)
+    }
+}
+
+impl Display for VariableEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}: {}",
+            if self.is_ref { "ref " } else { "" },
+            self.name
+                .as_ref()
+                .map(|ident| ident.to_string())
+                .unwrap_or("_".to_string()),
+            self.data_type
+                .as_ref()
+                .map(|dt| dt.to_string())
+                .unwrap_or("_".to_string())
+        )
+    }
+}
+
+impl Display for ProcedureEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "proc {}({})",
+            self.name
+                .as_ref()
+                .map(|ident| ident.to_string())
+                .unwrap_or("_".to_string()),
+            self.parameters
+                .iter()
+                .map(|param| param.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
+impl Display for Entry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
+            Entry::Procedure(p) => p.to_string(),
+            Entry::Type(t) => t
+                .as_ref()
+                .map(|dt| dt.to_string())
+                .unwrap_or("_".to_string()),
+            Entry::Variable(v) => v.to_string(),
+        };
+        write!(f, "{}", display)
     }
 }

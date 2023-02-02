@@ -1,6 +1,7 @@
 use crate::{
     document::{self, DocumentRequest},
     error::{ErrorCode, ResponseError},
+    features,
     io::{self, LSCodec, Message, Response},
 };
 use color_eyre::eyre::Result;
@@ -73,35 +74,50 @@ impl LanguageServer {
             match frame {
                 Ok(message) => match message {
                     Message::Request(request) => {
-                        let response: Response = match request.method.as_str() {
-                            Initialize::METHOD => {
-                                let (_, response) = request.split();
-                                response.into_error_response(ResponseError::new(
-                                    ErrorCode::InvalidRequest,
-                                    "Initialize method shall only be send once".to_string(),
-                                ))
-                            }
-                            Shutdown::METHOD => {
-                                // exit main phase
-                                let (_, response) = request.split();
-                                let response = response.into_result_response(Value::Null);
-                                iotx.send(Message::Response(response))
-                                    .await
-                                    .expect("Cannot send messages");
-                                break;
-                            }
-                            unknown_method => {
-                                let method_name = unknown_method.to_string();
-                                let (_, response) = request.split();
-                                response.into_error_response(ResponseError::new(
-                                    ErrorCode::MethodNotFound,
-                                    format!("Unknown method {}", method_name).to_string(),
-                                ))
-                            }
-                        };
-                        iotx.send(Message::Response(response))
-                            .await
-                            .expect("Cannot send messages");
+                        async fn match_request(
+                            request: io::Request,
+                            iotx: Sender<Message>,
+                            doctx: Sender<DocumentRequest>,
+                        ) -> Result<()> {
+                            let response: Response = match request.method.as_str() {
+                                Initialize::METHOD => {
+                                    let (_, response) = request.split();
+                                    response.into_error_response(ResponseError::new(
+                                        ErrorCode::InvalidRequest,
+                                        "Initialize method shall only be send once".to_string(),
+                                    ))
+                                }
+                                Shutdown::METHOD => {
+                                    // exit main phase
+                                    let (_, response) = request.split();
+                                    let response = response.into_result_response(Value::Null);
+                                    iotx.send(Message::Response(response)).await?;
+                                    return Ok(());
+                                }
+                                HoverRequest::METHOD => {
+                                    let (params, response) = request.split();
+                                    let params = serde_json::from_value(params)?;
+                                    let hover = features::hover(doctx.clone(), params).await?;
+                                    response.into_result_response(hover)
+                                }
+                                unknown_method => {
+                                    let method_name = unknown_method.to_string();
+                                    let (_, response) = request.split();
+                                    response.into_error_response(ResponseError::new(
+                                        ErrorCode::MethodNotFound,
+                                        format!("Unknown method {}", method_name),
+                                    ))
+                                }
+                            };
+                            iotx.send(Message::Response(response)).await?;
+                            Ok(())
+                        }
+
+                        if let Err(err) = match_request(request, iotx.clone(), doctx.clone()).await
+                        {
+                            log::error!("Error occured during request handling: {:#?}", err);
+                            panic!("Error occured during request handling: {:#?}", err);
+                        }
                     }
                     Message::Notification(notification) => {
                         async fn match_notification(
@@ -131,8 +147,9 @@ impl LanguageServer {
                             log::warn!("Error occured during notification handling: {:#?}", err);
                         }
                     }
-                    Message::Response(_) => {
-                        panic!("Cannot handle responses")
+                    Message::Response(response) => {
+                        log::error!("Cannot handle responses: {:?}", response);
+                        panic!("Cannot handle responses: {:?}", response);
                     }
                 },
                 Err(err) => {
@@ -197,8 +214,9 @@ mod phases {
                         std::process::exit(1) // ungraceful exit
                     }
                 }
-                Message::Response(_) => {
-                    panic!("Cannot handle responses")
+                Message::Response(response) => {
+                    log::error!("Cannot handle responses: {:?}", response);
+                    panic!("Cannot handle responses: {:?}", response);
                 }
             };
         }
@@ -219,8 +237,9 @@ mod phases {
                     Exit::METHOD => std::process::exit(1), // ungraceful exit
                     _ => { /* drop all other notifications */ }
                 },
-                Message::Response(_) => {
-                    panic!("Cannot handle responses")
+                Message::Response(response) => {
+                    log::error!("Cannot handle responses: {:?}", response);
+                    panic!("Cannot handle responses: {:?}", response);
                 }
             };
         }
@@ -249,8 +268,9 @@ mod phases {
                         break;
                     }
                 }
-                Message::Response(_) => {
-                    panic!("Cannot handle responses")
+                Message::Response(response) => {
+                    log::error!("Cannot handle responses: {:?}", response);
+                    panic!("Cannot handle responses: {:?}", response);
                 }
             };
         }

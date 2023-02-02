@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use error::SplError;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, ops::Range, rc::Rc};
 
 pub mod ast;
 pub mod error;
@@ -9,6 +9,12 @@ pub mod table;
 
 pub trait DiagnosticsBroker: Clone + std::fmt::Debug {
     fn report_error(&self, error: SplError);
+}
+
+// source: https://github.com/ebkalderon/example-fault-tolerant-parser/blob/master/src/main.rs
+// see also: https://eyalkalderon.com/blog/nom-error-recovery/
+pub trait ToRange {
+    fn to_range(&self) -> Range<usize>;
 }
 
 #[derive(Debug, Default)]

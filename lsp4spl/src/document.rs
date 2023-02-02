@@ -11,7 +11,10 @@ use spl_frontend::{
     LocalBroker,
 };
 use std::collections::HashMap;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    oneshot,
+};
 
 use crate::io::{self, Message, ToValue};
 
@@ -20,6 +23,7 @@ pub(super) enum DocumentRequest {
     Open(Url, String),
     Change(Url, Vec<TextDocumentContentChangeEvent>),
     Close(Url),
+    GetInfo(Url, oneshot::Sender<Option<DocumentInfo>>),
 }
 
 pub(super) async fn open(
@@ -114,16 +118,20 @@ pub(super) async fn broker(
             Close(uri) => {
                 docs.remove(uri.path());
             }
+            GetInfo(uri, tx) => {
+                let doc_info = docs.get(uri.path()).cloned();
+                tx.send(doc_info).expect("Cannot send messages");
+            }
         }
     }
 }
 
-#[derive(Debug)]
-struct DocumentInfo {
-    text: String,
-    ast: Program,
-    table: SymbolTable,
-    diagnostics: Vec<Diagnostic>,
+#[derive(Debug, Clone)]
+pub struct DocumentInfo {
+    pub text: String,
+    pub ast: Program,
+    pub table: SymbolTable,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl DocumentInfo {
@@ -147,24 +155,21 @@ impl DocumentInfo {
 }
 
 fn create_diagnostic(err: SplError, text: &str) -> Diagnostic {
-    let range = Range {
-        start: get_position(err.0.start, text),
-        end: get_position(err.0.end, text),
-    };
+    let SplError(range, message) = err;
     Diagnostic {
-        range,
+        range: convert_range(&range, text),
         severity: Some(DiagnosticSeverity::ERROR),
         code: None,
         code_description: None,
         source: None,
-        message: err.1,
+        message,
         related_information: None,
         tags: None,
         data: None,
     }
 }
 
-fn get_position(index: usize, text: &str) -> Position {
+pub fn get_position(index: usize, text: &str) -> Position {
     let mut line = 0;
     let mut character = 0;
     for (i, c) in text.char_indices() {
@@ -179,4 +184,29 @@ fn get_position(index: usize, text: &str) -> Position {
         }
     }
     Position { line, character }
+}
+
+pub fn convert_range(range: &std::ops::Range<usize>, text: &str) -> Range {
+    Range {
+        start: get_position(range.start, text),
+        end: get_position(range.end, text),
+    }
+}
+
+pub fn get_index(position: Position, text: &str) -> Option<usize> {
+    let mut line = 0;
+    let mut character = 0;
+    let pos = (position.line, position.character);
+    for (i, c) in text.char_indices() {
+        if (line, character) == pos {
+            return Some(i);
+        }
+        if c == '\n' {
+            line += 1;
+            character = 0;
+        } else {
+            character += 1;
+        }
+    }
+    None
 }

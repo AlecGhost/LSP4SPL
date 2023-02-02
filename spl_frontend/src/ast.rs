@@ -1,5 +1,5 @@
-use std::ops::Range;
-use crate::parser::ToRange;
+use crate::ToRange;
+use std::{ops::Range, fmt::Display};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Digit {
@@ -20,7 +20,10 @@ pub struct IntLiteral {
 
 impl IntLiteral {
     pub(crate) fn new(value: u32, range: Range<usize>) -> Self {
-        Self { value: Some(value), range }
+        Self {
+            value: Some(value),
+            range,
+        }
     }
 }
 
@@ -36,6 +39,12 @@ impl Identifier {
             value: value.to_string(),
             range,
         }
+    }
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 
@@ -56,9 +65,9 @@ impl ToRange for Variable {
     fn to_range(&self) -> Range<usize> {
         use Variable::*;
         match self {
-            NamedVariable(i) => i.range.to_owned(),
-            ArrayAccess(a) => a.range.to_owned(),
-        } 
+            NamedVariable(i) => i.range.clone(),
+            ArrayAccess(a) => a.range.clone(),
+        }
     }
 }
 
@@ -118,10 +127,10 @@ impl ToRange for Expression {
     fn to_range(&self) -> Range<usize> {
         use Expression::*;
         match self {
-            Binary(b) => b.range.to_owned(),
-            IntLiteral(i) => i.range.to_owned(),
+            Binary(b) => b.range.clone(),
+            IntLiteral(i) => i.range.clone(),
             Variable(v) => v.to_range(),
-            Error(range) => range.to_owned(),
+            Error(range) => range.clone(),
         }
     }
 }
@@ -220,7 +229,191 @@ pub enum GlobalDeclaration {
     Error(Range<usize>),
 }
 
+impl ToRange for GlobalDeclaration {
+    fn to_range(&self) -> Range<usize> {
+        use GlobalDeclaration::*;
+        match self {
+            Type(t) => t.range.clone(),
+            Procedure(p) => p.range.clone(),
+            Error(range) => range.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Program {
     pub global_declarations: Vec<GlobalDeclaration>,
+}
+
+impl Program {
+    pub fn ident_at(&self, index: usize) -> Option<&Identifier> {
+        fn search_type_expr(type_expr: &TypeExpression, index: usize) -> Option<&Identifier> {
+            match type_expr {
+                TypeExpression::NamedType(name) => {
+                    if name.range.contains(&index) {
+                        Some(name)
+                    } else {
+                        None
+                    }
+                }
+                TypeExpression::ArrayType { size: _, base_type } => {
+                    base_type.as_ref().and_then(|t| search_type_expr(t, index))
+                }
+                TypeExpression::IntType => None,
+            }
+        }
+
+        fn search_statement(stmt: &Statement, index: usize) -> Option<&Identifier> {
+            match stmt {
+                Statement::If(i) => {
+                    if let Some(condition) = &i.condition {
+                        if let Some(ident) = search_expression(condition, index) {
+                            return Some(ident);
+                        }
+                    }
+                    if let Some(stmt) = &i.if_branch {
+                        if let Some(ident) = search_statement(stmt, index) {
+                            return Some(ident);
+                        }
+                    }
+                    if let Some(stmt) = &i.else_branch {
+                        if let Some(ident) = search_statement(stmt, index) {
+                            return Some(ident);
+                        }
+                    }
+                    None
+                }
+                Statement::While(w) => {
+                    if let Some(condition) = &w.condition {
+                        if let Some(ident) = search_expression(condition, index) {
+                            return Some(ident);
+                        }
+                    }
+                    if let Some(stmt) = &w.statement {
+                        if let Some(ident) = search_statement(stmt, index) {
+                            return Some(ident);
+                        }
+                    }
+                    None
+                }
+                Statement::Call(c) => {
+                    if c.name.range.contains(&index) {
+                        Some(&c.name)
+                    } else {
+                        c.arguments
+                            .iter()
+                            .map(|arg| search_expression(arg, index))
+                            .find(|opt| opt.is_some())
+                            .flatten()
+                    }
+                }
+                Statement::Assignment(a) => {
+                    if let Some(ident) = search_variable(&a.variable, index) {
+                        return Some(ident);
+                    }
+                    if let Some(expr) = &a.expr {
+                        return search_expression(expr, index);
+                    }
+                    None
+                }
+                Statement::Block(b) => b
+                    .statements
+                    .iter()
+                    .map(|stmt| search_statement(stmt, index))
+                    .find(|opt| opt.is_some())
+                    .flatten(),
+                Statement::Empty => None,
+                Statement::Error => None,
+            }
+        }
+
+        fn search_expression(expr: &Expression, index: usize) -> Option<&Identifier> {
+            match expr {
+                Expression::Binary(b) => {
+                    if let Some(ident) = search_expression(&b.lhs, index) {
+                        return Some(ident);
+                    }
+                    search_expression(&b.rhs, index)
+                }
+                Expression::Variable(v) => search_variable(v, index),
+                Expression::IntLiteral(_) => None,
+                Expression::Error(_) => None,
+            }
+        }
+
+        fn search_variable(var: &Variable, index: usize) -> Option<&Identifier> {
+            match var {
+                Variable::NamedVariable(name) => {
+                    if name.range.contains(&index) {
+                        Some(name)
+                    } else {
+                        None
+                    }
+                }
+                Variable::ArrayAccess(a) => {
+                    if let Some(ident) = search_variable(&a.array, index) {
+                        return Some(ident);
+                    }
+                    search_expression(&a.index, index)
+                }
+            }
+        }
+
+        let gd = self
+            .global_declarations
+            .iter()
+            .find(|gd| gd.to_range().contains(&index));
+        if let Some(gd) = gd {
+            match gd {
+                GlobalDeclaration::Type(t) => {
+                    if let Some(name) = &t.name {
+                        if name.range.contains(&index) {
+                            return Some(name);
+                        }
+                    }
+                    if let Some(type_expr) = &t.type_expr {
+                        return search_type_expr(type_expr, index);
+                    }
+                }
+                GlobalDeclaration::Procedure(p) => {
+                    if let Some(name) = &p.name {
+                        if name.range.contains(&index) {
+                            return Some(name);
+                        }
+                    }
+                    for param in p.parameters.iter() {
+                        if let Some(name) = &param.name {
+                            if name.range.contains(&index) {
+                                return Some(name);
+                            }
+                        }
+                        if let Some(type_expr) = &param.type_expr {
+                            if let Some(ident) = search_type_expr(type_expr, index) {
+                                return Some(ident);
+                            }
+                        }
+                    }
+                    for var in &p.variable_declarations {
+                        if let Some(name) = &var.name {
+                            if name.range.contains(&index) {
+                                return Some(name);
+                            }
+                        }
+                        if let Some(type_expr) = &var.type_expr {
+                            if let Some(ident) = search_type_expr(type_expr, index) {
+                                return Some(ident);
+                            }
+                        }
+                    }
+                    for stmt in &p.statements {
+                        if let Some(ident) = search_statement(stmt, index) {
+                            return Some(ident);
+                        }
+                    }
+                }
+                GlobalDeclaration::Error(_) => {}
+            };
+        }
+        None
+    }
 }

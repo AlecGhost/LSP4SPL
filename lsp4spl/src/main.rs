@@ -1,14 +1,15 @@
 #![allow(dead_code)]
 use color_eyre::eyre::Result;
 use lsp_types::{
-    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions,
+    HoverProviderCapability, ServerCapabilities, ServerInfo, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions,
 };
 use server::LanguageServer;
 use simplelog::{Config, LevelFilter, WriteLogger};
 
 mod document;
 mod error;
+mod features;
 mod io;
 mod server;
 
@@ -32,7 +33,7 @@ async fn main() {
                 },
             )),
             selection_range_provider: None,
-            hover_provider: None,
+            hover_provider: Some(HoverProviderCapability::Simple(true)),
             completion_provider: None,
             signature_help_provider: None,
             definition_provider: None,

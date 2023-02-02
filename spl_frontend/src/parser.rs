@@ -1,7 +1,9 @@
+use std::ops::Range;
+
 use crate::{
     ast::*,
     error::{ParseErrorMessage, SplError},
-    DiagnosticsBroker,
+    DiagnosticsBroker, ToRange,
 };
 use nom::{
     branch::alt,
@@ -11,7 +13,6 @@ use nom::{
     multi::many0,
     sequence::{pair, preceded, terminated, tuple},
 };
-use std::ops::Range;
 use utility::{
     alpha_numeric0, expect, ignore_until, ignore_until1, keywords, primitives, symbols, ws,
 };
@@ -20,11 +21,7 @@ use utility::{
 mod tests;
 mod utility;
 
-// source: https://github.com/ebkalderon/example-fault-tolerant-parser/blob/master/src/main.rs
-// see also: https://eyalkalderon.com/blog/nom-error-recovery/
-pub(crate) trait ToRange {
-    fn to_range(&self) -> Range<usize>;
-}
+pub type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
 
 impl<B> ToRange for Span<'_, B> {
     fn to_range(&self) -> Range<usize> {
@@ -33,8 +30,6 @@ impl<B> ToRange for Span<'_, B> {
         start..end
     }
 }
-
-pub type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
 
 type IResult<'a, T, B> = nom::IResult<Span<'a, B>, T>;
 

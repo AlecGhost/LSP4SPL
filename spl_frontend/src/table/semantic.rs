@@ -4,9 +4,8 @@ use crate::{
         ArrayAccess, Assignment, BinaryExpression, BlockStatement, CallStatement, Expression,
         GlobalDeclaration, IfStatement, Program, Statement, Variable, WhileStatement,
     },
-    error::{SplError, SemanticErrorMessage},
-    parser::ToRange,
-    DiagnosticsBroker,
+    error::{SemanticErrorMessage, SplError},
+    DiagnosticsBroker, ToRange,
 };
 use std::cmp::Ordering;
 
@@ -104,13 +103,15 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                     Ordering::Less => {
                         broker.report_error(SplError(
                             self.range.clone(),
-                            SemanticErrorMessage::TooFewArguments(self.name.value.clone()).to_string(),
+                            SemanticErrorMessage::TooFewArguments(self.name.value.clone())
+                                .to_string(),
                         ));
                     }
                     Ordering::Greater => {
                         broker.report_error(SplError(
                             self.range.clone(),
-                            SemanticErrorMessage::TooManyArguments(self.name.value.clone()).to_string(),
+                            SemanticErrorMessage::TooManyArguments(self.name.value.clone())
+                                .to_string(),
                         ));
                     }
                     Ordering::Equal => {}
@@ -125,7 +126,8 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                                 self.name.value.clone(),
                                 // enumeration starts with 1
                                 i + 1,
-                            ).to_string(),
+                            )
+                            .to_string(),
                         ));
                     }
                     if arg.analyze(table, broker.clone()) != param.data_type {
@@ -135,7 +137,8 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                                 self.name.value.clone(),
                                 // enumeration starts with 1
                                 i + 1,
-                            ).to_string(),
+                            )
+                            .to_string(),
                         ));
                     }
                 }
@@ -202,16 +205,12 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Variable {
                     match &ranged_entry.entry {
                         Entry::Variable(v) => v.data_type.clone(),
                         _ => {
-                            broker.report_error(
-                                named.to_error(SemanticErrorMessage::NotAVariable),
-                            );
+                            broker.report_error(named.to_error(SemanticErrorMessage::NotAVariable));
                             None
                         }
                     }
                 } else {
-                    broker.report_error(
-                        named.to_error(SemanticErrorMessage::UndefinedVariable),
-                    );
+                    broker.report_error(named.to_error(SemanticErrorMessage::UndefinedVariable));
                     None
                 }
             }
