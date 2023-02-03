@@ -56,8 +56,8 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for Statement {
             Self::Call(stmt) => stmt.analyze(table, broker),
             Self::If(stmt) => stmt.analyze(table, broker),
             Self::While(stmt) => stmt.analyze(table, broker),
-            Self::Empty => {}
-            Self::Error => {}
+            Self::Empty(_) => {}
+            Self::Error(_) => {}
         };
     }
 }

@@ -1,5 +1,5 @@
 use crate::ToRange;
-use std::{ops::Range, fmt::Display};
+use std::{fmt::Display, ops::Range};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Digit {
@@ -148,7 +148,22 @@ pub enum TypeExpression {
     ArrayType {
         size: Option<u32>,
         base_type: Option<Box<TypeExpression>>,
+        range: Range<usize>,
     },
+}
+
+impl ToRange for TypeExpression {
+    fn to_range(&self) -> Range<usize> {
+        use TypeExpression::*;
+        match self {
+            NamedType(ident) => ident.range.clone(),
+            ArrayType {
+                size: _,
+                base_type: _,
+                range,
+            } => range.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -203,13 +218,28 @@ pub struct BlockStatement {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {
-    Empty,
+    Empty(Range<usize>),
     Assignment(Assignment),
     Call(CallStatement),
     If(IfStatement),
     While(WhileStatement),
     Block(BlockStatement),
-    Error,
+    Error(Range<usize>),
+}
+
+impl ToRange for Statement {
+    fn to_range(&self) -> Range<usize> {
+        use Statement::*;
+        match self {
+            Empty(range) => range.clone(),
+            Assignment(a) => a.range.clone(),
+            Call(c) => c.range.clone(),
+            If(i) => i.range.clone(),
+            While(w) => w.range.clone(),
+            Block(b) => b.range.clone(),
+            Error(range) => range.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -247,6 +277,9 @@ pub struct Program {
 impl Program {
     pub fn ident_at(&self, index: usize) -> Option<&Identifier> {
         fn search_type_expr(type_expr: &TypeExpression, index: usize) -> Option<&Identifier> {
+            if !type_expr.to_range().contains(&index) {
+                return None;
+            }
             match type_expr {
                 TypeExpression::NamedType(name) => {
                     if name.range.contains(&index) {
@@ -255,13 +288,24 @@ impl Program {
                         None
                     }
                 }
-                TypeExpression::ArrayType { size: _, base_type } => {
-                    base_type.as_ref().and_then(|t| search_type_expr(t, index))
+                TypeExpression::ArrayType {
+                    size: _,
+                    base_type,
+                    range,
+                } => {
+                    if range.contains(&index) {
+                        base_type.as_ref().and_then(|t| search_type_expr(t, index))
+                    } else {
+                        None
+                    }
                 }
             }
         }
 
         fn search_statement(stmt: &Statement, index: usize) -> Option<&Identifier> {
+            if !stmt.to_range().contains(&index) {
+                return None;
+            }
             match stmt {
                 Statement::If(i) => {
                     if let Some(condition) = &i.condition {
@@ -320,12 +364,15 @@ impl Program {
                     .map(|stmt| search_statement(stmt, index))
                     .find(|opt| opt.is_some())
                     .flatten(),
-                Statement::Empty => None,
-                Statement::Error => None,
+                Statement::Empty(_) => None,
+                Statement::Error(_) => None,
             }
         }
 
         fn search_expression(expr: &Expression, index: usize) -> Option<&Identifier> {
+            if !expr.to_range().contains(&index) {
+                return None;
+            }
             match expr {
                 Expression::Binary(b) => {
                     if let Some(ident) = search_expression(&b.lhs, index) {
@@ -340,6 +387,9 @@ impl Program {
         }
 
         fn search_variable(var: &Variable, index: usize) -> Option<&Identifier> {
+            if !var.to_range().contains(&index) {
+                return None;
+            }
             match var {
                 Variable::NamedVariable(name) => {
                     if name.range.contains(&index) {
@@ -364,6 +414,9 @@ impl Program {
         if let Some(gd) = gd {
             match gd {
                 GlobalDeclaration::Type(t) => {
+                    if !t.range.contains(&index) {
+                        return None;
+                    }
                     if let Some(name) = &t.name {
                         if name.range.contains(&index) {
                             return Some(name);
@@ -374,6 +427,9 @@ impl Program {
                     }
                 }
                 GlobalDeclaration::Procedure(p) => {
+                    if !p.range.contains(&index) {
+                        return None;
+                    }
                     if let Some(name) = &p.name {
                         if name.range.contains(&index) {
                             return Some(name);

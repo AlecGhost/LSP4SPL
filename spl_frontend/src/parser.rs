@@ -256,7 +256,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         fn parse_array_type<B: DiagnosticsBroker>(input: Span<B>) -> IResult<TypeExpression, B> {
-            let (input, _) = keywords::array(input)?;
+            let (input, array) = keywords::array(input)?;
+            let start = array.location_offset();
             let (input, _) = expect(
                 symbols::lbracket,
                 ParseErrorMessage::ExpectedToken("[".to_string()),
@@ -275,11 +276,13 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
                 TypeExpression::parse,
                 ParseErrorMessage::ExpectedToken("type expression".to_string()),
             )(input)?;
+            let end = input.location_offset();
             Ok((
                 input,
                 TypeExpression::ArrayType {
                     size: size.flatten(),
                     base_type: type_expr.map(Box::new),
+                    range: start..end,
                 },
             ))
         }
@@ -518,7 +521,7 @@ impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
 impl<B: DiagnosticsBroker> Parser<B> for Statement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         alt((
-            map(symbols::semic, |_| Self::Empty),
+            map(symbols::semic, |semic| Self::Empty(semic.to_range())),
             map(IfStatement::parse, Self::If),
             map(WhileStatement::parse, Self::While),
             map(BlockStatement::parse, Self::Block),
@@ -540,15 +543,16 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
                         match var {
                             Variable::NamedVariable(ident) => {
                                 let span = pair.1;
+                                let range = ident.range.start..span.to_range().end;
                                 let err = SplError(
-                                    ident.range.start..span.to_range().end,
+                                    range.clone(),
                                     ParseErrorMessage::UnexpectedCharacters(
                                         ident.value + span.fragment(),
                                     )
                                     .to_string(),
                                 );
                                 span.extra.report_error(err);
-                                return Self::Error;
+                                return Self::Error(range);
                             }
                             Variable::ArrayAccess(a) => var = *a.array,
                         }

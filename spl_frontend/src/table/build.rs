@@ -179,7 +179,11 @@ fn get_data_type<T: Table, B: DiagnosticsBroker>(
     if let Some(type_expr) = type_expr {
         use TypeExpression::*;
         match type_expr {
-            ArrayType { size, base_type } => {
+            ArrayType {
+                size,
+                base_type,
+                range: _,
+            } => {
                 if let (Some(size), Some(base_type)) = (
                     size,
                     get_data_type(

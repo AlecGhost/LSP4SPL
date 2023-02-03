@@ -261,8 +261,10 @@ fn type_declarations() {
                 size: Some(2),
                 base_type: Some(Box::new(TE::ArrayType {
                     size: Some(3),
-                    base_type: Some(Box::new(TE::NamedType(Identifier::new("int", 35..38))))
-                }))
+                    base_type: Some(Box::new(TE::NamedType(Identifier::new("int", 35..38)))),
+                    range: 22..38,
+                })),
+                range: 9..38,
             }),
             range: 0..39,
         },
@@ -280,8 +282,10 @@ fn type_declarations() {
                 size: None,
                 base_type: Some(Box::new(TE::ArrayType {
                     size: None,
-                    base_type: None
-                }))
+                    base_type: None,
+                    range: 19..30,
+                })),
+                range: 7..30,
             }),
             range: 0..31
         },
