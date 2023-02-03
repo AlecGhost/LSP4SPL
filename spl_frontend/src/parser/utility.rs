@@ -197,12 +197,6 @@ pub(super) mod keywords {
     );
 }
 
-pub(super) mod primitives {
-    keyword_parsers!(
-        int: "int"
-    );
-}
-
 pub(super) mod symbols {
     symbol_parsers!(
         lparen: "(",

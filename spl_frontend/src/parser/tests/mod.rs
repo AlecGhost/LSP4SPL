@@ -245,7 +245,7 @@ fn type_declarations() {
         all_consuming(TD::parse)(dec.to_span()).unwrap().1,
         TD {
             name: Some(Identifier::new("a", 5..6)),
-            type_expr: Some(TE::IntType),
+            type_expr: Some(TE::NamedType(Identifier::new("int", 9..12))),
             range: 0..13,
         },
         "Declaration: {}",
@@ -261,7 +261,7 @@ fn type_declarations() {
                 size: Some(2),
                 base_type: Some(Box::new(TE::ArrayType {
                     size: Some(3),
-                    base_type: Some(Box::new(TE::IntType))
+                    base_type: Some(Box::new(TE::NamedType(Identifier::new("int", 35..38))))
                 }))
             }),
             range: 0..39,
@@ -429,7 +429,7 @@ fn acker() {
     let (input, program) = all_consuming(Program::parse)(acker.to_span()).unwrap();
 
     // variables for use in assertion
-    let int_type = |range| Some(TypeExpression::IntType);
+    let int_type = |range| Some(TypeExpression::NamedType(Identifier::new("int", range)));
     let a = |range| Some(Identifier::new("a", range));
     let i = |range| Some(Identifier::new("i", range));
     let j = |range| Some(Identifier::new("j", range));

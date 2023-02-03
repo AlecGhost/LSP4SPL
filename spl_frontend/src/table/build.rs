@@ -179,7 +179,6 @@ fn get_data_type<T: Table, B: DiagnosticsBroker>(
     if let Some(type_expr) = type_expr {
         use TypeExpression::*;
         match type_expr {
-            IntType => Some(DataType::Int),
             ArrayType { size, base_type } => {
                 if let (Some(size), Some(base_type)) = (
                     size,
@@ -200,7 +199,9 @@ fn get_data_type<T: Table, B: DiagnosticsBroker>(
                 }
             }
             NamedType(name) => {
-                if let Some(ranged_entry) = table.lookup(name) {
+                if name.value == "int" {
+                    Some(DataType::Int)
+                } else if let Some(ranged_entry) = table.lookup(name) {
                     if let Entry::Type(t) = &ranged_entry.entry {
                         t.clone()
                     } else {

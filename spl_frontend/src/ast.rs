@@ -144,7 +144,6 @@ pub struct TypeDeclaration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeExpression {
-    IntType,
     NamedType(Identifier),
     ArrayType {
         size: Option<u32>,
@@ -259,7 +258,6 @@ impl Program {
                 TypeExpression::ArrayType { size: _, base_type } => {
                     base_type.as_ref().and_then(|t| search_type_expr(t, index))
                 }
-                TypeExpression::IntType => None,
             }
         }
 

@@ -14,7 +14,7 @@ use nom::{
     sequence::{pair, preceded, terminated, tuple},
 };
 use utility::{
-    alpha_numeric0, expect, ignore_until, ignore_until1, keywords, primitives, symbols, ws,
+    alpha_numeric0, expect, ignore_until, ignore_until1, keywords, symbols, ws,
 };
 
 #[cfg(test)]
@@ -286,7 +286,6 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
 
         alt((
             parse_array_type,
-            map(primitives::int, |_| Self::IntType),
             map(Identifier::parse, Self::NamedType),
         ))(input)
     }
