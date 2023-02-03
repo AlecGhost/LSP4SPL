@@ -292,7 +292,7 @@ fn type_declarations() {
         input.extra.errors(),
         vec![
             SplError(
-                5..5,
+                4..4,
                 ParseErrorMessage::ExpectedToken("identifier".to_string()).to_string()
             ),
             SplError(
@@ -429,7 +429,7 @@ fn acker() {
     let (input, program) = all_consuming(Program::parse)(acker.to_span()).unwrap();
 
     // variables for use in assertion
-    let int_type = Some(TypeExpression::IntType);
+    let int_type = |range| Some(TypeExpression::IntType);
     let a = |range| Some(Identifier::new("a", range));
     let i = |range| Some(Identifier::new("i", range));
     let j = |range| Some(Identifier::new("j", range));
@@ -478,26 +478,26 @@ fn acker() {
                         ParameterDeclaration {
                             is_ref: false,
                             name: i(60..61),
-                            type_expr: int_type.clone(),
+                            type_expr: int_type(63..66),
                             range: 60..66,
                         },
                         ParameterDeclaration {
                             is_ref: false,
                             name: j(68..69),
-                            type_expr: int_type.clone(),
+                            type_expr: int_type(71..74),
                             range: 68..74,
                         },
                         ParameterDeclaration {
                             is_ref: true,
                             name: k(80..81),
-                            type_expr: int_type.clone(),
+                            type_expr: int_type(83..86),
                             range: 76..86,
                         },
                     ],
                     variable_declarations: vec![VariableDeclaration {
                         name: a(96..97),
-                        type_expr: int_type.clone(),
-                        range: 92..107,
+                        type_expr: int_type(99..102),
+                        range: 92..103,
                     }],
                     statements: vec![Statement::If(IfStatement {
                         condition: Some(Expression::Binary(BinaryExpression {
@@ -515,9 +515,9 @@ fn acker() {
                                     rhs: int_lit(1, 133..134),
                                     range: 129..134,
                                 })),
-                                range: 124..138,
+                                range: 124..135,
                             })],
-                            range: 118..140,
+                            range: 118..139,
                         }))),
                         else_branch: Some(Box::new(Statement::Block(BlockStatement {
                             statements: vec![Statement::If(IfStatement {
@@ -530,7 +530,7 @@ fn acker() {
                                 if_branch: Some(Box::new(Statement::Block(BlockStatement {
                                     statements: vec![call_ackermann(
                                         170..179,
-                                        170..198,
+                                        170..193,
                                         Expression::Binary(BinaryExpression {
                                             operator: Operator::Sub,
                                             lhs: var_i(180..181),
@@ -540,13 +540,13 @@ fn acker() {
                                         Expression::IntLiteral(IntLiteral::new(1, 187..188)),
                                         *var_k(190..191)
                                     )],
-                                    range: 162..200,
+                                    range: 162..199,
                                 }))),
                                 else_branch: Some(Box::new(Statement::Block(BlockStatement {
                                     statements: vec![
                                         call_ackermann(
                                             213..222,
-                                            213..243,
+                                            213..236,
                                             *var_i(223..224),
                                             Expression::Binary(BinaryExpression {
                                                 operator: Operator::Sub,
@@ -558,7 +558,7 @@ fn acker() {
                                         ),
                                         call_ackermann(
                                             243..252,
-                                            243..271,
+                                            243..266,
                                             Expression::Binary(BinaryExpression {
                                                 operator: Operator::Sub,
                                                 lhs: var_i(253..254),
@@ -569,16 +569,16 @@ fn acker() {
                                             *var_k(263..264)
                                         )
                                     ],
-                                    range: 205..275,
+                                    range: 205..272,
                                 }))),
 
-                                range: 151..275,
+                                range: 151..272,
                             })],
-                            range: 145..277,
+                            range: 145..276,
                         }))),
-                        range: 107..277,
+                        range: 107..276,
                     })],
-                    range: 0..281,
+                    range: 45..278,
                 }),
                 GlobalDeclaration::Procedure(ProcedureDeclaration {
                     name: Some(Identifier::new("main", 286..290)),
@@ -586,25 +586,25 @@ fn acker() {
                     variable_declarations: vec![
                         VariableDeclaration {
                             name: i(301..302),
-                            type_expr: int_type.clone(),
-                            range: 297..311,
+                            type_expr: int_type(304..307),
+                            range: 297..308,
                         },
                         VariableDeclaration {
                             name: j(315..316),
-                            type_expr: int_type.clone(),
-                            range: 311..325,
+                            type_expr: int_type(318..321),
+                            range: 311..322,
                         },
                         VariableDeclaration {
                             name: k(329..330),
-                            type_expr: int_type.clone(),
-                            range: 325..340,
+                            type_expr: int_type(332..335),
+                            range: 325..336,
                         }
                     ],
                     statements: vec![
                         Statement::Assignment(Assignment {
                             variable: Variable::NamedVariable(Identifier::new("i", 340..341)),
                             expr: Some(*int_lit(0, 345..346).clone()),
-                            range: 340..350,
+                            range: 340..347,
                         }),
                         Statement::While(WhileStatement {
                             condition: Some(Expression::Binary(BinaryExpression {
@@ -621,7 +621,7 @@ fn acker() {
                                             371..372
                                         )),
                                         expr: Some(*int_lit(0, 376..377)),
-                                        range: 371..383,
+                                        range: 371..378,
                                     }),
                                     Statement::While(WhileStatement {
                                         condition: Some(Expression::Binary(BinaryExpression {
@@ -635,7 +635,7 @@ fn acker() {
                                                 statements: vec![
                                                     call_ackermann(
                                                         406..415,
-                                                        406..432,
+                                                        406..425,
                                                         *var_i(416..417),
                                                         *var_j(419..420),
                                                         *var_k(422..423)
@@ -643,32 +643,32 @@ fn acker() {
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new("printi", 432..438),
                                                         arguments: vec![*var_i(439..440)],
-                                                        range: 432..449,
+                                                        range: 432..442,
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new("printc", 449..455),
-                                                        arguments: vec![*int_lit(32, 456..458)],
-                                                        range: 449..468,
+                                                        arguments: vec![*int_lit(32, 456..459)],
+                                                        range: 449..461,
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new("printi", 468..474),
                                                         arguments: vec![*var_j(475..476)],
-                                                        range: 468..485,
+                                                        range: 468..478,
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new("printc", 485..491),
-                                                        arguments: vec![*int_lit(32, 492..494)],
-                                                        range: 485..504,
+                                                        arguments: vec![*int_lit(32, 492..495)],
+                                                        range: 485..497,
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new("printi", 504..510),
                                                         arguments: vec![*var_k(511..512)],
-                                                        range: 504..521,
+                                                        range: 504..514,
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new("printc", 521..527),
-                                                        arguments: vec![*int_lit(10, 528..531)],
-                                                        range: 521..541,
+                                                        arguments: vec![*int_lit(10, 528..532)],
+                                                        range: 521..534,
                                                     }),
                                                     Statement::Assignment(Assignment {
                                                         variable: Variable::NamedVariable(
@@ -682,13 +682,13 @@ fn acker() {
                                                                 range: 546..551,
                                                             }
                                                         )),
-                                                        range: 541..557,
+                                                        range: 541..552,
                                                     })
                                                 ],
-                                                range: 398..563,
+                                                range: 398..558,
                                             }
                                         ))),
-                                        range: 383..563,
+                                        range: 383..558,
                                     }),
                                     Statement::Assignment(Assignment {
                                         variable: Variable::NamedVariable(Identifier::new(
@@ -701,15 +701,15 @@ fn acker() {
                                             rhs: int_lit(1, 572..573),
                                             range: 568..573,
                                         })),
-                                        range: 563..577,
+                                        range: 563..574,
                                     })
                                 ],
-                                range: 365..581,
+                                range: 365..578,
                             }))),
-                            range: 350..581,
+                            range: 350..578,
                         })
                     ],
-                    range: 281..583,
+                    range: 281..582,
                 }),
             ],
         },

@@ -39,8 +39,6 @@ where
         let (input, _) = many0(comment)(input)?;
         let (input, _) = multispace0(input)?;
         let (input, result) = inner.parse(input)?;
-        let (input, _) = multispace0(input)?;
-        let (input, _) = many0(comment)(input)?;
         Ok((input, result))
     }
 }

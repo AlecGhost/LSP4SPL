@@ -61,7 +61,7 @@ fn arrays() {
     assert_eq!(
         errors,
         vec![SplError(
-            115..134,
+            115..125,
             SemanticErrorMessage::AssignmentHasDifferentTypes.to_string()
         ),]
     );
@@ -199,7 +199,7 @@ fn call_statements() {
     assert_eq!(
         errors,
         vec![SplError(
-            57..71,
+            57..62,
             SemanticErrorMessage::CallOfNoneProcedure("a".to_string()).to_string()
         )]
     );
@@ -214,7 +214,7 @@ fn call_statements() {
     assert_eq!(
         errors,
         vec![SplError(
-            35..49,
+            35..40,
             SemanticErrorMessage::UndefinedProcedure("a".to_string()).to_string()
         )]
     );
