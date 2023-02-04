@@ -3,15 +3,71 @@
 	"name": "SPL",
 	"patterns": [
 		{
+			"include": "#comment"
+		},
+		{
 			"include": "#keywords"
+		},
+		{
+			"include": "#separator"
+		},
+		{
+			"include": "#operator"
+		},
+		{
+			"include": "#numeric"
+		},
+		{
+			"include": "#character"
 		}
 	],
 	"repository": {
+		"comment": {
+			"patterns": [
+				{
+					"name": "comment.line.double-slash.spl",
+					"begin": "//",
+					"end": "\n"
+				}
+			]
+		},
 		"keywords": {
 			"patterns": [
 				{
 					"name": "keyword.control.spl",
-					"match": "\\b(if|else|while|proc|var|type)\\b"
+					"match": "\\b(if|else|while|proc|var|type|array|of)\\b"
+				}
+			]
+		},
+		"separator": {
+			"patterns": [
+				{
+					"name": "punctuation.separator.spl",
+					"match": "(:=|:|,|;|\\(|\\)|\\[|\\]|\\{|\\})"
+				}
+			]
+		},
+		"operator": {
+			"patterns": [
+				{
+					"name": "keyword.operator.spl",
+					"match": "(\\+|\\-|\\*|/|=|#|<|<=|>|>=)"
+				}
+			]
+		},
+		"numeric": {
+			"patterns": [
+				{
+					"name": "constant.numeric.spl",
+					"match": "(0x[A-Fa-f0-9]+|[0-9]+)"
+				}
+			]
+		},
+		"character": {
+			"patterns": [
+				{
+					"name": "constant.character.spl",
+					"match": "('(\\\\n|.)')"
 				}
 			]
 		}
