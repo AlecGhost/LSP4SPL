@@ -1,0 +1,20 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "SPL",
+	"patterns": [
+		{
+			"include": "#keywords"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.spl",
+					"match": "\\b(if|else|while|proc|var|type)\\b"
+				}
+			]
+		}
+	},
+	"scopeName": "source.spl"
+}

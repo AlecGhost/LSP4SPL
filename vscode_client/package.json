@@ -1,0 +1,50 @@
+{
+  "name": "lsp4spl",
+  "displayName": "LSP4SPL",
+  "description": "Language Server for SPL",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "activationEvents": [
+    "onLanguage:spl"
+  ],
+  "main": "./out/extension",
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "spl",
+        "aliases": [
+          "SPL",
+          "spl"
+        ],
+        "extensions": [
+          ".spl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "spl",
+        "scopeName": "source.spl",
+        "path": "./syntaxes/spl.tmLanguage.json"
+      }
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.0.2"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5",
+    "@types/node": "^18.11.18",
+    "@types/vscode": "^1.75.0"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "npx tsc -b"
+  }
+}
