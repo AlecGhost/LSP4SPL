@@ -1,14 +1,6 @@
-use crate::{
-    document::{self, DocumentRequest},
-    error::{ErrorCode, ResponseError},
-    features,
-    io::{self, LSCodec, Message, Response},
-};
-use color_eyre::eyre::Result;
-use futures::StreamExt;
-use lsp_types::{notification::*, request::*, *};
-use serde_json::Value;
-use tokio::sync::mpsc::{self, Sender};
+use crate::{document, io};
+use lsp_types::*;
+use tokio::sync::mpsc;
 use tokio_util::codec::FramedRead;
 
 #[derive(Clone, Debug, Default)]
@@ -53,7 +45,7 @@ impl LanguageServer {
 
         // decode messages, while stdin is not closed
         let stdin = tokio::io::stdin();
-        let mut framed_read = FramedRead::new(stdin, LSCodec::new());
+        let mut framed_read = FramedRead::new(stdin, io::LSCodec::new());
 
         // initialization phase
         if let Err(err) = phases::initialization(&mut self, &mut framed_read, iotx.clone()).await {
@@ -70,122 +62,9 @@ impl LanguageServer {
         )));
 
         // main phase
-        while let Some(frame) = framed_read.next().await {
-            match frame {
-                Ok(message) => match message {
-                    Message::Request(request) => {
-                        async fn match_request(
-                            request: io::Request,
-                            iotx: Sender<Message>,
-                            doctx: Sender<DocumentRequest>,
-                        ) -> Result<()> {
-                            let response: Response = match request.method.as_str() {
-                                Initialize::METHOD => {
-                                    let (_, response) = request.split();
-                                    response.into_error_response(ResponseError::new(
-                                        ErrorCode::InvalidRequest,
-                                        "Initialize method shall only be send once".to_string(),
-                                    ))
-                                }
-                                Shutdown::METHOD => {
-                                    // exit main phase
-                                    let (_, response) = request.split();
-                                    let response = response.into_result_response(Value::Null);
-                                    iotx.send(Message::Response(response)).await?;
-                                    return Ok(());
-                                }
-                                GotoDeclaration::METHOD => {
-                                    let (params, response) = request.split();
-                                    let params = serde_json::from_value(params)?;
-                                    let goto_declaration =
-                                        features::goto::declaration(doctx.clone(), params).await?;
-                                    response.into_result_response(goto_declaration)
-                                }
-                                GotoDefinition::METHOD => {
-                                    let (params, response) = request.split();
-                                    let params = serde_json::from_value(params)?;
-                                    let goto_definition =
-                                        features::goto::definition(doctx.clone(), params).await?;
-                                    response.into_result_response(goto_definition)
-                                }
-                                GotoImplementation::METHOD => {
-                                    let (params, response) = request.split();
-                                    let params = serde_json::from_value(params)?;
-                                    let goto_implementation =
-                                        features::goto::implementation(doctx.clone(), params).await?;
-                                    response.into_result_response(goto_implementation)
-                                }
-                                GotoTypeDefinition::METHOD => {
-                                    let (params, response) = request.split();
-                                    let params = serde_json::from_value(params)?;
-                                    let goto_type_definition =
-                                        features::goto::type_definition(doctx.clone(), params)
-                                            .await?;
-                                    response.into_result_response(goto_type_definition)
-                                }
-                                HoverRequest::METHOD => {
-                                    let (params, response) = request.split();
-                                    let params = serde_json::from_value(params)?;
-                                    let hover = features::hover(doctx.clone(), params).await?;
-                                    response.into_result_response(hover)
-                                }
-                                unknown_method => {
-                                    let method_name = unknown_method.to_string();
-                                    let (_, response) = request.split();
-                                    response.into_error_response(ResponseError::new(
-                                        ErrorCode::MethodNotFound,
-                                        format!("Unknown method {}", method_name),
-                                    ))
-                                }
-                            };
-                            iotx.send(Message::Response(response)).await?;
-                            Ok(())
-                        }
-
-                        if let Err(err) = match_request(request, iotx.clone(), doctx.clone()).await
-                        {
-                            log::error!("Error occured during request handling: {:#?}", err);
-                            panic!("Error occured during request handling: {:#?}", err);
-                        }
-                    }
-                    Message::Notification(notification) => {
-                        async fn match_notification(
-                            notification: io::Notification,
-                            doctx: Sender<DocumentRequest>,
-                        ) -> Result<()> {
-                            match notification.method.as_str() {
-                                DidOpenTextDocument::METHOD => {
-                                    let params = serde_json::from_value(notification.params)?;
-                                    document::open(doctx.clone(), params).await?;
-                                }
-                                DidChangeTextDocument::METHOD => {
-                                    let params = serde_json::from_value(notification.params)?;
-                                    document::change(doctx.clone(), params).await?;
-                                }
-                                DidCloseTextDocument::METHOD => {
-                                    let params = serde_json::from_value(notification.params)?;
-                                    document::close(doctx.clone(), params).await?;
-                                }
-                                Exit::METHOD => std::process::exit(1), // ungraceful exit
-                                _ => { /* drop all other notifications */ }
-                            };
-                            Ok(())
-                        }
-
-                        if let Err(err) = match_notification(notification, doctx.clone()).await {
-                            log::warn!("Error occured during notification handling: {:#?}", err);
-                        }
-                    }
-                    Message::Response(response) => {
-                        log::error!("Cannot handle responses: {:?}", response);
-                        panic!("Cannot handle responses: {:?}", response);
-                    }
-                },
-                Err(err) => {
-                    log::error!("Recieved frame with error: {:?}", err);
-                    panic!("Recieved frame with error: {:?}", err);
-                }
-            };
+        if let Err(err) = phases::main(&mut framed_read, iotx.clone(), doctx.clone()).await {
+            log::error!("Unexpected error occured during main phase: {:#?}", err);
+            panic!("Unexpected error occured during main phase: {:#?}", err);
         }
 
         // shutdown phase
@@ -195,7 +74,7 @@ impl LanguageServer {
         }
         drop(doctx);
         for handle in handles {
-            handle.await.unwrap()
+            handle.await.expect("Cannot await handle");
         }
         // tokio::join!(responder_handle, document_broker_handle);
     }
@@ -204,12 +83,15 @@ impl LanguageServer {
 mod phases {
     use super::LanguageServer;
     use crate::{
+        document::{self, DocumentRequest},
         error::{ErrorCode, ResponseError},
+        features,
         io::{LSCodec, Message, Response},
     };
-    use color_eyre::eyre::Result;
+    use color_eyre::eyre::{eyre, Result};
     use futures::StreamExt;
     use lsp_types::{notification::*, request::*};
+    use serde_json::Value;
     use tokio::{io::Stdin, sync::mpsc::Sender};
     use tokio_util::codec::FramedRead;
 
@@ -269,6 +151,107 @@ mod phases {
                 Message::Response(response) => {
                     log::error!("Cannot handle responses: {:?}", response);
                     panic!("Cannot handle responses: {:?}", response);
+                }
+            };
+        }
+        Ok(())
+    }
+
+    pub(super) async fn main(
+        framed_read: &mut FramedRead<Stdin, LSCodec>,
+        iotx: Sender<Message>,
+        doctx: Sender<DocumentRequest>,
+    ) -> Result<()> {
+        while let Some(frame) = framed_read.next().await {
+            match frame {
+                Ok(message) => match message {
+                    Message::Request(request) => {
+                        let response: Response = match request.method.as_str() {
+                            Initialize::METHOD => {
+                                let (_, response) = request.split();
+                                response.into_error_response(ResponseError::new(
+                                    ErrorCode::InvalidRequest,
+                                    "Initialize method shall only be send once".to_string(),
+                                ))
+                            }
+                            Shutdown::METHOD => {
+                                // exit main phase
+                                let (_, response) = request.split();
+                                let response = response.into_result_response(Value::Null);
+                                iotx.send(Message::Response(response)).await?;
+                                return Ok(());
+                            }
+                            GotoDeclaration::METHOD => {
+                                let (params, response) = request.split();
+                                let params = serde_json::from_value(params)?;
+                                let goto_declaration =
+                                    features::goto::declaration(doctx.clone(), params).await?;
+                                response.into_result_response(goto_declaration)
+                            }
+                            GotoDefinition::METHOD => {
+                                let (params, response) = request.split();
+                                let params = serde_json::from_value(params)?;
+                                let goto_definition =
+                                    features::goto::definition(doctx.clone(), params).await?;
+                                response.into_result_response(goto_definition)
+                            }
+                            GotoImplementation::METHOD => {
+                                let (params, response) = request.split();
+                                let params = serde_json::from_value(params)?;
+                                let goto_implementation =
+                                    features::goto::implementation(doctx.clone(), params).await?;
+                                response.into_result_response(goto_implementation)
+                            }
+                            GotoTypeDefinition::METHOD => {
+                                let (params, response) = request.split();
+                                let params = serde_json::from_value(params)?;
+                                let goto_type_definition =
+                                    features::goto::type_definition(doctx.clone(), params).await?;
+                                response.into_result_response(goto_type_definition)
+                            }
+                            HoverRequest::METHOD => {
+                                let (params, response) = request.split();
+                                let params = serde_json::from_value(params)?;
+                                let hover = features::hover(doctx.clone(), params).await?;
+                                response.into_result_response(hover)
+                            }
+                            unknown_method => {
+                                let method_name = unknown_method.to_string();
+                                let (_, response) = request.split();
+                                response.into_error_response(ResponseError::new(
+                                    ErrorCode::MethodNotFound,
+                                    format!("Unknown method {}", method_name),
+                                ))
+                            }
+                        };
+                        iotx.send(Message::Response(response)).await?;
+                    }
+                    Message::Notification(notification) => {
+                        match notification.method.as_str() {
+                            DidOpenTextDocument::METHOD => {
+                                let params = serde_json::from_value(notification.params)?;
+                                document::open(doctx.clone(), params).await?;
+                            }
+                            DidChangeTextDocument::METHOD => {
+                                let params = serde_json::from_value(notification.params)?;
+                                document::change(doctx.clone(), params).await?;
+                            }
+                            DidCloseTextDocument::METHOD => {
+                                let params = serde_json::from_value(notification.params)?;
+                                document::close(doctx.clone(), params).await?;
+                            }
+                            Exit::METHOD => std::process::exit(1), // ungraceful exit
+                            _ => { /* drop all other notifications */ }
+                        };
+                    }
+                    Message::Response(response) => {
+                        log::error!("Cannot handle responses: {:?}", response);
+                        return Err(eyre!("Cannot handle responses: {:?}", response));
+                    }
+                },
+                Err(err) => {
+                    log::error!("Recieved frame with error: {:?}", err);
+                    return Err(err.into());
                 }
             };
         }
