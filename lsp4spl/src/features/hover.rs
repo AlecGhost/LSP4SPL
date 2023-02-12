@@ -1,4 +1,3 @@
-use super::DocumentPrelude;
 use crate::document::{convert_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind, Range};
@@ -20,36 +19,34 @@ pub(crate) async fn hover(
     params: HoverParams,
 ) -> Result<Option<Hover>> {
     let doc_params = params.text_document_position_params;
-    if let Some(DocumentPrelude {
-        doc_info,
-        ident,
-        entry,
-    }) = super::document_prelude(doc_params, doctx).await?
-    {
-        match &entry {
-            Entry::Type(_) => {
-                if let Some(ranged_entry) = doc_info.table.lookup(&ident) {
-                    return Ok(Some(create_hover(
-                        &ranged_entry.entry,
-                        convert_range(&ident.range, &doc_info.text),
-                    )));
+    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
+        if let Some((ident, entry)) = super::ident_with_context(&cursor) {
+            let doc_info = cursor.doc_info;
+            match &entry {
+                Entry::Type(_) => {
+                    if let Some(ranged_entry) = doc_info.table.lookup(&ident) {
+                        return Ok(Some(create_hover(
+                            &ranged_entry.entry,
+                            convert_range(&ident.range, &doc_info.text),
+                        )));
+                    }
                 }
-            }
-            Entry::Procedure(p) => {
-                let lookup_table = LookupTable {
-                    global_table: &doc_info.table,
-                    local_table: &p.local_table,
-                };
-                if let Some(ranged_entry) = lookup_table.lookup(&ident) {
-                    return Ok(Some(create_hover(
-                        &ranged_entry.entry,
-                        convert_range(&ident.range, &doc_info.text),
-                    )));
+                Entry::Procedure(p) => {
+                    let lookup_table = LookupTable {
+                        global_table: &doc_info.table,
+                        local_table: &p.local_table,
+                    };
+                    if let Some(ranged_entry) = lookup_table.lookup(&ident) {
+                        return Ok(Some(create_hover(
+                            &ranged_entry.entry,
+                            convert_range(&ident.range, &doc_info.text),
+                        )));
+                    }
                 }
-            }
-            Entry::Variable(v) => {
-                log::error!("Found illegal variable in global table {:#?}", v);
-                panic!("Found illegal variable in global table {:#?}", v);
+                Entry::Variable(v) => {
+                    log::error!("Found illegal variable in global table {:#?}", v);
+                    panic!("Found illegal variable in global table {:#?}", v);
+                }
             }
         }
     }

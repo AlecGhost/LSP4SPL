@@ -9,6 +9,11 @@ use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::document::{self, DocumentInfo, DocumentRequest};
 
+struct DocumentCursor {
+    doc_info: DocumentInfo,
+    index: usize,
+}
+
 async fn get_doc_info(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option<DocumentInfo>> {
     let (tx, rx) = oneshot::channel();
     doctx.send(DocumentRequest::GetInfo(uri, tx)).await?;
@@ -16,37 +21,32 @@ async fn get_doc_info(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option
     Ok(doc_info)
 }
 
-struct DocumentPrelude {
-    doc_info: DocumentInfo,
-    ident: Identifier,
-    entry: Entry,
-}
-
-async fn document_prelude(
+async fn doc_cursor(
     doc_params: TextDocumentPositionParams,
     doctx: Sender<DocumentRequest>,
-) -> Result<Option<DocumentPrelude>> {
+) -> Result<Option<DocumentCursor>> {
     let pos = doc_params.position;
     let uri = doc_params.text_document.uri;
     if let Some(doc_info) = get_doc_info(uri, doctx).await? {
         if let Some(index) = document::get_index(pos, &doc_info.text) {
-            if let Some(ident) = doc_info.ast.ident_at(index) {
-                if let Some(ranged_entry) = doc_info
-                    .table
-                    .entries
-                    .values()
-                    .find(|entry| entry.range.contains(&index))
-                {
-                    let ident = ident.clone();
-                    let entry = ranged_entry.entry.clone();
-                    return Ok(Some(DocumentPrelude {
-                        doc_info,
-                        ident,
-                        entry,
-                    }));
-                }
-            }
+            return Ok(Some(DocumentCursor { doc_info, index }));
         }
     }
     Ok(None)
+}
+
+fn ident_with_context(cursor: &DocumentCursor) -> Option<(Identifier, Entry)> {
+    if let Some(ident) = cursor.doc_info.ast.ident_at(cursor.index) {
+        if let Some(ranged_entry) = cursor
+            .doc_info
+            .table
+            .entries
+            .values()
+            .find(|entry| entry.range.contains(&cursor.index))
+        {
+            let entry = ranged_entry.entry.clone();
+            return Some((ident.clone(), entry));
+        }
+    }
+    None
 }
