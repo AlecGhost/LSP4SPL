@@ -138,6 +138,7 @@ impl ToRange for Expression {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeDeclaration {
+    pub type_kw: Range<usize>,
     pub name: Option<Identifier>,
     pub type_expr: Option<TypeExpression>,
     pub range: Range<usize>,
@@ -147,6 +148,8 @@ pub struct TypeDeclaration {
 pub enum TypeExpression {
     NamedType(Identifier),
     ArrayType {
+        array_kw: Range<usize>,
+        of_kw: Option<Range<usize>>,
         size: Option<u32>,
         base_type: Option<Box<TypeExpression>>,
         range: Range<usize>,
@@ -159,6 +162,8 @@ impl ToRange for TypeExpression {
         match self {
             NamedType(ident) => ident.range.clone(),
             ArrayType {
+                array_kw: _,
+                of_kw: _,
                 size: _,
                 base_type: _,
                 range,
@@ -169,6 +174,7 @@ impl ToRange for TypeExpression {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableDeclaration {
+    pub var_kw: Range<usize>,
     pub name: Option<Identifier>,
     pub type_expr: Option<TypeExpression>,
     pub range: Range<usize>,
@@ -176,7 +182,7 @@ pub struct VariableDeclaration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParameterDeclaration {
-    pub is_ref: bool,
+    pub ref_kw: Option<Range<usize>>,
     pub name: Option<Identifier>,
     pub type_expr: Option<TypeExpression>,
     pub range: Range<usize>,
@@ -198,14 +204,17 @@ pub struct Assignment {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IfStatement {
+    pub if_kw: Range<usize>,
     pub condition: Option<Expression>,
     pub if_branch: Option<Box<Statement>>,
+    pub else_kw: Option<Range<usize>>,
     pub else_branch: Option<Box<Statement>>,
     pub range: Range<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WhileStatement {
+    pub while_kw: Range<usize>,
     pub condition: Option<Expression>,
     pub statement: Option<Box<Statement>>,
     pub range: Range<usize>,
@@ -245,6 +254,7 @@ impl ToRange for Statement {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcedureDeclaration {
+    pub proc_kw: Range<usize>,
     pub name: Option<Identifier>,
     pub parameters: Vec<ParameterDeclaration>,
     pub variable_declarations: Vec<VariableDeclaration>,
@@ -291,6 +301,8 @@ impl Program {
                     }
                 }
                 TypeExpression::ArrayType {
+                    array_kw: _,
+                    of_kw: _,
                     size: _,
                     base_type,
                     range,

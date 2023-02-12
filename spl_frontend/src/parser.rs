@@ -11,7 +11,7 @@ use nom::{
     character::complete::{alpha1, anychar, digit1, hex_digit1},
     combinator::{all_consuming, eof, map, opt, peek},
     multi::many0,
-    sequence::{pair, preceded, terminated, tuple},
+    sequence::{pair, terminated, tuple},
 };
 use utility::{alpha_numeric0, expect, ignore_until, ignore_until1, keywords, symbols, ws};
 
@@ -273,8 +273,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
     fn parse(input: Span<B>) -> IResult<Self, B> {
         fn parse_array_type<B: DiagnosticsBroker>(input: Span<B>) -> IResult<TypeExpression, B> {
-            let (input, array) = keywords::array(input)?;
-            let start = array.location_offset();
+            let (input, array_kw) = keywords::array(input)?;
+            let start = array_kw.location_offset();
             let (input, _) = expect(
                 symbols::lbracket,
                 ParseErrorMessage::ExpectedToken("[".to_string()),
@@ -285,7 +285,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
             )(input)?;
             let (input, _) =
                 expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']'))(input)?;
-            let (input, _) = expect(
+            let (input, of_kw) = expect(
                 keywords::of,
                 ParseErrorMessage::ExpectedToken("of".to_string()),
             )(input)?;
@@ -297,6 +297,8 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
             Ok((
                 input,
                 TypeExpression::ArrayType {
+                    array_kw: array_kw.to_range(),
+                    of_kw: of_kw.map(|span| span.to_range()),
                     size: size.flatten(),
                     base_type: type_expr.map(Box::new),
                     range: start..end,
@@ -310,8 +312,8 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
 
 impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        let (input, r#type) = keywords::r#type(input)?;
-        let start = r#type.location_offset();
+        let (input, type_kw) = keywords::r#type(input)?;
+        let start = type_kw.location_offset();
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -329,6 +331,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
         Ok((
             input,
             Self {
+                type_kw: type_kw.to_range(),
                 name,
                 type_expr,
                 range: start..end,
@@ -339,8 +342,8 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
 
 impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        let (input, var) = keywords::var(input)?;
-        let start = var.location_offset();
+        let (input, var_kw) = keywords::var(input)?;
+        let start = var_kw.location_offset();
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -358,6 +361,7 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
         Ok((
             input,
             Self {
+                var_kw: var_kw.to_range(),
                 name,
                 type_expr,
                 range: start..end,
@@ -368,7 +372,7 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
 
 impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        let (input, (start, is_ref, name)) = alt((
+        let (input, (start, ref_kw, name)) = alt((
             map(
                 pair(
                     keywords::r#ref,
@@ -377,10 +381,10 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
                         ParseErrorMessage::ExpectedToken("identifier".to_string()),
                     ),
                 ),
-                |pair| (pair.0.location_offset(), true, pair.1),
+                |pair| (pair.0.location_offset(), Some(pair.0.to_range()), pair.1),
             ),
             map(Identifier::parse, |ident| {
-                (ident.range.start, false, Some(ident))
+                (ident.range.start, None, Some(ident))
             }),
         ))(input)?;
         let (input, _) = expect(
@@ -395,7 +399,7 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
         Ok((
             input,
             Self {
-                is_ref,
+                ref_kw,
                 name,
                 type_expr,
                 range: start..end,
@@ -457,8 +461,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
 
 impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        let (input, r#if) = keywords::r#if(input)?;
-        let start = r#if.location_offset();
+        let (input, if_kw) = keywords::r#if(input)?;
+        let start = if_kw.location_offset();
         let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
@@ -469,20 +473,28 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
             Statement::parse,
             ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
-        let (input, else_branch) = opt(preceded(
-            keywords::r#else,
-            expect(
-                Statement::parse,
-                ParseErrorMessage::ExpectedToken("statement".to_string()),
-            ),
-        ))(input)?;
+        let (input, (else_kw, else_branch)) = map(
+            opt(pair(
+                keywords::r#else,
+                expect(
+                    Statement::parse,
+                    ParseErrorMessage::ExpectedToken("statement".to_string()),
+                ),
+            )),
+            |opt| match opt {
+                Some(pair) => (Some(pair.0.to_range()), pair.1),
+                None => (None, None),
+            },
+        )(input)?;
         let end = input.location_offset();
         Ok((
             input,
             Self {
+                if_kw: if_kw.to_range(),
                 condition,
                 if_branch: if_branch.map(Box::new),
-                else_branch: else_branch.flatten().map(Box::new),
+                else_kw,
+                else_branch: else_branch.map(Box::new),
                 range: start..end,
             },
         ))
@@ -491,8 +503,8 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
 
 impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        let (input, r#while) = keywords::r#while(input)?;
-        let start = r#while.location_offset();
+        let (input, while_kw) = keywords::r#while(input)?;
+        let start = while_kw.location_offset();
         let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
@@ -507,6 +519,7 @@ impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
         Ok((
             input,
             Self {
+                while_kw: while_kw.to_range(),
                 condition,
                 statement: stmt.map(Box::new),
                 range: start..end,
@@ -579,8 +592,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
 
 impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
     fn parse(input: Span<B>) -> IResult<Self, B> {
-        let (input, proc) = keywords::proc(input)?;
-        let start = proc.location_offset();
+        let (input, proc_kw) = keywords::proc(input)?;
+        let start = proc_kw.location_offset();
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -608,6 +621,7 @@ impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
         Ok((
             input,
             Self {
+                proc_kw: proc_kw.to_range(),
                 name,
                 parameters,
                 variable_declarations,

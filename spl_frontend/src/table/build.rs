@@ -120,12 +120,12 @@ fn build_parameter<B: DiagnosticsBroker>(
 ) -> VariableEntry {
     let param_entry = VariableEntry {
         name: param.name.clone(),
-        is_ref: param.is_ref,
+        is_ref: param.ref_kw.is_some(),
         data_type: get_data_type(&param.type_expr, &param.name, global_table, broker.clone()),
     };
     if let Some(name) = &param.name {
         if let Some(data_type) = &param_entry.data_type {
-            if !data_type.is_primitive() && !param.is_ref {
+            if !data_type.is_primitive() && !param_entry.is_ref {
                 broker.report_error(name.to_error(BuildErrorMessage::MustBeAReferenceParameter));
             }
         }
@@ -182,6 +182,8 @@ fn get_data_type<T: Table, B: DiagnosticsBroker>(
         use TypeExpression::*;
         match type_expr {
             ArrayType {
+                array_kw: _,
+                of_kw: _,
                 size,
                 base_type,
                 range: _,

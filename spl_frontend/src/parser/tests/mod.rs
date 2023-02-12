@@ -244,6 +244,7 @@ fn type_declarations() {
     assert_eq!(
         all_consuming(TD::parse)(dec.to_span()).unwrap().1,
         TD {
+            type_kw: 0..4,
             name: Some(Identifier::new("a", 5..6)),
             type_expr: Some(TE::NamedType(Identifier::new("int", 9..12))),
             range: 0..13,
@@ -256,10 +257,15 @@ fn type_declarations() {
     assert_eq!(
         all_consuming(TD::parse)(dec.to_span()).unwrap().1,
         TD {
+            type_kw: 0..4,
             name: Some(Identifier::new("a", 5..6)),
             type_expr: Some(TE::ArrayType {
+                array_kw: 9..14,
+                of_kw: Some(19..21),
                 size: Some(2),
                 base_type: Some(Box::new(TE::ArrayType {
+                    array_kw: 22..27,
+                    of_kw: Some(32..34),
                     size: Some(3),
                     base_type: Some(Box::new(TE::NamedType(Identifier::new("int", 35..38)))),
                     range: 22..38,
@@ -277,10 +283,15 @@ fn type_declarations() {
     assert_eq!(
         td,
         TD {
+            type_kw: 0..4,
             name: None,
             type_expr: Some(TE::ArrayType {
+                array_kw: 7..12,
+                of_kw: Some(16..18),
                 size: None,
                 base_type: Some(Box::new(TE::ArrayType {
+                    array_kw: 19..24,
+                    of_kw: Some(28..30),
                     size: None,
                     base_type: None,
                     range: 19..30,
@@ -408,6 +419,7 @@ fn if_statements() {
     assert_eq!(
         is,
         IfStatement {
+            if_kw: 0..2,
             condition: Some(Expression::Binary(BinaryExpression {
                 operator: Operator::Equ,
                 lhs: int_lit(1, 4..5),
@@ -418,6 +430,7 @@ fn if_statements() {
                 statements: Vec::new(),
                 range: 11..13,
             }))),
+            else_kw: None,
             else_branch: None,
             range: 0..13,
         },
@@ -477,33 +490,36 @@ fn acker() {
         Program {
             global_declarations: vec![
                 GlobalDeclaration::Procedure(ProcedureDeclaration {
+                    proc_kw: 45..49,
                     name: Some(Identifier::new("ackermann", 50..59)),
                     parameters: vec![
                         ParameterDeclaration {
-                            is_ref: false,
+                            ref_kw: None,
                             name: i(60..61),
                             type_expr: int_type(63..66),
                             range: 60..66,
                         },
                         ParameterDeclaration {
-                            is_ref: false,
+                            ref_kw: None,
                             name: j(68..69),
                             type_expr: int_type(71..74),
                             range: 68..74,
                         },
                         ParameterDeclaration {
-                            is_ref: true,
+                            ref_kw: Some(76..79),
                             name: k(80..81),
                             type_expr: int_type(83..86),
                             range: 76..86,
                         },
                     ],
                     variable_declarations: vec![VariableDeclaration {
+                        var_kw: 92..95,
                         name: a(96..97),
                         type_expr: int_type(99..102),
                         range: 92..103,
                     }],
                     statements: vec![Statement::If(IfStatement {
+                        if_kw: 107..109,
                         condition: Some(Expression::Binary(BinaryExpression {
                             operator: Operator::Equ,
                             lhs: var_i(111..112),
@@ -523,8 +539,10 @@ fn acker() {
                             })],
                             range: 118..139,
                         }))),
+                        else_kw: Some(140..144),
                         else_branch: Some(Box::new(Statement::Block(BlockStatement {
                             statements: vec![Statement::If(IfStatement {
+                                if_kw: 151..153,
                                 condition: Some(Expression::Binary(BinaryExpression {
                                     operator: Operator::Equ,
                                     lhs: var_j(155..156),
@@ -546,6 +564,7 @@ fn acker() {
                                     )],
                                     range: 162..199,
                                 }))),
+                                else_kw: Some(200..204),
                                 else_branch: Some(Box::new(Statement::Block(BlockStatement {
                                     statements: vec![
                                         call_ackermann(
@@ -585,20 +604,24 @@ fn acker() {
                     range: 45..278,
                 }),
                 GlobalDeclaration::Procedure(ProcedureDeclaration {
+                    proc_kw: 281..285,
                     name: Some(Identifier::new("main", 286..290)),
                     parameters: Vec::new(),
                     variable_declarations: vec![
                         VariableDeclaration {
+                            var_kw: 297..300,
                             name: i(301..302),
                             type_expr: int_type(304..307),
                             range: 297..308,
                         },
                         VariableDeclaration {
+                            var_kw: 311..314,
                             name: j(315..316),
                             type_expr: int_type(318..321),
                             range: 311..322,
                         },
                         VariableDeclaration {
+                            var_kw: 325..328,
                             name: k(329..330),
                             type_expr: int_type(332..335),
                             range: 325..336,
@@ -611,6 +634,7 @@ fn acker() {
                             range: 340..347,
                         }),
                         Statement::While(WhileStatement {
+                            while_kw: 350..355,
                             condition: Some(Expression::Binary(BinaryExpression {
                                 operator: Operator::Lse,
                                 lhs: var_i(357..358),
@@ -628,6 +652,7 @@ fn acker() {
                                         range: 371..378,
                                     }),
                                     Statement::While(WhileStatement {
+                                        while_kw: 383..388,
                                         condition: Some(Expression::Binary(BinaryExpression {
                                             operator: Operator::Lse,
                                             lhs: var_j(390..391),
