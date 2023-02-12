@@ -8,11 +8,11 @@ use nom::{
     {InputTake, Offset},
 };
 
-pub(super) trait MutParser<'a, O, B> {
+pub(super) trait InnerParser<'a, O, B> {
     fn parse(&mut self, input: Span<'a, B>) -> IResult<'a, O, B>;
 }
 
-impl<'a, O, B, F> MutParser<'a, O, B> for F
+impl<'a, O, B, F> InnerParser<'a, O, B> for F
 where
     F: FnMut(Span<'a, B>) -> IResult<'a, O, B>,
 {
@@ -29,11 +29,12 @@ pub(super) fn comment<B: Clone>(input: Span<B>) -> IResult<Span<B>, B> {
 }
 
 // Source: https://github.com/Geal/nom/blob/main/doc/nom_recipes.md#whitespace
-/// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
-/// trailing whitespace, returning the output of `inner`.
+/// A combinator that takes a parser `inner`
+/// and produces a parser that consumes leading whitespace and comments,
+/// returning the output of `inner`.
 pub(super) fn ws<'a, O, B: Clone, F>(mut inner: F) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
 where
-    F: MutParser<'a, O, B>,
+    F: InnerParser<'a, O, B>,
 {
     move |input: Span<B>| {
         let (input, _) = many0(comment)(input)?;
@@ -43,6 +44,7 @@ where
     }
 }
 
+/// Parser for alphanumeric characters or underscores
 pub(super) fn alpha_numeric0<B: Clone>(input: Span<B>) -> IResult<Span<B>, B> {
     take_while(is_alpha_numeric)(input)
 }
@@ -51,16 +53,18 @@ pub(super) fn is_alpha_numeric(c: char) -> bool {
     is_alphanumeric(c as u8) || c == '_'
 }
 
+/// Consumes characters until the given pattern matches.
+/// Returns all consumed characters as a `Span`.
 pub(super) fn ignore_until<'a, B: Clone, F>(
-    mut f: F,
+    mut pattern: F,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
 where
-    F: MutParser<'a, Span<'a, B>, B>,
+    F: InnerParser<'a, Span<'a, B>, B>,
 {
     move |mut i: Span<B>| {
         let original_input = i.clone();
         loop {
-            match f.parse(i.clone()) {
+            match pattern.parse(i.clone()) {
                 Ok((i1, _)) => {
                     // source: https://stackoverflow.com/a/73004814
                     // compares remaining input with original input and returns the difference
@@ -78,14 +82,15 @@ where
     }
 }
 
+/// Like `ignore_until`, but fails if the pattern does not match at least once.
 pub(super) fn ignore_until1<'a, B: Clone, F>(
-    mut f: F,
+    mut pattern: F,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Span<'a, B>, B>
 where
-    F: MutParser<'a, Span<'a, B>, B>,
+    F: InnerParser<'a, Span<'a, B>, B>,
 {
     move |mut i: Span<B>| {
-        if let Ok((i1, _)) = f.parse(i.clone()) {
+        if let Ok((i1, _)) = pattern.parse(i.clone()) {
             return Err(nom::Err::Error(nom::error::ParseError::from_error_kind(
                 i1,
                 ErrorKind::ManyTill,
@@ -93,7 +98,7 @@ where
         };
         let original_input = i.clone();
         loop {
-            match f.parse(i.clone()) {
+            match pattern.parse(i.clone()) {
                 Ok((i1, _)) => {
                     // source: https://stackoverflow.com/a/73004814
                     // compares remaining input with original input and returns the difference
@@ -111,12 +116,15 @@ where
     }
 }
 
+/// Tries to parse the input with the given parser.
+/// If parsing succeeds, the result of inner is returned.
+/// If parsing fails, an error with the given message is reported.
 pub(super) fn expect<'a, O, B: DiagnosticsBroker, F>(
     mut parser: F,
     error_msg: ParseErrorMessage,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Option<O>, B>
 where
-    F: MutParser<'a, O, B>,
+    F: InnerParser<'a, O, B>,
 {
     move |input: Span<B>| match parser.parse(input.clone()) {
         Ok((input, out)) => Ok((input, Some(out))),
@@ -130,12 +138,15 @@ where
     }
 }
 
+/// Tries to parse the input with the given parser.
+/// If parsing succeeds and the output matches the given verification function,
+/// the result is returned.
 pub(super) fn verify<'a, O, B: DiagnosticsBroker, F, G>(
     mut parser: F,
     verification: G,
 ) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
 where
-    F: MutParser<'a, O, B>,
+    F: InnerParser<'a, O, B>,
     G: Fn(&O) -> bool,
 {
     move |input: Span<B>| match parser.parse(input.clone()) {

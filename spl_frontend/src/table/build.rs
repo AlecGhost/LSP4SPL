@@ -4,6 +4,8 @@ use crate::{ast::*, error::SplError};
 #[cfg(test)]
 mod tests;
 
+/// Builds a SymbolTable for the given program.
+/// Errors are reported by the specified broker.
 pub fn build<B>(program: &Program, broker: B) -> SymbolTable
 where
     B: Clone + std::fmt::Debug + DiagnosticsBroker,

@@ -13,15 +13,13 @@ use nom::{
     multi::many0,
     sequence::{pair, preceded, terminated, tuple},
 };
-use utility::{
-    alpha_numeric0, expect, ignore_until, ignore_until1, keywords, symbols, ws,
-};
+use utility::{alpha_numeric0, expect, ignore_until, ignore_until1, keywords, symbols, ws};
 
 #[cfg(test)]
 mod tests;
 mod utility;
 
-pub type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
+pub(crate) type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
 
 impl<B> ToRange for Span<'_, B> {
     fn to_range(&self) -> Range<usize> {
@@ -33,12 +31,31 @@ impl<B> ToRange for Span<'_, B> {
 
 type IResult<'a, T, B> = nom::IResult<Span<'a, B>, T>;
 
-pub fn parse<B: DiagnosticsBroker>(src: &str, broker: B) -> Program {
-    let input = Span::new_extra(src, broker);
+/// Parses the given source code and returns an AST.
+/// Errors are reported by the specified broker.
+/// Panics if parsing fails.
+///
+/// # Examples
+///
+/// ```
+/// use spl_frontend::parser::parse;
+/// use spl_frontend::ast::Program;
+/// # use spl_frontend::LocalBroker;
+///
+/// # let broker = LocalBroker::default();
+/// let program = parse("", broker);
+///
+/// assert_eq!(program, Program {
+///     global_declarations: Vec::new()
+/// });
+/// ```
+pub fn parse<B: DiagnosticsBroker>(input: &str, broker: B) -> Program {
+    let input = Span::new_extra(input, broker);
     let (_, program) = all_consuming(Program::parse)(input).expect("Parser cannot fail");
     program
 }
 
+/// Implemented by all AST nodes.
 trait Parser<B>: Sized {
     fn parse(input: Span<B>) -> IResult<Self, B>;
 }
@@ -287,10 +304,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
             ))
         }
 
-        alt((
-            parse_array_type,
-            map(Identifier::parse, Self::NamedType),
-        ))(input)
+        alt((parse_array_type, map(Identifier::parse, Self::NamedType)))(input)
     }
 }
 
