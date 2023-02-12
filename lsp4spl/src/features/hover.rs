@@ -4,6 +4,8 @@ use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind, Ra
 use spl_frontend::table::{Entry, LookupTable, Table};
 use tokio::sync::mpsc::Sender;
 
+use super::DocumentCursor;
+
 fn create_hover(entry: &Entry, range: Range) -> Hover {
     Hover {
         contents: HoverContents::Markup(MarkupContent {
@@ -19,10 +21,14 @@ pub(crate) async fn hover(
     params: HoverParams,
 ) -> Result<Option<Hover>> {
     let doc_params = params.text_document_position_params;
-    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
-        if let Some((ident, entry)) = super::ident_with_context(&cursor) {
-            let doc_info = cursor.doc_info;
-            match &entry {
+    if let Some(DocumentCursor {
+        doc_info,
+        index,
+        context,
+    }) = super::doc_cursor(doc_params, doctx).await?
+    {
+        if let Some(ident) = doc_info.ast.ident_at(index) {
+            match &context.entry {
                 Entry::Type(_) => {
                     if let Some(ranged_entry) = doc_info.table.lookup(&ident) {
                         return Ok(Some(create_hover(

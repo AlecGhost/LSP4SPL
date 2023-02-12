@@ -7,16 +7,22 @@ use lsp_types::{
 use spl_frontend::table::{DataType, Entry, LookupTable, Table};
 use tokio::sync::mpsc::Sender;
 
+use super::DocumentCursor;
+
 pub(crate) async fn declaration(
     doctx: Sender<DocumentRequest>,
     params: GotoDeclarationParams,
 ) -> Result<Option<Location>> {
     let doc_params = params.text_document_position_params;
     let uri = doc_params.text_document.uri.clone();
-    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
-        if let Some((ident, entry)) = super::ident_with_context(&cursor) {
-            let doc_info = cursor.doc_info;
-            match &entry {
+    if let Some(DocumentCursor {
+        doc_info,
+        index,
+        context,
+    }) = super::doc_cursor(doc_params, doctx).await?
+    {
+        if let Some(ident) = doc_info.ast.ident_at(index) {
+            match &context.entry {
                 Entry::Type(_) => {
                     if let Some((key, _)) = doc_info.table.entry(&ident) {
                         return Ok(Some(Location {
@@ -62,10 +68,14 @@ pub(crate) async fn type_definition(
 ) -> Result<Option<Location>> {
     let doc_params = params.text_document_position_params;
     let uri = doc_params.text_document.uri.clone();
-    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
-        if let Some((ident, entry)) = super::ident_with_context(&cursor) {
-            let doc_info = cursor.doc_info;
-            match &entry {
+    if let Some(DocumentCursor {
+        doc_info,
+        index,
+        context,
+    }) = super::doc_cursor(doc_params, doctx).await?
+    {
+        if let Some(ident) = doc_info.ast.ident_at(index) {
+            match &context.entry {
                 Entry::Type(_) => {
                     if let Some((key, ranged_entry)) = doc_info.table.entry(&ident) {
                         match &ranged_entry.entry {
@@ -131,10 +141,14 @@ pub(crate) async fn implementation(
 ) -> Result<Option<Location>> {
     let doc_params = params.text_document_position_params;
     let uri = doc_params.text_document.uri.clone();
-    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
-        if let Some((ident, entry)) = super::ident_with_context(&cursor) {
-            let doc_info = cursor.doc_info;
-            match &entry {
+    if let Some(DocumentCursor {
+        doc_info,
+        index,
+        context,
+    }) = super::doc_cursor(doc_params, doctx).await?
+    {
+        if let Some(ident) = doc_info.ast.ident_at(index) {
+            match &context.entry {
                 Entry::Procedure(p) => {
                     let lookup_table = LookupTable {
                         global_table: &doc_info.table,
