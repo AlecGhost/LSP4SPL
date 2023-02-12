@@ -1,13 +1,14 @@
+//! Contains structs and enums for all AST nodes
 use crate::ToRange;
 use std::{fmt::Display, ops::Range};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Digit {
+pub(crate) struct Digit {
     pub value: u32,
     pub range: Range<usize>,
 }
 
-pub struct Char {
+pub(crate) struct Char {
     pub value: char,
     pub range: Range<usize>,
 }
@@ -19,7 +20,7 @@ pub struct IntLiteral {
 }
 
 impl IntLiteral {
-    pub(crate) fn new(value: u32, range: Range<usize>) -> Self {
+    pub fn new(value: u32, range: Range<usize>) -> Self {
         Self {
             value: Some(value),
             range,
@@ -269,6 +270,7 @@ impl ToRange for GlobalDeclaration {
     }
 }
 
+/// Contains entire AST
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Program {
     pub global_declarations: Vec<GlobalDeclaration>,

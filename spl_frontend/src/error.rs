@@ -3,10 +3,6 @@ use std::ops::Range;
 use thiserror::Error;
 use crate::ast::Identifier;
 
-pub trait DisplayError {
-    fn display(&self, src: &str) -> String;
-}
-
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("{1}")]
 pub struct SplError(pub Range<usize>, pub String);
