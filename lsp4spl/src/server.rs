@@ -80,6 +80,22 @@ impl LanguageServer {
     }
 }
 
+macro_rules! respond {
+    ($request:ident, $func:path, $doctx:expr) => {{
+        let (params, response) = $request.split();
+        let params = serde_json::from_value(params)?;
+        let result = $func($doctx, params).await?;
+        response.into_result_response(result)
+    }};
+}
+
+macro_rules! note {
+    ($notification:ident, $func:path, $doctx:expr) => {{
+        let params = serde_json::from_value($notification.params)?;
+        $func($doctx, params).await?;
+    }};
+}
+
 mod phases {
     use super::LanguageServer;
     use crate::{
@@ -182,59 +198,28 @@ mod phases {
                                 return Ok(());
                             }
                             GotoDeclaration::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let goto_declaration =
-                                    features::goto::declaration(doctx.clone(), params).await?;
-                                response.into_result_response(goto_declaration)
+                                respond!(request, features::goto::declaration, doctx.clone())
                             }
                             GotoDefinition::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let goto_definition =
-                                    features::goto::definition(doctx.clone(), params).await?;
-                                response.into_result_response(goto_definition)
+                                respond!(request, features::goto::definition, doctx.clone())
                             }
                             GotoImplementation::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let goto_implementation =
-                                    features::goto::implementation(doctx.clone(), params).await?;
-                                response.into_result_response(goto_implementation)
+                                respond!(request, features::goto::implementation, doctx.clone())
                             }
                             GotoTypeDefinition::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let goto_type_definition =
-                                    features::goto::type_definition(doctx.clone(), params).await?;
-                                response.into_result_response(goto_type_definition)
+                                respond!(request, features::goto::type_definition, doctx.clone())
                             }
                             References::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let references =
-                                    features::references::find(doctx.clone(), params).await?;
-                                response.into_result_response(references)
+                                respond!(request, features::references::find, doctx.clone())
                             }
                             HoverRequest::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let hover = features::hover(doctx.clone(), params).await?;
-                                response.into_result_response(hover)
+                                respond!(request, features::hover, doctx.clone())
                             }
                             Rename::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let renames =
-                                    features::references::rename(doctx.clone(), params).await?;
-                                response.into_result_response(renames)
+                                respond!(request, features::references::rename, doctx.clone())
                             }
                             Completion::METHOD => {
-                                let (params, response) = request.split();
-                                let params = serde_json::from_value(params)?;
-                                let completion =
-                                    features::completion(doctx.clone(), params).await?;
-                                response.into_result_response(completion)
+                                respond!(request, features::completion, doctx.clone())
                             }
                             unknown_method => {
                                 let method_name = unknown_method.to_string();
@@ -250,16 +235,13 @@ mod phases {
                     Message::Notification(notification) => {
                         match notification.method.as_str() {
                             DidOpenTextDocument::METHOD => {
-                                let params = serde_json::from_value(notification.params)?;
-                                document::open(doctx.clone(), params).await?;
+                                note!(notification, document::open, doctx.clone())
                             }
                             DidChangeTextDocument::METHOD => {
-                                let params = serde_json::from_value(notification.params)?;
-                                document::change(doctx.clone(), params).await?;
+                                note!(notification, document::change, doctx.clone())
                             }
                             DidCloseTextDocument::METHOD => {
-                                let params = serde_json::from_value(notification.params)?;
-                                document::close(doctx.clone(), params).await?;
+                                note!(notification, document::close, doctx.clone())
                             }
                             Exit::METHOD => std::process::exit(1), // ungraceful exit
                             _ => { /* drop all other notifications */ }
