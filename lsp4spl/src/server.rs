@@ -209,6 +209,13 @@ mod phases {
                                     features::goto::type_definition(doctx.clone(), params).await?;
                                 response.into_result_response(goto_type_definition)
                             }
+                            References::METHOD => {
+                                let (params, response) = request.split();
+                                let params = serde_json::from_value(params)?;
+                                let references =
+                                    features::goto::references(doctx.clone(), params).await?;
+                                response.into_result_response(references)
+                            }
                             HoverRequest::METHOD => {
                                 let (params, response) = request.split();
                                 let params = serde_json::from_value(params)?;

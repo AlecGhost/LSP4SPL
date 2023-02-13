@@ -33,7 +33,7 @@ pub struct VariableEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcedureEntry {
-    pub name: Option<Identifier>,
+    pub name: Identifier,
     pub local_table: SymbolTable,
     pub parameters: Vec<VariableEntry>,
 }
@@ -154,9 +154,7 @@ impl Display for ProcedureEntry {
             f,
             "proc {}({})",
             self.name
-                .as_ref()
-                .map(|ident| ident.to_string())
-                .unwrap_or_else(|| "_".to_string()),
+                .to_string(),
             self.parameters
                 .iter()
                 .map(|param| param.to_string())

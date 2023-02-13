@@ -89,7 +89,7 @@ fn test_main() {
             RangedEntry {
                 range: 0..14,
                 entry: Entry::Procedure(ProcedureEntry {
-                    name: Some(Identifier::new("main", 5..9)),
+                    name: Identifier::new("main", 5..9),
                     local_table: SymbolTable::new(),
                     parameters: Vec::new(),
                 }),
@@ -123,7 +123,7 @@ fn test_main() {
             RangedEntry {
                 range: 17..31,
                 entry: Entry::Procedure(ProcedureEntry {
-                    name: Some(Identifier::new("main", 22..26),),
+                    name: Identifier::new("main", 22..26),
                     local_table: SymbolTable::new(),
                     parameters: Vec::new(),
                 }),
@@ -146,7 +146,7 @@ fn test_main() {
             RangedEntry {
                 range: 0..20,
                 entry: Entry::Procedure(ProcedureEntry {
-                    name: Some(Identifier::new("main", 5..9),),
+                    name: Identifier::new("main", 5..9),
                     local_table: SymbolTable {
                         entries: HashMap::from([(
                             Identifier::new("a", 10..11),

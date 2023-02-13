@@ -11,7 +11,7 @@ impl SymbolTable {
             RangedEntry {
                 range: 0..0,
                 entry: Entry::Procedure(ProcedureEntry {
-                    name: Some(name),
+                    name,
                     local_table: SymbolTable::new(),
                     parameters,
                 }),

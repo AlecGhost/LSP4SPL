@@ -94,7 +94,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
                 .iter()
                 .for_each(|dec| build_variable(dec, table, &mut local_table, broker.clone()));
             let entry = ProcedureEntry {
-                name: self.name.clone(),
+                name: name.clone(),
                 local_table,
                 parameters,
             };
