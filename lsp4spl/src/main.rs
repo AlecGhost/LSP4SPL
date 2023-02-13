@@ -2,9 +2,9 @@
 use color_eyre::eyre::Result;
 use lsp_types::{
     CompletionOptions, DeclarationCapability, HoverProviderCapability,
-    ImplementationProviderCapability, OneOf, ServerCapabilities, ServerInfo,
+    ImplementationProviderCapability, OneOf, PositionEncodingKind, ServerCapabilities, ServerInfo,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    TypeDefinitionProviderCapability, WorkDoneProgressOptions,
+    TypeDefinitionProviderCapability,
 };
 use server::LanguageServer;
 use simplelog::{Config, LevelFilter, WriteLogger};
@@ -37,12 +37,7 @@ async fn main() {
             selection_range_provider: None,
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             completion_provider: Some(CompletionOptions {
-                resolve_provider: None,
-                trigger_characters: None,
-                all_commit_characters: None,
-                work_done_progress_options: WorkDoneProgressOptions {
-                    work_done_progress: None,
-                },
+                ..Default::default()
             }),
             signature_help_provider: None,
             definition_provider: Some(OneOf::Left(true)),
@@ -69,6 +64,9 @@ async fn main() {
             moniker_provider: None,
             linked_editing_range_provider: None,
             experimental: None,
+            inlay_hint_provider: None,
+            inline_value_provider: None,
+            position_encoding: Some(PositionEncodingKind::UTF8),
         },
     );
     ls.run().await;
