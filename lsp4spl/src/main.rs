@@ -57,7 +57,7 @@ async fn main() {
             document_formatting_provider: None,
             document_range_formatting_provider: None,
             document_on_type_formatting_provider: None,
-            rename_provider: None,
+            rename_provider: Some(OneOf::Left(true)),
             document_link_provider: None,
             color_provider: None,
             folding_range_provider: None,

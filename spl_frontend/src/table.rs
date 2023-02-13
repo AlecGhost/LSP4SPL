@@ -153,8 +153,7 @@ impl Display for ProcedureEntry {
         write!(
             f,
             "proc {}({})",
-            self.name
-                .to_string(),
+            self.name,
             self.parameters
                 .iter()
                 .map(|param| param.to_string())

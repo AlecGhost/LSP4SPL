@@ -231,11 +231,7 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for ArrayAccess {
         };
         if let Some(array_type) = self.array.analyze(table, broker.clone()) {
             match array_type {
-                DataType::Array {
-                    size: _,
-                    base_type,
-                    creator: _,
-                } => Some(*base_type),
+                DataType::Array { base_type, .. } => Some(*base_type),
                 _ => {
                     broker.report_error(SplError(
                         self.array.to_range(),

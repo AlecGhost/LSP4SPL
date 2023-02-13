@@ -213,7 +213,7 @@ mod phases {
                                 let (params, response) = request.split();
                                 let params = serde_json::from_value(params)?;
                                 let references =
-                                    features::goto::references(doctx.clone(), params).await?;
+                                    features::references::find(doctx.clone(), params).await?;
                                 response.into_result_response(references)
                             }
                             HoverRequest::METHOD => {
@@ -221,6 +221,13 @@ mod phases {
                                 let params = serde_json::from_value(params)?;
                                 let hover = features::hover(doctx.clone(), params).await?;
                                 response.into_result_response(hover)
+                            }
+                            Rename::METHOD => {
+                                let (params, response) = request.split();
+                                let params = serde_json::from_value(params)?;
+                                let renames =
+                                    features::references::rename(doctx.clone(), params).await?;
+                                response.into_result_response(renames)
                             }
                             Completion::METHOD => {
                                 let (params, response) = request.split();

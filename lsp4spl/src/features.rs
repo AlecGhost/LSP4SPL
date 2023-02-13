@@ -7,6 +7,7 @@ use tokio::sync::{mpsc::Sender, oneshot};
 mod completion;
 pub(crate) mod goto;
 mod hover;
+pub(crate) mod references;
 
 pub(crate) use completion::completion;
 pub(crate) use hover::hover;
