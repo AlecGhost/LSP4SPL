@@ -28,30 +28,32 @@ pub(crate) async fn hover(
     }) = super::doc_cursor(doc_params, doctx).await?
     {
         if let Some(ident) = doc_info.ast.ident_at(index) {
-            match &context.entry {
-                Entry::Type(_) => {
-                    if let Some(ranged_entry) = doc_info.table.lookup(&ident) {
-                        return Ok(Some(create_hover(
-                            &ranged_entry.entry,
-                            convert_range(&ident.range, &doc_info.text),
-                        )));
+            if let Some(ranged_entry) = context {
+                match &ranged_entry.entry {
+                    Entry::Type(_) => {
+                        if let Some(ranged_entry) = doc_info.table.lookup(ident) {
+                            return Ok(Some(create_hover(
+                                &ranged_entry.entry,
+                                convert_range(&ident.range, &doc_info.text),
+                            )));
+                        }
                     }
-                }
-                Entry::Procedure(p) => {
-                    let lookup_table = LookupTable {
-                        global_table: &doc_info.table,
-                        local_table: &p.local_table,
-                    };
-                    if let Some(ranged_entry) = lookup_table.lookup(&ident) {
-                        return Ok(Some(create_hover(
-                            &ranged_entry.entry,
-                            convert_range(&ident.range, &doc_info.text),
-                        )));
+                    Entry::Procedure(p) => {
+                        let lookup_table = LookupTable {
+                            global_table: &doc_info.table,
+                            local_table: &p.local_table,
+                        };
+                        if let Some(ranged_entry) = lookup_table.lookup(ident) {
+                            return Ok(Some(create_hover(
+                                &ranged_entry.entry,
+                                convert_range(&ident.range, &doc_info.text),
+                            )));
+                        }
                     }
-                }
-                Entry::Variable(v) => {
-                    log::error!("Found illegal variable in global table {:#?}", v);
-                    panic!("Found illegal variable in global table {:#?}", v);
+                    Entry::Variable(v) => {
+                        log::error!("Found illegal variable in global table {:#?}", v);
+                        panic!("Found illegal variable in global table {:#?}", v);
+                    }
                 }
             }
         }

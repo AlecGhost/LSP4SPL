@@ -215,6 +215,13 @@ mod phases {
                                 let hover = features::hover(doctx.clone(), params).await?;
                                 response.into_result_response(hover)
                             }
+                            Completion::METHOD => {
+                                let (params, response) = request.split();
+                                let params = serde_json::from_value(params)?;
+                                let completion =
+                                    features::completion(doctx.clone(), params).await?;
+                                response.into_result_response(completion)
+                            }
                             unknown_method => {
                                 let method_name = unknown_method.to_string();
                                 let (_, response) = request.split();

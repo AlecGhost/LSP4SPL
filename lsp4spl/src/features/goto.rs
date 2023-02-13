@@ -22,30 +22,32 @@ pub(crate) async fn declaration(
     }) = super::doc_cursor(doc_params, doctx).await?
     {
         if let Some(ident) = doc_info.ast.ident_at(index) {
-            match &context.entry {
-                Entry::Type(_) => {
-                    if let Some((key, _)) = doc_info.table.entry(&ident) {
-                        return Ok(Some(Location {
-                            uri,
-                            range: convert_range(&key.range, &doc_info.text),
-                        }));
+            if let Some(ranged_entry) = context {
+                match &ranged_entry.entry {
+                    Entry::Type(_) => {
+                        if let Some((key, _)) = doc_info.table.entry(ident) {
+                            return Ok(Some(Location {
+                                uri,
+                                range: convert_range(&key.range, &doc_info.text),
+                            }));
+                        }
                     }
-                }
-                Entry::Procedure(p) => {
-                    let lookup_table = LookupTable {
-                        global_table: &doc_info.table,
-                        local_table: &p.local_table,
-                    };
-                    if let Some((key, _)) = lookup_table.entry(&ident) {
-                        return Ok(Some(Location {
-                            uri,
-                            range: convert_range(&key.range, &doc_info.text),
-                        }));
+                    Entry::Procedure(p) => {
+                        let lookup_table = LookupTable {
+                            global_table: &doc_info.table,
+                            local_table: &p.local_table,
+                        };
+                        if let Some((key, _)) = lookup_table.entry(ident) {
+                            return Ok(Some(Location {
+                                uri,
+                                range: convert_range(&key.range, &doc_info.text),
+                            }));
+                        }
                     }
-                }
-                Entry::Variable(v) => {
-                    log::error!("Found illegal variable in global table {:#?}", v);
-                    panic!("Found illegal variable in global table {:#?}", v);
+                    Entry::Variable(v) => {
+                        log::error!("Found illegal variable in global table {:#?}", v);
+                        panic!("Found illegal variable in global table {:#?}", v);
+                    }
                 }
             }
         }
@@ -75,58 +77,60 @@ pub(crate) async fn type_definition(
     }) = super::doc_cursor(doc_params, doctx).await?
     {
         if let Some(ident) = doc_info.ast.ident_at(index) {
-            match &context.entry {
-                Entry::Type(_) => {
-                    if let Some((key, ranged_entry)) = doc_info.table.entry(&ident) {
-                        match &ranged_entry.entry {
-                            Entry::Type(_) => {
-                                return Ok(Some(Location {
-                                    uri,
-                                    range: convert_range(&key.range, &doc_info.text),
-                                }));
-                            }
-                            Entry::Procedure(_) => { /* no type definition */ }
-                            Entry::Variable(v) => {
-                                log::error!("Found illegal variable in global table {:#?}", v);
-                                panic!("Found illegal variable in global table {:#?}", v);
-                            }
-                        }
-                    }
-                }
-                Entry::Procedure(p) => {
-                    let lookup_table = LookupTable {
-                        global_table: &doc_info.table,
-                        local_table: &p.local_table,
-                    };
-                    if let Some((key, ranged_entry)) = lookup_table.entry(&ident) {
-                        match &ranged_entry.entry {
-                            Entry::Type(_) => {
-                                return Ok(Some(Location {
-                                    uri,
-                                    range: convert_range(&key.range, &doc_info.text),
-                                }));
-                            }
-                            Entry::Procedure(_) => { /* no type definition */ }
-                            Entry::Variable(v) => {
-                                if let Some(DataType::Array {
-                                    size: _,
-                                    base_type: _,
-                                    creator,
-                                }) = &v.data_type
-                                {
+            if let Some(ranged_entry) = context {
+                match &ranged_entry.entry {
+                    Entry::Type(_) => {
+                        if let Some((key, ranged_entry)) = doc_info.table.entry(ident) {
+                            match &ranged_entry.entry {
+                                Entry::Type(_) => {
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(&creator.range, &doc_info.text),
+                                        range: convert_range(&key.range, &doc_info.text),
                                     }));
                                 }
-                                /* cannot look up primitive types */
+                                Entry::Procedure(_) => { /* no type definition */ }
+                                Entry::Variable(v) => {
+                                    log::error!("Found illegal variable in global table {:#?}", v);
+                                    panic!("Found illegal variable in global table {:#?}", v);
+                                }
                             }
                         }
                     }
-                }
-                Entry::Variable(v) => {
-                    log::error!("Found illegal variable in global table {:#?}", v);
-                    panic!("Found illegal variable in global table {:#?}", v);
+                    Entry::Procedure(p) => {
+                        let lookup_table = LookupTable {
+                            global_table: &doc_info.table,
+                            local_table: &p.local_table,
+                        };
+                        if let Some((key, ranged_entry)) = lookup_table.entry(ident) {
+                            match &ranged_entry.entry {
+                                Entry::Type(_) => {
+                                    return Ok(Some(Location {
+                                        uri,
+                                        range: convert_range(&key.range, &doc_info.text),
+                                    }));
+                                }
+                                Entry::Procedure(_) => { /* no type definition */ }
+                                Entry::Variable(v) => {
+                                    if let Some(DataType::Array {
+                                        size: _,
+                                        base_type: _,
+                                        creator,
+                                    }) = &v.data_type
+                                    {
+                                        return Ok(Some(Location {
+                                            uri,
+                                            range: convert_range(&creator.range, &doc_info.text),
+                                        }));
+                                    }
+                                    /* cannot look up primitive types */
+                                }
+                            }
+                        }
+                    }
+                    Entry::Variable(v) => {
+                        log::error!("Found illegal variable in global table {:#?}", v);
+                        panic!("Found illegal variable in global table {:#?}", v);
+                    }
                 }
             }
         }
@@ -148,26 +152,28 @@ pub(crate) async fn implementation(
     }) = super::doc_cursor(doc_params, doctx).await?
     {
         if let Some(ident) = doc_info.ast.ident_at(index) {
-            match &context.entry {
-                Entry::Procedure(p) => {
-                    let lookup_table = LookupTable {
-                        global_table: &doc_info.table,
-                        local_table: &p.local_table,
-                    };
-                    if let Some((key, ranged_entry)) = lookup_table.entry(&ident) {
-                        if let Entry::Procedure(_) = ranged_entry.entry {
-                            return Ok(Some(Location {
-                                uri,
-                                range: convert_range(&key.range, &doc_info.text),
-                            }));
+            if let Some(ranged_entry) = context {
+                match &ranged_entry.entry {
+                    Entry::Procedure(p) => {
+                        let lookup_table = LookupTable {
+                            global_table: &doc_info.table,
+                            local_table: &p.local_table,
+                        };
+                        if let Some((key, ranged_entry)) = lookup_table.entry(ident) {
+                            if let Entry::Procedure(_) = ranged_entry.entry {
+                                return Ok(Some(Location {
+                                    uri,
+                                    range: convert_range(&key.range, &doc_info.text),
+                                }));
+                            }
+                            /* no implementation for types and variables */
                         }
-                        /* no implementation for types and variables */
                     }
-                }
-                Entry::Type(_) => { /* no implementation for types */ }
-                Entry::Variable(v) => {
-                    log::error!("Found illegal variable in global table {:#?}", v);
-                    panic!("Found illegal variable in global table {:#?}", v);
+                    Entry::Type(_) => { /* no implementation for types */ }
+                    Entry::Variable(v) => {
+                        log::error!("Found illegal variable in global table {:#?}", v);
+                        panic!("Found illegal variable in global table {:#?}", v);
+                    }
                 }
             }
         }
