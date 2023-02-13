@@ -221,6 +221,9 @@ mod phases {
                             Completion::METHOD => {
                                 respond!(request, features::completion, doctx.clone())
                             }
+                            FoldingRangeRequest::METHOD => {
+                                respond!(request, features::fold, doctx.clone())
+                            }
                             unknown_method => {
                                 let method_name = unknown_method.to_string();
                                 let (_, response) = request.split();

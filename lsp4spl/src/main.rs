@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 use color_eyre::eyre::Result;
 use lsp_types::{
-    CompletionOptions, DeclarationCapability, HoverProviderCapability,
-    ImplementationProviderCapability, OneOf, PositionEncodingKind, ServerCapabilities, ServerInfo,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
+    CompletionOptions, DeclarationCapability, FoldingRangeProviderCapability,
+    HoverProviderCapability, ImplementationProviderCapability, OneOf, ServerCapabilities,
+    ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
     TypeDefinitionProviderCapability,
 };
 use server::LanguageServer;
@@ -55,7 +55,7 @@ async fn main() {
             rename_provider: Some(OneOf::Left(true)),
             document_link_provider: None,
             color_provider: None,
-            folding_range_provider: None,
+            folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
             declaration_provider: Some(DeclarationCapability::Simple(true)),
             execute_command_provider: None,
             workspace: None,
@@ -66,7 +66,7 @@ async fn main() {
             experimental: None,
             inlay_hint_provider: None,
             inline_value_provider: None,
-            position_encoding: Some(PositionEncodingKind::UTF8),
+            position_encoding: None,
         },
     );
     ls.run().await;

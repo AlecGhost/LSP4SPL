@@ -6,11 +6,13 @@ use tokio::sync::{mpsc::Sender, oneshot};
 
 mod completion;
 pub(crate) mod goto;
+mod fold;
 mod hover;
 pub(crate) mod references;
 
 pub(crate) use completion::completion;
 pub(crate) use hover::hover;
+pub(crate) use fold::fold;
 
 struct DocumentCursor {
     doc_info: DocumentInfo,
