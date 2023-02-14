@@ -45,7 +45,7 @@ impl LanguageServer {
 
         // decode messages, while stdin is not closed
         let stdin = tokio::io::stdin();
-        let mut framed_read = FramedRead::new(stdin, io::LSCodec::new());
+        let mut framed_read = FramedRead::new(stdin, io::LSCodec);
 
         // initialization phase
         if let Err(err) = phases::initialization(&mut self, &mut framed_read, iotx.clone()).await {

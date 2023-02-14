@@ -103,13 +103,7 @@ enum ResponseAnswer {
     Error { error: ResponseError },
 }
 
-pub(super) struct LSCodec {}
-
-impl LSCodec {
-    pub(super) fn new() -> Self {
-        Self {}
-    }
-}
+pub(super) struct LSCodec;
 
 impl Decoder for LSCodec {
     type Item = Message;
@@ -159,7 +153,7 @@ impl Encoder<Message> for LSCodec {
 }
 
 pub(super) async fn responder(stdout: tokio::io::Stdout, mut rx: Receiver<Message>) {
-    let mut framed_write = FramedWrite::new(stdout, LSCodec::new());
+    let mut framed_write = FramedWrite::new(stdout, LSCodec);
     while let Some(response) = rx.recv().await {
         if let Err(err) = framed_write.send(response).await {
             log::error!("Sending responses failed: {:#?}", err);
@@ -183,7 +177,7 @@ mod tests {
                 .as_bytes()
                 .to_vec(),
         );
-        let mut framed_read = FramedRead::new(stdin, LSCodec::new());
+        let mut framed_read = FramedRead::new(stdin, LSCodec);
         assert_eq!(
             framed_read.next().await.unwrap().unwrap(),
             Message::Request(Request {
