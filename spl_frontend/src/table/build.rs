@@ -29,7 +29,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
                 if let Entry::Procedure(main) = &ranged_entry.entry {
                     if !main.parameters.is_empty() {
                         broker.report_error(SplError(
-                            0..0,
+                            main.name.range.clone(),
                             BuildErrorMessage::MainMustNotHaveParameters.to_string(),
                         ));
                     }

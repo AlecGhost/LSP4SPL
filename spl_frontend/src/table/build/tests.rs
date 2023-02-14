@@ -172,7 +172,7 @@ fn test_main() {
     assert_eq!(
         broker.errors(),
         vec![SplError(
-            0..0,
+            5..9,
             BuildErrorMessage::MainMustNotHaveParameters.to_string()
         )]
     );
