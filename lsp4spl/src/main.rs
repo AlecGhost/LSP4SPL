@@ -2,9 +2,9 @@
 use color_eyre::eyre::Result;
 use lsp_types::{
     CompletionOptions, DeclarationCapability, FoldingRangeProviderCapability,
-    HoverProviderCapability, ImplementationProviderCapability, OneOf, ServerCapabilities,
-    ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    TypeDefinitionProviderCapability,
+    HoverProviderCapability, ImplementationProviderCapability, OneOf, RenameOptions,
+    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TextDocumentSyncOptions, TypeDefinitionProviderCapability, WorkDoneProgressOptions,
 };
 use server::LanguageServer;
 use simplelog::{Config, LevelFilter, WriteLogger};
@@ -52,7 +52,12 @@ async fn main() {
             document_formatting_provider: None,
             document_range_formatting_provider: None,
             document_on_type_formatting_provider: None,
-            rename_provider: Some(OneOf::Left(true)),
+            rename_provider: Some(OneOf::Right(RenameOptions {
+                prepare_provider: Some(true),
+                work_done_progress_options: WorkDoneProgressOptions {
+                    work_done_progress: None,
+                },
+            })),
             document_link_provider: None,
             color_provider: None,
             folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),

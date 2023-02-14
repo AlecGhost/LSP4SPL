@@ -218,6 +218,9 @@ mod phases {
                             Rename::METHOD => {
                                 respond!(request, features::references::rename, doctx.clone())
                             }
+                            PrepareRenameRequest::METHOD => {
+                                respond!(request, features::references::prepare_rename, doctx.clone())
+                            }
                             Completion::METHOD => {
                                 respond!(request, features::completion, doctx.clone())
                             }

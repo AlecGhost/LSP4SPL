@@ -1,14 +1,17 @@
-use std::collections::HashMap;
 use super::DocumentCursor;
 use crate::document::{convert_range, DocumentRequest};
 use color_eyre::eyre::Result;
-use lsp_types::{Location, ReferenceParams, RenameParams, TextEdit, WorkspaceEdit};
+use lsp_types::{
+    Location, Range, ReferenceParams, RenameParams, TextDocumentPositionParams, TextEdit,
+    WorkspaceEdit,
+};
 use spl_frontend::{
     ast::{
         Expression, GlobalDeclaration, Identifier, Program, Statement, TypeExpression, Variable,
     },
     table::{Entry, LookupTable, SymbolTable, Table},
 };
+use std::collections::HashMap;
 use tokio::sync::mpsc::Sender;
 
 pub(crate) async fn rename(
@@ -26,8 +29,12 @@ pub(crate) async fn rename(
     {
         if let Some(ident) = doc_info.ast.ident_at(index) {
             if let Some(ranged_entry) = context {
-                let idents =
-                    find_referenced_idents(ident, &ranged_entry.entry, &doc_info.ast, &doc_info.table);
+                let idents = find_referenced_idents(
+                    ident,
+                    &ranged_entry.entry,
+                    &doc_info.ast,
+                    &doc_info.table,
+                );
                 // it seems like the original identifier is changed automatically,
                 // so it does not need to be added to `idents`
                 let text_edits = idents
@@ -47,6 +54,21 @@ pub(crate) async fn rename(
     Ok(None)
 }
 
+pub(crate) async fn prepare_rename(
+    doctx: Sender<DocumentRequest>,
+    params: TextDocumentPositionParams,
+) -> Result<Option<Range>> {
+    if let Some(DocumentCursor {
+        doc_info, index, ..
+    }) = super::doc_cursor(params, doctx).await?
+    {
+        if let Some(ident) = doc_info.ast.ident_at(index) {
+            return Ok(Some(convert_range(&ident.range, &doc_info.text)));
+        }
+    }
+    Ok(None)
+}
+
 pub(crate) async fn find(
     doctx: Sender<DocumentRequest>,
     params: ReferenceParams,
@@ -61,8 +83,12 @@ pub(crate) async fn find(
     {
         if let Some(ident) = doc_info.ast.ident_at(index) {
             if let Some(ranged_entry) = context {
-                let idents =
-                    find_referenced_idents(ident, &ranged_entry.entry, &doc_info.ast, &doc_info.table);
+                let idents = find_referenced_idents(
+                    ident,
+                    &ranged_entry.entry,
+                    &doc_info.ast,
+                    &doc_info.table,
+                );
                 let references = idents
                     .into_iter()
                     .filter(|i| i != ident)
