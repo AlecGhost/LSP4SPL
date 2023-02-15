@@ -1,22 +1,17 @@
 use super::*;
-use crate::LocalBroker;
+use crate::{lexer::lex, LocalBroker};
 use nom::combinator::all_consuming;
 #[cfg(test)]
 use pretty_assertions::assert_eq;
+use std::ops::Range;
 
-trait ToSpan<B> {
-    fn to_span(&self) -> Span<B>;
+trait ToTokens<B> {
+    fn to_tokens(&self) -> Tokens<B>;
 }
 
-impl ToSpan<LocalBroker> for &str {
-    fn to_span(&self) -> Span<LocalBroker> {
-        Span::new_extra(self, LocalBroker::default())
-    }
-}
-
-impl ToSpan<LocalBroker> for String {
-    fn to_span(&self) -> Span<LocalBroker> {
-        Span::new_extra(self, LocalBroker::default())
+impl ToTokens<LocalBroker> for Vec<Token> {
+    fn to_tokens(&self) -> Tokens<LocalBroker> {
+        Tokens::new(self, LocalBroker::default())
     }
 }
 
@@ -27,32 +22,42 @@ fn int_lit(value: u32, range: Range<usize>) -> Box<Expression> {
 #[test]
 fn idents() {
     let i = "ab1";
+    let tokens = lex(i);
     assert_eq!(
-        all_consuming(Identifier::parse)(i.to_span()).unwrap().1,
+        all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         Identifier::new("ab1", 0..3),
         "Identifier: {}",
         i
     );
 
     let i = "test_ident";
+    let tokens = lex(i);
     assert_eq!(
-        all_consuming(Identifier::parse)(i.to_span()).unwrap().1,
+        all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         Identifier::new("test_ident", 0..10),
         "Identifier: {}",
         i
     );
 
     let i = "_a";
+    let tokens = lex(i);
     assert_eq!(
-        all_consuming(Identifier::parse)(i.to_span()).unwrap().1,
+        all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         Identifier::new("_a", 0..2),
         "Identifier: {}",
         i
     );
 
     let i = "1a";
+    let tokens = lex(i);
     assert!(
-        all_consuming(Identifier::parse)(i.to_span()).is_err(),
+        all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens()).is_err(),
         "Identifier: {}",
         i
     );
@@ -61,29 +66,33 @@ fn idents() {
 #[test]
 fn keywords() {
     let kw = "array";
+    let tokens = lex(kw);
     assert!(
-        all_consuming(keywords::array)(kw.to_span()).is_ok(),
+        all_consuming(terminated(keywords::array, eof))(tokens.to_tokens()).is_ok(),
         "Keyword: {}",
         kw
     );
 
     let kw = "array_";
+    let tokens = lex(kw);
     assert!(
-        all_consuming(keywords::array)(kw.to_span()).is_err(),
+        all_consuming(terminated(keywords::array, eof))(tokens.to_tokens()).is_err(),
         "Keyword: {}",
         kw
     );
 
     let kw = "type a=int;";
+    let tokens = lex(kw);
     assert!(
-        all_consuming(TypeDeclaration::parse)(kw.to_span()).is_ok(),
+        all_consuming(terminated(TypeDeclaration::parse, eof))(tokens.to_tokens()).is_ok(),
         "Keyword: {}",
         kw
     );
 
     let kw = "typea=int;";
+    let tokens = lex(kw);
     assert!(
-        all_consuming(TypeDeclaration::parse)(kw.to_span()).is_err(),
+        all_consuming(terminated(TypeDeclaration::parse, eof))(tokens.to_tokens()).is_err(),
         "Keyword: {}",
         kw
     );
@@ -94,15 +103,21 @@ fn expressions() {
     type E = Expression;
 
     let expr = "1";
+    let tokens = lex(expr);
     assert_eq!(
-        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         E::IntLiteral(IntLiteral::new(1, 0..1)),
         "Expression: {}",
         expr
     );
     let expr = "1 + 2";
+    let tokens = lex(expr);
     assert_eq!(
-        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         E::Binary(BinaryExpression {
             operator: Operator::Add,
             lhs: int_lit(1, 0..1),
@@ -113,8 +128,11 @@ fn expressions() {
         expr
     );
     let expr = "1 + 2 * 3";
+    let tokens = lex(expr);
     assert_eq!(
-        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         E::Binary(BinaryExpression {
             operator: Operator::Add,
             lhs: int_lit(1, 0..1),
@@ -130,8 +148,11 @@ fn expressions() {
         expr
     );
     let expr = "1 / 2 + 3";
+    let tokens = lex(expr);
     assert_eq!(
-        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         E::Binary(BinaryExpression {
             operator: Operator::Add,
             lhs: Box::new(E::Binary(BinaryExpression {
@@ -147,8 +168,11 @@ fn expressions() {
         expr
     );
     let expr = "1 * 2 / 3 * 4";
+    let tokens = lex(expr);
     assert_eq!(
-        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         E::Binary(BinaryExpression {
             operator: Operator::Mul,
             lhs: Box::new(E::Binary(BinaryExpression {
@@ -169,8 +193,11 @@ fn expressions() {
         expr
     );
     let expr = "1 - 2 + 3 - 4";
+    let tokens = lex(expr);
     assert_eq!(
-        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         E::Binary(BinaryExpression {
             operator: Operator::Sub,
             lhs: Box::new(E::Binary(BinaryExpression {
@@ -191,8 +218,11 @@ fn expressions() {
         expr
     );
     let expr = "(1 + 2) * 3 = 4 + 5 * 6 / 6";
+    let tokens = lex(expr);
     assert_eq!(
-        all_consuming(E::parse)(expr.to_span()).unwrap().1,
+        all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         E::Binary(BinaryExpression {
             operator: Operator::Equ,
             lhs: Box::new(Expression::Binary(BinaryExpression {
@@ -228,8 +258,9 @@ fn expressions() {
         expr
     );
     let expr = "a < b > c";
+    let tokens = lex(expr);
     assert!(
-        all_consuming(E::parse)(expr.to_span()).is_err(),
+        all_consuming(terminated(E::parse, eof))(tokens.to_tokens()).is_err(),
         "Expression: {}",
         expr
     );
@@ -241,8 +272,11 @@ fn type_declarations() {
     type TE = TypeExpression;
 
     let dec = "type a = int;";
+    let tokens = lex(dec);
     assert_eq!(
-        all_consuming(TD::parse)(dec.to_span()).unwrap().1,
+        all_consuming(terminated(TD::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         TD {
             type_kw: 0..4,
             name: Some(Identifier::new("a", 5..6)),
@@ -254,8 +288,11 @@ fn type_declarations() {
     );
 
     let dec = "type a = array [2] of array [3] of int;";
+    let tokens = lex(dec);
     assert_eq!(
-        all_consuming(TD::parse)(dec.to_span()).unwrap().1,
+        all_consuming(terminated(TD::parse, eof))(tokens.to_tokens())
+            .unwrap()
+            .1,
         TD {
             type_kw: 0..4,
             name: Some(Identifier::new("a", 5..6)),
@@ -279,7 +316,8 @@ fn type_declarations() {
     );
 
     let dec = "type = array [] of array [] of;";
-    let (input, td) = all_consuming(TD::parse)(dec.to_span()).unwrap();
+    let tokens = lex(dec);
+    let (input, td) = all_consuming(terminated(TD::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
         td,
         TD {
@@ -304,10 +342,10 @@ fn type_declarations() {
         dec
     );
     assert_eq!(
-        input.extra.errors(),
+        input.broker.errors(),
         vec![
             SplError(
-                4..4,
+                5..5,
                 ParseErrorMessage::ExpectedToken("identifier".to_string()).to_string()
             ),
             SplError(
@@ -331,7 +369,9 @@ fn type_declarations() {
 #[test]
 fn assignments() {
     let asgn = "a := 1;";
-    let (input, assignment) = all_consuming(Assignment::parse)(asgn.to_span()).unwrap();
+    let tokens = lex(asgn);
+    let (input, assignment) =
+        all_consuming(terminated(Assignment::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
         assignment,
         Assignment {
@@ -342,11 +382,12 @@ fn assignments() {
         "Assignment: {}",
         asgn
     );
-    assert!(input.extra.errors().is_empty(), "Assignment: {}", asgn);
+    assert!(input.broker.errors().is_empty(), "Assignment: {}", asgn);
 
     let asgn = "a = 1;";
+    let tokens = lex(asgn);
     assert!(
-        Assignment::parse(asgn.to_span()).is_err(),
+        Assignment::parse(tokens.to_tokens()).is_err(),
         "Assignment: {}",
         asgn
     );
@@ -355,7 +396,9 @@ fn assignments() {
 #[test]
 fn call_statements() {
     let stmt = "a();";
-    let (input, cs) = all_consuming(CallStatement::parse)(stmt.to_span()).unwrap();
+    let tokens = lex(stmt);
+    let (input, cs) =
+        all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
         cs,
         CallStatement {
@@ -366,10 +409,12 @@ fn call_statements() {
         "CallStatement: {}",
         stmt
     );
-    assert!(input.extra.errors().is_empty(), "CallStatement: {}", stmt);
+    assert!(input.broker.errors().is_empty(), "CallStatement: {}", stmt);
 
     let stmt = "a(1, 2, 3);";
-    let (input, cs) = all_consuming(CallStatement::parse)(stmt.to_span()).unwrap();
+    let tokens = lex(stmt);
+    let (input, cs) =
+        all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
         cs,
         CallStatement {
@@ -384,10 +429,12 @@ fn call_statements() {
         "CallStatement: {}",
         stmt
     );
-    assert!(input.extra.errors().is_empty(), "CallStatement: {}", stmt);
+    assert!(input.broker.errors().is_empty(), "CallStatement: {}", stmt);
 
     let stmt = "a(1,)";
-    let (input, cs) = all_consuming(CallStatement::parse)(stmt.to_span()).unwrap();
+    let tokens = lex(stmt);
+    let (input, cs) =
+        all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
         cs,
         CallStatement {
@@ -399,7 +446,7 @@ fn call_statements() {
         stmt
     );
     assert_eq!(
-        input.extra.errors(),
+        input.broker.errors(),
         vec![
             SplError(
                 4..4,
@@ -415,7 +462,9 @@ fn call_statements() {
 #[test]
 fn if_statements() {
     let stmt = "if (1 = 2) {}";
-    let (input, is) = all_consuming(IfStatement::parse)(stmt.to_span()).unwrap();
+    let tokens = lex(stmt);
+    let (input, is) =
+        all_consuming(terminated(IfStatement::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
         is,
         IfStatement {
@@ -437,13 +486,14 @@ fn if_statements() {
         "IfStatement: {}",
         stmt
     );
-    assert!(input.extra.errors().is_empty(), "IfStatement: {}", stmt);
+    assert!(input.broker.errors().is_empty(), "IfStatement: {}", stmt);
 }
 
 #[test]
 fn acker() {
     let acker = std::fs::read_to_string("/Users/alex/dev/compiler/programs/acker.spl").unwrap();
-    let (input, program) = all_consuming(Program::parse)(acker.to_span()).unwrap();
+    let tokens = lex(&acker);
+    let (input, program) = all_consuming(Program::parse)(tokens.to_tokens()).unwrap();
 
     // variables for use in assertion
     let int_type = |range| Some(TypeExpression::NamedType(Identifier::new("int", range)));
@@ -745,5 +795,5 @@ fn acker() {
         "Acker: {}",
         acker
     );
-    assert!(input.extra.errors().is_empty(), "Acker: {}", acker);
+    assert!(input.broker.errors().is_empty(), "Acker: {}", acker);
 }

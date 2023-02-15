@@ -12,7 +12,8 @@ use std::collections::HashMap;
 
 fn test(src: &str) -> (SymbolTable, LocalBroker) {
     eprintln!("Testing: {}", src);
-    let program = crate::parser::parse(src, LocalBroker::default());
+    let tokens = crate::lexer::lex(src);
+    let program = crate::parser::parse(&tokens, LocalBroker::default());
     let broker = LocalBroker::default();
     let table = crate::table::build(&program, broker.clone());
     (table, broker)

@@ -1,35 +1,22 @@
-use std::ops::Range;
-
 use crate::{
     ast::*,
     error::{ParseErrorMessage, SplError},
+    lexer::token::{Token, TokenType, Tokens},
     DiagnosticsBroker, ToRange,
 };
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    character::complete::{alpha1, anychar, digit1, hex_digit1},
-    combinator::{all_consuming, eof, map, opt, peek},
+    combinator::{all_consuming, map, opt, peek, recognize},
     multi::many0,
     sequence::{pair, terminated, tuple},
 };
-use utility::{alpha_numeric0, expect, ignore_until, ignore_until1, keywords, symbols, ws};
+use utility::{expect, ignore_until, ignore_until1};
 
 #[cfg(test)]
 mod tests;
 mod utility;
 
-pub(crate) type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
-
-impl<B> ToRange for Span<'_, B> {
-    fn to_range(&self) -> Range<usize> {
-        let start = self.location_offset();
-        let end = start + self.fragment().len();
-        start..end
-    }
-}
-
-type IResult<'a, T, B> = nom::IResult<Span<'a, B>, T>;
+type IResult<'a, T, B> = nom::IResult<Tokens<'a, B>, T>;
 
 /// Parses the given source code and returns an AST.
 /// Errors are reported by the specified broker.
@@ -49,95 +36,59 @@ type IResult<'a, T, B> = nom::IResult<Span<'a, B>, T>;
 ///     global_declarations: Vec::new()
 /// });
 /// ```
-pub fn parse<B: DiagnosticsBroker>(input: &str, broker: B) -> Program {
-    let input = Span::new_extra(input, broker);
+pub fn parse<B: DiagnosticsBroker>(input: &[Token], broker: B) -> Program {
+    let input = Tokens::new(input, broker);
     let (_, program) = all_consuming(Program::parse)(input).expect("Parser cannot fail");
     program
 }
 
 /// Implemented by all AST nodes.
 trait Parser<B>: Sized {
-    fn parse(input: Span<B>) -> IResult<Self, B>;
-}
-
-impl<B: DiagnosticsBroker> Parser<B> for Char {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
-        let start = input.location_offset();
-        let (input, _) = tag("'")(input)?;
-        let (input, c) = alt((map(tag("\\n"), |_| '\n'), anychar))(input)?;
-        let (input, _) = expect(tag("'"), ParseErrorMessage::MissingClosing('\''))(input)?;
-        let end = input.location_offset();
-        Ok((
-            input,
-            Self {
-                value: c,
-                range: start..end,
-            },
-        ))
-    }
-}
-
-impl<B: Clone> Parser<B> for Digit {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
-        ws(map(digit1, |span: Span<B>| Self {
-            value: span.parse().expect("Parsing digit failed"),
-            range: span.to_range(),
-        }))(input)
-    }
+    fn parse(input: Tokens<B>) -> IResult<Self, B>;
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
-        ws(alt((
-            map(
-                pair(
-                    tag("0x"),
-                    expect(
-                        hex_digit1,
-                        ParseErrorMessage::ExpectedToken("Hexadecimal digit".to_string()),
-                    ),
-                ),
-                |pair| {
-                    let end = if let Some(span) = &pair.1 {
-                        span.to_range().end
-                    } else {
-                        pair.0.to_range().end
-                    };
-                    let value = pair.1.map(|span| {
-                        u32::from_str_radix(&span, 16).expect("Parsing hex digit failed")
-                    });
-                    Self {
-                        value,
-                        range: pair.0.to_range().start..end,
-                    }
-                },
-            ),
-            map(Char::parse, |char| Self {
-                value: Some(char.value as u32),
-                range: char.range,
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+        alt((
+            map(hex, |token| Self {
+                value: Some(if let TokenType::Hex(value) = token.fragment().token_type {
+                    value
+                } else {
+                    panic!("Invalid hex parse")
+                }),
+                range: token.to_range(),
             }),
-            map(Digit::parse, |digit| Self {
-                value: Some(digit.value),
-                range: digit.range,
+            map(char, |token| Self {
+                value: Some(if let TokenType::Char(c) = token.fragment().token_type {
+                    (c as u8).into()
+                } else {
+                    panic!("Invalid char parse")
+                }),
+                range: token.to_range(),
             }),
-        )))(input)
+            map(int, |token| Self {
+                value: Some(if let TokenType::Int(value) = token.fragment().token_type {
+                    value
+                } else {
+                    panic!("Invalid int parse")
+                }),
+                range: token.to_range(),
+            }),
+        ))(input)
     }
 }
 
-impl<B: Clone> Parser<B> for Identifier {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
-        map(
-            ws(pair(alt((alpha1, tag("_"))), alpha_numeric0)),
-            |pair: (Span<B>, Span<B>)| Self {
-                value: String::new() + *pair.0 + *pair.1,
-                range: pair.0.location_offset()..pair.1.to_range().end,
-            },
-        )(input)
+impl<B: DiagnosticsBroker> Parser<B> for Identifier {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+        map(ident, |token| Self {
+            value: token.fragment().to_string(),
+            range: token.to_range(),
+        })(input)
     }
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Variable {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, mut name) = map(Identifier::parse, Self::NamedVariable)(input)?;
         let (input, accesses) = many0(tuple((
             symbols::lbracket,
@@ -158,8 +109,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Variable {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Expression {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
-        fn parse_primary<B: DiagnosticsBroker>(input: Span<B>) -> IResult<Expression, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+        fn parse_primary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Primary := IntLit | Variable | "(" Expr ")"
             alt((
                 map(IntLiteral::parse, Expression::IntLiteral),
@@ -185,11 +136,11 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             ))(input)
         }
 
-        fn parse_unary<B: DiagnosticsBroker>(input: Span<B>) -> IResult<Expression, B> {
+        fn parse_unary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Unary := Primary | "-" Primary
             alt((
                 parse_primary,
-                map(pair(tag("-"), parse_unary), |pair| {
+                map(pair(symbols::minus, parse_unary), |pair| {
                     let minus = pair.0;
                     let primary = pair.1;
                     let range = minus.to_range().start..primary.to_range().end;
@@ -203,14 +154,14 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             ))(input)
         }
 
-        fn parse_rhs<'a, P, B: DiagnosticsBroker>(
-            input: Span<'a, B>,
+        fn parse_rhs<P, B: DiagnosticsBroker>(
+            input: Tokens<B>,
             lhs: Expression,
-            op: &str,
+            operator: Operator,
             parser: P,
-        ) -> IResult<'a, Expression, B>
+        ) -> IResult<Expression, B>
         where
-            P: Fn(Span<B>) -> IResult<Expression, B>,
+            P: Fn(Tokens<B>) -> IResult<Expression, B>,
         {
             let (input, rhs) = expect(
                 parser,
@@ -222,7 +173,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             });
             let range = lhs.to_range().start..rhs.to_range().end;
             let exp = Expression::Binary(BinaryExpression {
-                operator: Operator::new(op).expect("Operator conversion failed"),
+                operator,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
                 range,
@@ -230,25 +181,27 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, exp))
         }
 
-        fn parse_mul<B: DiagnosticsBroker>(input: Span<B>) -> IResult<Expression, B> {
+        fn parse_mul<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Mul := Unary (("*" | "/") Unary)*
             let (mut input, mut exp) = parse_unary(input)?;
             while let Ok((i, op)) = alt((symbols::times, symbols::divide))(input.clone()) {
-                (input, exp) = parse_rhs(i, exp, &op, parse_unary)?;
+                (input, exp) =
+                    parse_rhs(i, exp, op.fragment().token_type.clone().into(), parse_unary)?;
             }
             Ok((input, exp))
         }
 
-        fn parse_add<B: DiagnosticsBroker>(input: Span<B>) -> IResult<Expression, B> {
+        fn parse_add<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Add := Mul (("+" | "-") Mul)*
             let (mut input, mut exp) = parse_mul(input)?;
             while let Ok((i, op)) = alt((symbols::plus, symbols::minus))(input.clone()) {
-                (input, exp) = parse_rhs(i, exp, &op, parse_mul)?;
+                (input, exp) =
+                    parse_rhs(i, exp, op.fragment().token_type.clone().into(), parse_mul)?;
             }
             Ok((input, exp))
         }
 
-        fn parse_comparison<B: DiagnosticsBroker>(input: Span<B>) -> IResult<Expression, B> {
+        fn parse_comparison<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Comp := Add (("=" | "#" | "<" | "<=" | ">" | ">=") Add)?
             let (mut input, mut exp) = parse_add(input)?;
             if let Ok((i, op)) = alt((
@@ -260,7 +213,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                 symbols::gt,
             ))(input.clone())
             {
-                (input, exp) = parse_rhs(i, exp, &op, parse_add)?;
+                (input, exp) =
+                    parse_rhs(i, exp, op.fragment().token_type.clone().into(), parse_add)?;
             }
             Ok((input, exp))
         }
@@ -271,16 +225,16 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
-        fn parse_array_type<B: DiagnosticsBroker>(input: Span<B>) -> IResult<TypeExpression, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+        fn parse_array_type<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<TypeExpression, B> {
             let (input, array_kw) = keywords::array(input)?;
-            let start = array_kw.location_offset();
+            let start = array_kw.to_range().start;
             let (input, _) = expect(
                 symbols::lbracket,
                 ParseErrorMessage::ExpectedToken("[".to_string()),
             )(input)?;
             let (input, size) = expect(
-                map(ws(IntLiteral::parse), |int_lit| int_lit.value),
+                map(IntLiteral::parse, |int_lit| int_lit.value),
                 ParseErrorMessage::ExpectedToken("int literal".to_string()),
             )(input)?;
             let (input, _) =
@@ -298,7 +252,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
                 input,
                 TypeExpression::ArrayType {
                     array_kw: array_kw.to_range(),
-                    of_kw: of_kw.map(|span| span.to_range()),
+                    of_kw: of_kw.map(|token| token.to_range()),
                     size: size.flatten(),
                     base_type: type_expr.map(Box::new),
                     range: start..end,
@@ -311,9 +265,9 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, type_kw) = keywords::r#type(input)?;
-        let start = type_kw.location_offset();
+        let start = type_kw.to_range().start;
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -341,9 +295,9 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, var_kw) = keywords::var(input)?;
-        let start = var_kw.location_offset();
+        let start = var_kw.to_range().start;
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -371,7 +325,7 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, (start, ref_kw, name)) = alt((
             map(
                 pair(
@@ -381,7 +335,7 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
                         ParseErrorMessage::ExpectedToken("identifier".to_string()),
                     ),
                 ),
-                |pair| (pair.0.location_offset(), Some(pair.0.to_range()), pair.1),
+                |pair| (pair.0.to_range().start, Some(pair.0.to_range()), pair.1),
             ),
             map(Identifier::parse, |ident| {
                 (ident.range.start, None, Some(ident))
@@ -409,7 +363,7 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, name) = terminated(Identifier::parse, symbols::lparen)(input)?;
         let start = name.range.start;
         let (input, mut arguments) = many0(terminated(Expression::parse, symbols::comma))(input)?;
@@ -439,7 +393,7 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Assignment {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, variable) = terminated(Variable::parse, symbols::assign)(input)?;
         let start = variable.to_range().start;
         let (input, expr) = expect(
@@ -460,9 +414,9 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, if_kw) = keywords::r#if(input)?;
-        let start = if_kw.location_offset();
+        let start = if_kw.to_range().start;
         let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
@@ -502,9 +456,9 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, while_kw) = keywords::r#while(input)?;
-        let start = while_kw.location_offset();
+        let start = while_kw.to_range().start;
         let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
@@ -529,9 +483,9 @@ impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, curly) = symbols::lcurly(input)?;
-        let start = curly.location_offset();
+        let start = curly.to_range().start;
         let (input, statements) = many0(Statement::parse)(input)?;
         let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
         let end = input.location_offset();
@@ -546,7 +500,7 @@ impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Statement {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         alt((
             map(symbols::semic, |semic| Self::Empty(semic.to_range())),
             map(IfStatement::parse, Self::If),
@@ -558,9 +512,9 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
                 pair(
                     Variable::parse,
                     ignore_until::<B, _>(peek(alt((
-                        symbols::lcurly,
-                        symbols::rcurly,
-                        symbols::semic,
+                        recognize(symbols::lcurly),
+                        recognize(symbols::rcurly),
+                        recognize(symbols::semic),
                         eof,
                     )))),
                 ),
@@ -569,16 +523,16 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
                     loop {
                         match var {
                             Variable::NamedVariable(ident) => {
-                                let span = pair.1;
-                                let range = ident.range.start..span.to_range().end;
+                                let tokens = pair.1;
+                                let range = ident.range.start..tokens.to_range().end;
                                 let err = SplError(
                                     range.clone(),
                                     ParseErrorMessage::UnexpectedCharacters(
-                                        ident.value + span.fragment(),
+                                        ident.value + &tokens.fragment().to_string(),
                                     )
                                     .to_string(),
                                 );
-                                span.extra.report_error(err);
+                                tokens.broker.report_error(err);
                                 return Self::Error(range);
                             }
                             Variable::ArrayAccess(a) => var = *a.array,
@@ -591,9 +545,9 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, proc_kw) = keywords::proc(input)?;
-        let start = proc_kw.location_offset();
+        let start = proc_kw.to_range().start;
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -633,20 +587,20 @@ impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         alt((
             map(TypeDeclaration::parse, Self::Type),
             map(ProcedureDeclaration::parse, Self::Procedure),
             map(
-                ignore_until1(peek(alt((keywords::r#type::<B>, keywords::proc, ws(eof))))),
-                |span| {
+                ignore_until1(peek(alt((keywords::r#type::<B>, keywords::proc, eof)))),
+                |token| {
                     let err = SplError(
-                        span.to_range(),
-                        ParseErrorMessage::UnexpectedCharacters(span.fragment().to_string())
+                        token.to_range(),
+                        ParseErrorMessage::UnexpectedCharacters(token.fragment().to_string())
                             .to_string(),
                     );
-                    span.extra.report_error(err);
-                    Self::Error(span.to_range())
+                    token.broker.report_error(err);
+                    Self::Error(token.to_range())
                 },
             ),
         ))(input)
@@ -654,9 +608,9 @@ impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Program {
-    fn parse(input: Span<B>) -> IResult<Self, B> {
+    fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let (input, global_declarations) = many0(GlobalDeclaration::parse)(input)?;
-        let (input, _) = ws(eof)(input)?;
+        let (input, _) = eof(input)?;
         Ok((
             input,
             Self {
@@ -664,4 +618,67 @@ impl<B: DiagnosticsBroker> Parser<B> for Program {
             },
         ))
     }
+}
+
+macro_rules! tag_parser {
+    ($name:ident, $token_type:pat) => {
+        pub(super) fn $name<B: crate::DiagnosticsBroker>(
+            input: crate::lexer::token::Tokens<B>,
+        ) -> crate::parser::IResult<crate::lexer::token::Tokens<B>, B> {
+            use crate::lexer::token::TokenType;
+            use nom::bytes::complete::take;
+            let original_input = input.clone();
+            let (input, tokens) = take(1usize)(input)?;
+            if matches!(tokens.fragment().token_type, $token_type) {
+                Ok((input, tokens))
+            } else {
+                Err(nom::Err::Error(nom::error::Error::new(
+                    original_input,
+                    nom::error::ErrorKind::Tag,
+                )))
+            }
+        }
+    };
+}
+
+tag_parser!(ident, TokenType::Ident(_));
+tag_parser!(char, TokenType::Char(_));
+tag_parser!(int, TokenType::Int(_));
+tag_parser!(hex, TokenType::Hex(_));
+tag_parser!(comment, TokenType::Comment(_));
+tag_parser!(eof, TokenType::Eof);
+
+mod keywords {
+    tag_parser!(array, TokenType::Array);
+    tag_parser!(of, TokenType::Of);
+    tag_parser!(r#if, TokenType::If);
+    tag_parser!(r#else, TokenType::Else);
+    tag_parser!(r#while, TokenType::While);
+    tag_parser!(proc, TokenType::Proc);
+    tag_parser!(r#ref, TokenType::Ref);
+    tag_parser!(r#type, TokenType::Type);
+    tag_parser!(var, TokenType::Var);
+}
+
+mod symbols {
+    tag_parser!(lparen, TokenType::LParen);
+    tag_parser!(rparen, TokenType::RParen);
+    tag_parser!(lbracket, TokenType::LBracket);
+    tag_parser!(rbracket, TokenType::RBracket);
+    tag_parser!(lcurly, TokenType::LCurly);
+    tag_parser!(rcurly, TokenType::RCurly);
+    tag_parser!(eq, TokenType::Eq);
+    tag_parser!(neq, TokenType::Neq);
+    tag_parser!(lt, TokenType::Lt);
+    tag_parser!(le, TokenType::Le);
+    tag_parser!(gt, TokenType::Gt);
+    tag_parser!(ge, TokenType::Ge);
+    tag_parser!(assign, TokenType::Assign);
+    tag_parser!(colon, TokenType::Colon);
+    tag_parser!(comma, TokenType::Comma);
+    tag_parser!(semic, TokenType::Semic);
+    tag_parser!(plus, TokenType::Plus);
+    tag_parser!(minus, TokenType::Minus);
+    tag_parser!(times, TokenType::Times);
+    tag_parser!(divide, TokenType::Divide);
 }

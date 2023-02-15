@@ -1,5 +1,5 @@
 //! Contains structs and enums for all AST nodes
-use crate::ToRange;
+use crate::{ToRange, lexer::token::TokenType};
 use std::{fmt::Display, ops::Range};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -105,6 +105,25 @@ impl Operator {
 
     pub fn is_arithmetic(&self) -> bool {
         matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div)
+    }
+}
+
+impl From<TokenType> for Operator {
+    fn from(value: TokenType) -> Self {
+        use TokenType::*;
+        match value {
+            Plus => Self::Add,
+            Minus => Self::Sub,
+            Times => Self::Mul,
+            Divide => Self::Div,
+            Eq => Self::Equ,
+            Neq => Self::Neq,
+            Lt => Self::Lst,
+            Le => Self::Lse,
+            Gt => Self::Grt,
+            Ge => Self::Gre,
+            token => panic!("Invalid token for operator conversion: {:?}", token),
+        }
     }
 }
 

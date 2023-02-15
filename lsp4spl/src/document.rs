@@ -8,7 +8,7 @@ use spl_frontend::{
     error::SplError,
     parser,
     table::{self, SymbolTable},
-    LocalBroker,
+    LocalBroker, lexer,
 };
 use std::collections::HashMap;
 use tokio::sync::{
@@ -137,7 +137,8 @@ pub struct DocumentInfo {
 impl DocumentInfo {
     fn new(text: String) -> Self {
         let broker = LocalBroker::default();
-        let program = parser::parse(&text, broker.clone());
+        let tokens = lexer::lex(&text);
+        let program = parser::parse(&tokens, broker.clone());
         let table = table::build(&program, broker.clone());
         table::analyze(&program, &table, broker.clone());
         let diagnostics = broker

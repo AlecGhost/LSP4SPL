@@ -1,14 +1,15 @@
 use crate::{
     error::{SemanticErrorMessage, SplError},
-    parser, table, LocalBroker,
+    lexer, parser, table, LocalBroker,
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 
 fn test(src: &str) -> Vec<SplError> {
     eprintln!("Testing: {}", src);
+    let tokens = lexer::lex(src);
     let parse_broker = LocalBroker::default();
-    let program = parser::parse(src, parse_broker.clone());
+    let program = parser::parse(&tokens, parse_broker.clone());
     assert_eq!(parse_broker.errors(), Vec::new(), "parsing failed");
     let build_broker = LocalBroker::default();
     let table = table::build(&program, build_broker.clone());
