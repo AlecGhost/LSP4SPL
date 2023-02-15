@@ -8,7 +8,7 @@ use spl_frontend::{
     error::SplError,
     parser,
     table::{self, SymbolTable},
-    LocalBroker, lexer,
+    LocalBroker, lexer::{self, token::Token},
 };
 use std::collections::HashMap;
 use tokio::sync::{
@@ -129,6 +129,7 @@ pub(super) async fn broker(
 #[derive(Debug, Clone)]
 pub struct DocumentInfo {
     pub text: String,
+    pub tokens: Vec<Token>,
     pub ast: Program,
     pub table: SymbolTable,
     pub diagnostics: Vec<Diagnostic>,
@@ -148,6 +149,7 @@ impl DocumentInfo {
             .collect();
         Self {
             text,
+            tokens,
             ast: program,
             table,
             diagnostics,

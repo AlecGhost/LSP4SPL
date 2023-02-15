@@ -95,7 +95,7 @@ fn arrays() {
     assert_eq!(
         errors,
         vec![SplError(
-            115..122,
+            115..125,
             SemanticErrorMessage::IndexingNonArray.to_string()
         )]
     );

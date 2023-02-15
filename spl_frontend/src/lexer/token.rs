@@ -35,7 +35,7 @@ const REF: &str = "ref";
 const TYPE: &str = "type";
 const VAR: &str = "var";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Token {
     pub token_type: TokenType,
     pub range: Range<usize>,
@@ -53,7 +53,26 @@ impl std::fmt::Display for Token {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+pub trait TokenAt {
+    fn token_at(&self, index: usize) -> Option<&Token>;
+}
+
+impl TokenAt for Vec<Token> {
+    fn token_at(&self, index: usize) -> Option<&Token>{
+        self.iter().find(|token| token.range.contains(&index))
+    }
+}
+
+impl ToRange for Vec<Token> {
+    fn to_range(&self) -> Range<usize> {
+        let start = self.first().map(|token| token.range.start).unwrap_or(0);
+        let end = self.last().map(|token| token.range.end).unwrap_or(0);
+        start..end
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TokenType {
     LParen,
     RParen,
@@ -187,20 +206,30 @@ pub struct Tokens<'a, B> {
     pub broker: B,
 }
 
+/// source: https://stackoverflow.com/a/57203324
+/// enables indexing and slicing
+impl<'a, B, Idx> std::ops::Index<Idx> for Tokens<'a, B>
+where
+    Idx: std::slice::SliceIndex<[Token]>,
+{
+    type Output = Idx::Output;
+
+    fn index(&self, index: Idx) -> &Self::Output {
+        &self.tokens[index]
+    }
+}
+
 impl<'a, B: Clone> Tokens<'a, B> {
     pub fn new(tokens: &'a [Token], broker: B) -> Self {
-        Self {
-            tokens,
-            broker,
-        }
+        Self { tokens, broker }
     }
 
     pub fn fragment(&self) -> &Token {
         &self.tokens[0]
     }
 
-    pub fn location_offset(&self) -> usize {
-        self.fragment().range.start
+    pub fn token(&self) -> Token {
+        self.fragment().clone()
     }
 }
 
@@ -243,8 +272,11 @@ impl<'a, B> nom::Offset for Tokens<'a, B> {
     fn offset(&self, second: &Self) -> usize {
         let fst = self.tokens.as_ptr();
         let snd = second.tokens.as_ptr();
+        // because we do pointer arithmetic, the size of `Token` in memory is needed,
+        // to calculate the offset.
+        let size = std::mem::size_of::<Token>();
 
-        snd as usize - fst as usize
+        (snd as usize - fst as usize) / size
     }
 }
 

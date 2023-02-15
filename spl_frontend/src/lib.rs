@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use error::SplError;
 use std::{cell::RefCell, ops::Range, rc::Rc};
 

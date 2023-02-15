@@ -1,9 +1,10 @@
+use std::ops::Range;
+
 use super::*;
 use crate::{lexer::lex, LocalBroker};
 use nom::combinator::all_consuming;
 #[cfg(test)]
 use pretty_assertions::assert_eq;
-use std::ops::Range;
 
 trait ToTokens<B> {
     fn to_tokens(&self) -> Tokens<B>;
@@ -15,8 +16,11 @@ impl ToTokens<LocalBroker> for Vec<Token> {
     }
 }
 
-fn int_lit(value: u32, range: Range<usize>) -> Box<Expression> {
-    Box::new(Expression::IntLiteral(IntLiteral::new(value, range)))
+fn int_lit(value: u32, tokens: &[Token]) -> Box<Expression> {
+    Box::new(Expression::IntLiteral(IntLiteral::new(
+        value,
+        AstInfo::new(tokens),
+    )))
 }
 
 #[test]
@@ -27,7 +31,7 @@ fn idents() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("ab1", 0..3),
+        Identifier::new("ab1", &tokens[0..1]),
         "Identifier: {}",
         i
     );
@@ -38,7 +42,7 @@ fn idents() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("test_ident", 0..10),
+        Identifier::new("test_ident", &tokens[0..1]),
         "Identifier: {}",
         i
     );
@@ -49,7 +53,7 @@ fn idents() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("_a", 0..2),
+        Identifier::new("_a", &tokens[0..1]),
         "Identifier: {}",
         i
     );
@@ -108,7 +112,7 @@ fn expressions() {
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        E::IntLiteral(IntLiteral::new(1, 0..1)),
+        *int_lit(1, &tokens[0..1]),
         "Expression: {}",
         expr
     );
@@ -120,9 +124,9 @@ fn expressions() {
             .1,
         E::Binary(BinaryExpression {
             operator: Operator::Add,
-            lhs: int_lit(1, 0..1),
-            rhs: int_lit(2, 4..5),
-            range: 0..5,
+            lhs: int_lit(1, &tokens[0..1]),
+            rhs: int_lit(2, &tokens[2..3]),
+            info: AstInfo::new(&tokens[0..3]),
         }),
         "Expression: {}",
         expr
@@ -135,14 +139,14 @@ fn expressions() {
             .1,
         E::Binary(BinaryExpression {
             operator: Operator::Add,
-            lhs: int_lit(1, 0..1),
+            lhs: int_lit(1, &tokens[0..1]),
             rhs: Box::new(E::Binary(BinaryExpression {
                 operator: Operator::Mul,
-                lhs: int_lit(2, 4..5),
-                rhs: int_lit(3, 8..9),
-                range: 4..9,
+                lhs: int_lit(2, &tokens[2..3]),
+                rhs: int_lit(3, &tokens[4..5]),
+                info: AstInfo::new(&tokens[2..5]),
             })),
-            range: 0..9,
+            info: AstInfo::new(&tokens[..5]),
         }),
         "Expression: {}",
         expr
@@ -157,12 +161,12 @@ fn expressions() {
             operator: Operator::Add,
             lhs: Box::new(E::Binary(BinaryExpression {
                 operator: Operator::Div,
-                lhs: int_lit(1, 0..1),
-                rhs: int_lit(2, 4..5),
-                range: 0..5,
+                lhs: int_lit(1, &tokens[0..1]),
+                rhs: int_lit(2, &tokens[2..3]),
+                info: AstInfo::new(&tokens[0..3]),
             })),
-            rhs: int_lit(3, 8..9),
-            range: 0..9,
+            rhs: int_lit(3, &tokens[4..5]),
+            info: AstInfo::new(&tokens[..5]),
         }),
         "Expression: {}",
         expr
@@ -179,15 +183,15 @@ fn expressions() {
                 operator: Operator::Div,
                 lhs: Box::new(E::Binary(BinaryExpression {
                     operator: Operator::Mul,
-                    lhs: int_lit(1, 0..1),
-                    rhs: int_lit(2, 4..5),
-                    range: 0..5,
+                    lhs: int_lit(1, &tokens[0..1]),
+                    rhs: int_lit(2, &tokens[2..3]),
+                    info: AstInfo::new(&tokens[0..3]),
                 })),
-                rhs: int_lit(3, 8..9),
-                range: 0..9,
+                rhs: int_lit(3, &tokens[4..5]),
+                info: AstInfo::new(&tokens[0..5]),
             })),
-            rhs: int_lit(4, 12..13),
-            range: 0..13,
+            rhs: int_lit(4, &tokens[6..7]),
+            info: AstInfo::new(&tokens[..7]),
         }),
         "Expression: {}",
         expr
@@ -204,15 +208,15 @@ fn expressions() {
                 operator: Operator::Add,
                 lhs: Box::new(E::Binary(BinaryExpression {
                     operator: Operator::Sub,
-                    lhs: int_lit(1, 0..1),
-                    rhs: int_lit(2, 4..5),
-                    range: 0..5,
+                    lhs: int_lit(1, &tokens[0..1]),
+                    rhs: int_lit(2, &tokens[2..3]),
+                    info: AstInfo::new(&tokens[0..3]),
                 })),
-                rhs: int_lit(3, 8..9),
-                range: 0..9,
+                rhs: int_lit(3, &tokens[4..5]),
+                info: AstInfo::new(&tokens[0..5]),
             })),
-            rhs: int_lit(4, 12..13),
-            range: 0..13,
+            rhs: int_lit(4, &tokens[6..7]),
+            info: AstInfo::new(&tokens[..7]),
         }),
         "Expression: {}",
         expr
@@ -229,30 +233,30 @@ fn expressions() {
                 operator: Operator::Mul,
                 lhs: Box::new(E::Binary(BinaryExpression {
                     operator: Operator::Add,
-                    lhs: int_lit(1, 1..2),
-                    rhs: int_lit(2, 5..6),
-                    range: 1..6,
+                    lhs: int_lit(1, &tokens[1..2]),
+                    rhs: int_lit(2, &tokens[3..4]),
+                    info: AstInfo::new(&tokens[1..4]),
                 })),
-                rhs: int_lit(3, 10..11),
-                range: 1..11,
+                rhs: int_lit(3, &tokens[6..7]),
+                info: AstInfo::new(&tokens[0..7]),
             })),
             rhs: Box::new(Expression::Binary(BinaryExpression {
                 operator: Operator::Add,
-                lhs: int_lit(4, 14..15),
+                lhs: int_lit(4, &tokens[8..9]),
                 rhs: Box::new(E::Binary(BinaryExpression {
                     operator: Operator::Div,
                     lhs: Box::new(E::Binary(BinaryExpression {
                         operator: Operator::Mul,
-                        lhs: int_lit(5, 18..19),
-                        rhs: int_lit(6, 22..23),
-                        range: 18..23,
+                        lhs: int_lit(5, &tokens[10..11]),
+                        rhs: int_lit(6, &tokens[12..13]),
+                        info: AstInfo::new(&tokens[10..13]),
                     })),
-                    rhs: int_lit(6, 26..27),
-                    range: 18..27,
+                    rhs: int_lit(6, &tokens[14..15]),
+                    info: AstInfo::new(&tokens[10..15]),
                 })),
-                range: 14..27,
+                info: AstInfo::new(&tokens[8..15]),
             })),
-            range: 1..27,
+            info: AstInfo::new(&tokens[..15]),
         }),
         "Expression: {}",
         expr
@@ -278,10 +282,9 @@ fn type_declarations() {
             .unwrap()
             .1,
         TD {
-            type_kw: 0..4,
-            name: Some(Identifier::new("a", 5..6)),
-            type_expr: Some(TE::NamedType(Identifier::new("int", 9..12))),
-            range: 0..13,
+            name: Some(Identifier::new("a", &tokens[1..2])),
+            type_expr: Some(TE::NamedType(Identifier::new("int", &tokens[3..4]))),
+            info: AstInfo::new(&tokens[..5]),
         },
         "Declaration: {}",
         dec
@@ -294,22 +297,20 @@ fn type_declarations() {
             .unwrap()
             .1,
         TD {
-            type_kw: 0..4,
-            name: Some(Identifier::new("a", 5..6)),
+            name: Some(Identifier::new("a", &tokens[1..2])),
             type_expr: Some(TE::ArrayType {
-                array_kw: 9..14,
-                of_kw: Some(19..21),
                 size: Some(2),
                 base_type: Some(Box::new(TE::ArrayType {
-                    array_kw: 22..27,
-                    of_kw: Some(32..34),
                     size: Some(3),
-                    base_type: Some(Box::new(TE::NamedType(Identifier::new("int", 35..38)))),
-                    range: 22..38,
+                    base_type: Some(Box::new(TE::NamedType(Identifier::new(
+                        "int",
+                        &tokens[13..14]
+                    )))),
+                    info: AstInfo::new(&tokens[8..14]),
                 })),
-                range: 9..38,
+                info: AstInfo::new(&tokens[3..14]),
             }),
-            range: 0..39,
+            info: AstInfo::new(&tokens[..15]),
         },
         "Declaration: {}",
         dec
@@ -321,22 +322,17 @@ fn type_declarations() {
     assert_eq!(
         td,
         TD {
-            type_kw: 0..4,
             name: None,
             type_expr: Some(TE::ArrayType {
-                array_kw: 7..12,
-                of_kw: Some(16..18),
                 size: None,
                 base_type: Some(Box::new(TE::ArrayType {
-                    array_kw: 19..24,
-                    of_kw: Some(28..30),
                     size: None,
                     base_type: None,
-                    range: 19..30,
+                    info: AstInfo::new(&tokens[6..10]),
                 })),
-                range: 7..30,
+                info: AstInfo::new(&tokens[2..10]),
             }),
-            range: 0..31
+            info: AstInfo::new(&tokens[..11]),
         },
         "Declaration: {}",
         dec
@@ -375,9 +371,9 @@ fn assignments() {
     assert_eq!(
         assignment,
         Assignment {
-            variable: Variable::NamedVariable(Identifier::new("a", 0..1)),
-            expr: Some(Expression::IntLiteral(IntLiteral::new(1, 5..6))),
-            range: 0..7,
+            variable: Variable::NamedVariable(Identifier::new("a", &tokens[0..1])),
+            expr: Some(*int_lit(1, &tokens[2..3])),
+            info: AstInfo::new(&tokens[..4]),
         },
         "Assignment: {}",
         asgn
@@ -402,9 +398,9 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a", 0..1),
+            name: Identifier::new("a", &tokens[0..1]),
             arguments: Vec::new(),
-            range: 0..4,
+            info: AstInfo::new(&tokens[0..4]),
         },
         "CallStatement: {}",
         stmt
@@ -418,13 +414,13 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a", 0..1),
+            name: Identifier::new("a", &tokens[0..1]),
             arguments: vec![
-                Expression::IntLiteral(IntLiteral::new(1, 2..3)),
-                Expression::IntLiteral(IntLiteral::new(2, 5..6)),
-                Expression::IntLiteral(IntLiteral::new(3, 8..9)),
+                *int_lit(1, &tokens[2..3]),
+                *int_lit(2, &tokens[4..5]),
+                *int_lit(3, &tokens[6..7]),
             ],
-            range: 0..11,
+            info: AstInfo::new(&tokens[..9]),
         },
         "CallStatement: {}",
         stmt
@@ -438,9 +434,9 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a", 0..1),
-            arguments: vec![Expression::IntLiteral(IntLiteral::new(1, 2..3)),],
-            range: 0..5,
+            name: Identifier::new("a", &tokens[0..1]),
+            arguments: vec![*int_lit(1, &tokens[2..3])],
+            info: AstInfo::new(&tokens[..5]),
         },
         "CallStatement: {}",
         stmt
@@ -468,20 +464,18 @@ fn if_statements() {
     assert_eq!(
         is,
         IfStatement {
-            if_kw: 0..2,
             condition: Some(Expression::Binary(BinaryExpression {
                 operator: Operator::Equ,
-                lhs: int_lit(1, 4..5),
-                rhs: int_lit(2, 8..9),
-                range: 4..9,
+                lhs: int_lit(1, &tokens[2..3]),
+                rhs: int_lit(2, &tokens[4..5]),
+                info: AstInfo::new(&tokens[2..5]),
             })),
             if_branch: Some(Box::new(Statement::Block(BlockStatement {
                 statements: Vec::new(),
-                range: 11..13,
+                info: AstInfo::new(&tokens[6..8]),
             }))),
-            else_kw: None,
             else_branch: None,
-            range: 0..13,
+            info: AstInfo::new(&tokens[..8]),
         },
         "IfStatement: {}",
         stmt
@@ -496,42 +490,42 @@ fn acker() {
     let (input, program) = all_consuming(Program::parse)(tokens.to_tokens()).unwrap();
 
     // variables for use in assertion
-    let int_type = |range| Some(TypeExpression::NamedType(Identifier::new("int", range)));
-    let a = |range| Some(Identifier::new("a", range));
-    let i = |range| Some(Identifier::new("i", range));
-    let j = |range| Some(Identifier::new("j", range));
-    let k = |range| Some(Identifier::new("k", range));
-    let var_i = |range| {
+    let int_type = |tokens| Some(TypeExpression::NamedType(Identifier::new("int", tokens)));
+    let a = |tokens| Some(Identifier::new("a", tokens));
+    let i = |tokens| Some(Identifier::new("i", tokens));
+    let j = |tokens| Some(Identifier::new("j", tokens));
+    let k = |tokens| Some(Identifier::new("k", tokens));
+    let var_i = |tokens| {
         Box::new(Expression::Variable(Variable::NamedVariable(
-            Identifier::new("i", range),
+            Identifier::new("i", tokens),
         )))
     };
-    let var_a = |range| {
+    let var_a = |tokens| {
         Box::new(Expression::Variable(Variable::NamedVariable(
-            Identifier::new("a", range),
+            Identifier::new("a", tokens),
         )))
     };
-    let var_j = |range| {
+    let var_j = |tokens| {
         Box::new(Expression::Variable(Variable::NamedVariable(
-            Identifier::new("j", range),
+            Identifier::new("j", tokens),
         )))
     };
-    let var_k = |range| {
+    let var_k = |tokens| {
         Box::new(Expression::Variable(Variable::NamedVariable(
-            Identifier::new("k", range),
+            Identifier::new("k", tokens),
         )))
     };
     fn call_ackermann(
-        range_ident: Range<usize>,
-        range: Range<usize>,
+        ident_tokens: &[Token],
+        tokens: &[Token],
         arg0: Expression,
         arg1: Expression,
         arg2: Expression,
     ) -> Statement {
         Statement::Call(CallStatement {
-            name: Identifier::new("ackermann", range_ident),
+            name: Identifier::new("ackermann", ident_tokens),
             arguments: vec![arg0, arg1, arg2],
-            range,
+            info: AstInfo::new(tokens),
         })
     }
 
@@ -540,255 +534,276 @@ fn acker() {
         Program {
             global_declarations: vec![
                 GlobalDeclaration::Procedure(ProcedureDeclaration {
-                    proc_kw: 45..49,
-                    name: Some(Identifier::new("ackermann", 50..59)),
+                    name: Some(Identifier::new("ackermann", &tokens[0..0])),
                     parameters: vec![
                         ParameterDeclaration {
-                            ref_kw: None,
-                            name: i(60..61),
-                            type_expr: int_type(63..66),
-                            range: 60..66,
+                            is_ref: false,
+                            name: i(&tokens[0..0]),
+                            type_expr: int_type(&tokens[0..0]),
+                            info: AstInfo::new(&tokens[0..0]),
                         },
                         ParameterDeclaration {
-                            ref_kw: None,
-                            name: j(68..69),
-                            type_expr: int_type(71..74),
-                            range: 68..74,
+                            is_ref: false,
+                            name: j(&tokens[0..0]),
+                            type_expr: int_type(&tokens[0..0]),
+                            info: AstInfo::new(&tokens[0..0]),
                         },
                         ParameterDeclaration {
-                            ref_kw: Some(76..79),
-                            name: k(80..81),
-                            type_expr: int_type(83..86),
-                            range: 76..86,
+                            is_ref: false,
+                            name: k(&tokens[0..0]),
+                            type_expr: int_type(&tokens[0..0]),
+                            info: AstInfo::new(&tokens[0..0]),
                         },
                     ],
                     variable_declarations: vec![VariableDeclaration {
-                        var_kw: 92..95,
-                        name: a(96..97),
-                        type_expr: int_type(99..102),
-                        range: 92..103,
+                        name: a(&tokens[0..0]),
+                        type_expr: int_type(&tokens[0..0]),
+                        info: AstInfo::new(&tokens[0..0]),
                     }],
                     statements: vec![Statement::If(IfStatement {
-                        if_kw: 107..109,
                         condition: Some(Expression::Binary(BinaryExpression {
                             operator: Operator::Equ,
-                            lhs: var_i(111..112),
-                            rhs: int_lit(0, 115..116),
-                            range: 111..116,
+                            lhs: var_i(&tokens[0..0]),
+                            rhs: int_lit(0, &tokens[0..0]),
+                            info: AstInfo::new(&tokens[0..0]),
                         })),
                         if_branch: Some(Box::new(Statement::Block(BlockStatement {
                             statements: vec![Statement::Assignment(Assignment {
-                                variable: Variable::NamedVariable(Identifier::new("k", 124..125)),
+                                variable: Variable::NamedVariable(Identifier::new(
+                                    "k",
+                                    &tokens[0..0]
+                                )),
                                 expr: Some(Expression::Binary(BinaryExpression {
                                     operator: Operator::Add,
-                                    lhs: var_j(129..130),
-                                    rhs: int_lit(1, 133..134),
-                                    range: 129..134,
+                                    lhs: var_j(&tokens[0..0]),
+                                    rhs: int_lit(1, &tokens[0..0]),
+                                    info: AstInfo::new(&tokens[0..0]),
                                 })),
-                                range: 124..135,
+                                info: AstInfo::new(&tokens[0..0]),
                             })],
-                            range: 118..139,
+                            info: AstInfo::new(&tokens[0..0]),
                         }))),
-                        else_kw: Some(140..144),
                         else_branch: Some(Box::new(Statement::Block(BlockStatement {
                             statements: vec![Statement::If(IfStatement {
-                                if_kw: 151..153,
                                 condition: Some(Expression::Binary(BinaryExpression {
                                     operator: Operator::Equ,
-                                    lhs: var_j(155..156),
-                                    rhs: int_lit(0, 159..160),
-                                    range: 155..160,
+                                    lhs: var_j(&tokens[0..0]),
+                                    rhs: int_lit(0, &tokens[0..0]),
+                                    info: AstInfo::new(&tokens[0..0]),
                                 })),
                                 if_branch: Some(Box::new(Statement::Block(BlockStatement {
                                     statements: vec![call_ackermann(
-                                        170..179,
-                                        170..193,
+                                        &tokens[0..0],
+                                        &tokens[0..0],
                                         Expression::Binary(BinaryExpression {
                                             operator: Operator::Sub,
-                                            lhs: var_i(180..181),
-                                            rhs: int_lit(1, 184..185),
-                                            range: 180..185,
+                                            lhs: var_i(&tokens[0..0]),
+                                            rhs: int_lit(1, &tokens[0..0]),
+                                            info: AstInfo::new(&tokens[0..0]),
                                         }),
-                                        Expression::IntLiteral(IntLiteral::new(1, 187..188)),
-                                        *var_k(190..191)
+                                        Expression::IntLiteral(IntLiteral::new(
+                                            1,
+                                            AstInfo::new(&tokens[0..0])
+                                        )),
+                                        *var_k(&tokens[0..0])
                                     )],
-                                    range: 162..199,
+                                    info: AstInfo::new(&tokens[0..0]),
                                 }))),
-                                else_kw: Some(200..204),
                                 else_branch: Some(Box::new(Statement::Block(BlockStatement {
                                     statements: vec![
                                         call_ackermann(
-                                            213..222,
-                                            213..236,
-                                            *var_i(223..224),
+                                            &tokens[0..0],
+                                            &tokens[0..0],
+                                            *var_i(&tokens[0..0]),
                                             Expression::Binary(BinaryExpression {
                                                 operator: Operator::Sub,
-                                                lhs: var_j(226..227),
-                                                rhs: int_lit(1, 230..231),
-                                                range: 226..231,
+                                                lhs: var_j(&tokens[0..0]),
+                                                rhs: int_lit(1, &tokens[0..0]),
+                                                info: AstInfo::new(&tokens[0..0]),
                                             }),
-                                            *var_a(233..234)
+                                            *var_a(&tokens[0..0])
                                         ),
                                         call_ackermann(
-                                            243..252,
-                                            243..266,
+                                            &tokens[0..0],
+                                            &tokens[0..0],
                                             Expression::Binary(BinaryExpression {
                                                 operator: Operator::Sub,
-                                                lhs: var_i(253..254),
-                                                rhs: int_lit(1, 257..258),
-                                                range: 253..258,
+                                                lhs: var_i(&tokens[0..0]),
+                                                rhs: int_lit(1, &tokens[0..0]),
+                                                info: AstInfo::new(&tokens[0..0]),
                                             }),
-                                            *var_a(260..261),
-                                            *var_k(263..264)
+                                            *var_a(&tokens[0..0]),
+                                            *var_k(&tokens[0..0])
                                         )
                                     ],
-                                    range: 205..272,
+                                    info: AstInfo::new(&tokens[0..0]),
                                 }))),
 
-                                range: 151..272,
+                                info: AstInfo::new(&tokens[0..0]),
                             })],
-                            range: 145..276,
+                            info: AstInfo::new(&tokens[0..0]),
                         }))),
-                        range: 107..276,
+                        info: AstInfo::new(&tokens[0..0]),
                     })],
-                    range: 45..278,
+                    info: AstInfo::new(&tokens[0..0]),
                 }),
                 GlobalDeclaration::Procedure(ProcedureDeclaration {
-                    proc_kw: 281..285,
-                    name: Some(Identifier::new("main", 286..290)),
+                    name: Some(Identifier::new("main", &tokens[0..0])),
                     parameters: Vec::new(),
                     variable_declarations: vec![
                         VariableDeclaration {
-                            var_kw: 297..300,
-                            name: i(301..302),
-                            type_expr: int_type(304..307),
-                            range: 297..308,
+                            name: i(&tokens[0..0]),
+                            type_expr: int_type(&tokens[0..0]),
+                            info: AstInfo::new(&tokens[0..0]),
                         },
                         VariableDeclaration {
-                            var_kw: 311..314,
-                            name: j(315..316),
-                            type_expr: int_type(318..321),
-                            range: 311..322,
+                            name: j(&tokens[0..0]),
+                            type_expr: int_type(&tokens[0..0]),
+                            info: AstInfo::new(&tokens[0..0]),
                         },
                         VariableDeclaration {
-                            var_kw: 325..328,
-                            name: k(329..330),
-                            type_expr: int_type(332..335),
-                            range: 325..336,
+                            name: k(&tokens[0..0]),
+                            type_expr: int_type(&tokens[0..0]),
+                            info: AstInfo::new(&tokens[0..0]),
                         }
                     ],
                     statements: vec![
                         Statement::Assignment(Assignment {
-                            variable: Variable::NamedVariable(Identifier::new("i", 340..341)),
-                            expr: Some(*int_lit(0, 345..346).clone()),
-                            range: 340..347,
+                            variable: Variable::NamedVariable(Identifier::new("i", &tokens[0..0])),
+                            expr: Some(*int_lit(0, &tokens[0..0]).clone()),
+                            info: AstInfo::new(&tokens[0..0]),
                         }),
                         Statement::While(WhileStatement {
-                            while_kw: 350..355,
                             condition: Some(Expression::Binary(BinaryExpression {
                                 operator: Operator::Lse,
-                                lhs: var_i(357..358),
-                                rhs: int_lit(3, 362..363),
-                                range: 357..363,
+                                lhs: var_i(&tokens[0..0]),
+                                rhs: int_lit(3, &tokens[0..0]),
+                                info: AstInfo::new(&tokens[0..0]),
                             })),
                             statement: Some(Box::new(Statement::Block(BlockStatement {
                                 statements: vec![
                                     Statement::Assignment(Assignment {
                                         variable: Variable::NamedVariable(Identifier::new(
                                             "j",
-                                            371..372
+                                            &tokens[0..0],
                                         )),
-                                        expr: Some(*int_lit(0, 376..377)),
-                                        range: 371..378,
+                                        expr: Some(*int_lit(0, &tokens[0..0])),
+                                        info: AstInfo::new(&tokens[0..0]),
                                     }),
                                     Statement::While(WhileStatement {
-                                        while_kw: 383..388,
                                         condition: Some(Expression::Binary(BinaryExpression {
                                             operator: Operator::Lse,
-                                            lhs: var_j(390..391),
-                                            rhs: int_lit(6, 395..396),
-                                            range: 390..396,
+                                            lhs: var_j(&tokens[0..0]),
+                                            rhs: int_lit(6, &tokens[0..0]),
+                                            info: AstInfo::new(&tokens[0..0]),
                                         })),
                                         statement: Some(Box::new(Statement::Block(
                                             BlockStatement {
                                                 statements: vec![
                                                     call_ackermann(
-                                                        406..415,
-                                                        406..425,
-                                                        *var_i(416..417),
-                                                        *var_j(419..420),
-                                                        *var_k(422..423)
+                                                        &tokens[0..0],
+                                                        &tokens[0..0],
+                                                        *var_i(&tokens[0..0]),
+                                                        *var_j(&tokens[0..0]),
+                                                        *var_k(&tokens[0..0])
                                                     ),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printi", 432..438),
-                                                        arguments: vec![*var_i(439..440)],
-                                                        range: 432..442,
+                                                        name: Identifier::new(
+                                                            "printi",
+                                                            &tokens[0..0]
+                                                        ),
+                                                        arguments: vec![*var_i(&tokens[0..0])],
+                                                        info: AstInfo::new(&tokens[0..0]),
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printc", 449..455),
-                                                        arguments: vec![*int_lit(32, 456..459)],
-                                                        range: 449..461,
+                                                        name: Identifier::new(
+                                                            "printc",
+                                                            &tokens[0..0]
+                                                        ),
+                                                        arguments: vec![*int_lit(
+                                                            32,
+                                                            &tokens[0..0]
+                                                        )],
+                                                        info: AstInfo::new(&tokens[0..0]),
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printi", 468..474),
-                                                        arguments: vec![*var_j(475..476)],
-                                                        range: 468..478,
+                                                        name: Identifier::new(
+                                                            "printi",
+                                                            &tokens[0..0]
+                                                        ),
+                                                        arguments: vec![*var_j(&tokens[0..0])],
+                                                        info: AstInfo::new(&tokens[0..0]),
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printc", 485..491),
-                                                        arguments: vec![*int_lit(32, 492..495)],
-                                                        range: 485..497,
+                                                        name: Identifier::new(
+                                                            "printc",
+                                                            &tokens[0..0]
+                                                        ),
+                                                        arguments: vec![*int_lit(
+                                                            32,
+                                                            &tokens[0..0]
+                                                        )],
+                                                        info: AstInfo::new(&tokens[0..0]),
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printi", 504..510),
-                                                        arguments: vec![*var_k(511..512)],
-                                                        range: 504..514,
+                                                        name: Identifier::new(
+                                                            "printi",
+                                                            &tokens[0..0]
+                                                        ),
+                                                        arguments: vec![*var_k(&tokens[0..0])],
+                                                        info: AstInfo::new(&tokens[0..0]),
                                                     }),
                                                     Statement::Call(CallStatement {
-                                                        name: Identifier::new("printc", 521..527),
-                                                        arguments: vec![*int_lit(10, 528..532)],
-                                                        range: 521..534,
+                                                        name: Identifier::new(
+                                                            "printc",
+                                                            &tokens[0..0]
+                                                        ),
+                                                        arguments: vec![*int_lit(
+                                                            10,
+                                                            &tokens[0..0]
+                                                        )],
+                                                        info: AstInfo::new(&tokens[0..0]),
                                                     }),
                                                     Statement::Assignment(Assignment {
                                                         variable: Variable::NamedVariable(
-                                                            Identifier::new("j", 541..542)
+                                                            Identifier::new("j", &tokens[0..0])
                                                         ),
                                                         expr: Some(Expression::Binary(
                                                             BinaryExpression {
                                                                 operator: Operator::Add,
-                                                                lhs: var_j(546..547),
-                                                                rhs: int_lit(1, 550..551),
-                                                                range: 546..551,
+                                                                lhs: var_j(&tokens[0..0]),
+                                                                rhs: int_lit(1, &tokens[0..0]),
+                                                                info: AstInfo::new(&tokens[0..0]),
                                                             }
                                                         )),
-                                                        range: 541..552,
+                                                        info: AstInfo::new(&tokens[0..0]),
                                                     })
                                                 ],
-                                                range: 398..558,
+                                                info: AstInfo::new(&tokens[0..0]),
                                             }
                                         ))),
-                                        range: 383..558,
+                                        info: AstInfo::new(&tokens[0..0]),
                                     }),
                                     Statement::Assignment(Assignment {
                                         variable: Variable::NamedVariable(Identifier::new(
                                             "i",
-                                            563..564
+                                            &tokens[0..0],
                                         )),
                                         expr: Some(Expression::Binary(BinaryExpression {
                                             operator: Operator::Add,
-                                            lhs: var_i(568..569),
-                                            rhs: int_lit(1, 572..573),
-                                            range: 568..573,
+                                            lhs: var_i(&tokens[0..0]),
+                                            rhs: int_lit(1, &tokens[0..0]),
+                                            info: AstInfo::new(&tokens[0..0]),
                                         })),
-                                        range: 563..574,
+                                        info: AstInfo::new(&tokens[0..0]),
                                     })
                                 ],
-                                range: 365..578,
+                                info: AstInfo::new(&tokens[0..0]),
                             }))),
-                            range: 350..578,
+                            info: AstInfo::new(&tokens[0..0]),
                         })
                     ],
-                    range: 281..582,
+                    info: AstInfo::new(&tokens[0..0]),
                 }),
             ],
         },

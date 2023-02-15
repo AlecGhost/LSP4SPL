@@ -10,6 +10,7 @@ use spl_frontend::{
         Expression, GlobalDeclaration, Identifier, Program, Statement, TypeExpression, Variable,
     },
     table::{Entry, LookupTable, SymbolTable, Table},
+    ToRange,
 };
 use std::collections::HashMap;
 use tokio::sync::mpsc::Sender;
@@ -21,13 +22,11 @@ pub(crate) async fn rename(
     let doc_params = params.text_document_position;
     let uri = doc_params.text_document.uri.clone();
     let new_name = params.new_name;
-    if let Some(DocumentCursor {
-        doc_info,
-        index,
-        context,
-    }) = super::doc_cursor(doc_params, doctx).await?
-    {
-        if let Some(ident) = doc_info.ast.ident_at(index) {
+    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
+        if let Some(ident) = &cursor.ident() {
+            let DocumentCursor {
+                doc_info, context, ..
+            } = cursor;
             if let Some(ranged_entry) = context {
                 let idents = find_referenced_idents(
                     ident,
@@ -40,7 +39,7 @@ pub(crate) async fn rename(
                 let text_edits = idents
                     .into_iter()
                     .map(|ident| TextEdit {
-                        range: convert_range(&ident.range, &doc_info.text),
+                        range: convert_range(&ident.to_range(), &doc_info.text),
                         new_text: new_name.clone(),
                     })
                     .collect();
@@ -58,12 +57,10 @@ pub(crate) async fn prepare_rename(
     doctx: Sender<DocumentRequest>,
     params: TextDocumentPositionParams,
 ) -> Result<Option<Range>> {
-    if let Some(DocumentCursor {
-        doc_info, index, ..
-    }) = super::doc_cursor(params, doctx).await?
-    {
-        if let Some(ident) = doc_info.ast.ident_at(index) {
-            return Ok(Some(convert_range(&ident.range, &doc_info.text)));
+    if let Some(cursor) = super::doc_cursor(params, doctx).await? {
+        if let Some(ident) = &cursor.ident() {
+            let text = cursor.doc_info.text;
+            return Ok(Some(convert_range(&ident.to_range(), &text)));
         }
     }
     Ok(None)
@@ -75,13 +72,11 @@ pub(crate) async fn find(
 ) -> Result<Option<Vec<Location>>> {
     let doc_params = params.text_document_position;
     let uri = doc_params.text_document.uri.clone();
-    if let Some(DocumentCursor {
-        doc_info,
-        index,
-        context,
-    }) = super::doc_cursor(doc_params, doctx).await?
-    {
-        if let Some(ident) = doc_info.ast.ident_at(index) {
+    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
+        if let Some(ident) = &cursor.ident() {
+            let DocumentCursor {
+                doc_info, context, ..
+            } = cursor;
             if let Some(ranged_entry) = context {
                 let idents = find_referenced_idents(
                     ident,
@@ -94,7 +89,7 @@ pub(crate) async fn find(
                     .filter(|i| i != ident)
                     .map(|i| Location {
                         uri: uri.clone(),
-                        range: convert_range(&i.range, &doc_info.text),
+                        range: convert_range(&i.to_range(), &doc_info.text),
                     })
                     .collect();
                 return Ok(Some(references));

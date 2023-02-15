@@ -5,7 +5,10 @@ use lsp_types::{
     request::{GotoDeclarationParams, GotoImplementationParams, GotoTypeDefinitionParams},
     GotoDefinitionParams, Location,
 };
-use spl_frontend::table::{DataType, Entry, LookupTable, Table};
+use spl_frontend::{
+    table::{DataType, Entry, LookupTable, Table},
+    ToRange,
+};
 use tokio::sync::mpsc::Sender;
 
 pub(crate) async fn declaration(
@@ -14,20 +17,18 @@ pub(crate) async fn declaration(
 ) -> Result<Option<Location>> {
     let doc_params = params.text_document_position_params;
     let uri = doc_params.text_document.uri.clone();
-    if let Some(DocumentCursor {
-        doc_info,
-        index,
-        context,
-    }) = super::doc_cursor(doc_params, doctx).await?
-    {
-        if let Some(ident) = doc_info.ast.ident_at(index) {
+    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
+        if let Some(ident) = &cursor.ident() {
+            let DocumentCursor {
+                doc_info, context, ..
+            } = cursor;
             if let Some(ranged_entry) = context {
                 match &ranged_entry.entry {
                     Entry::Type(_) => {
                         if let Some((key, _)) = doc_info.table.entry(ident) {
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(&key.range, &doc_info.text),
+                                range: convert_range(&key.to_range(), &doc_info.text),
                             }));
                         }
                     }
@@ -39,7 +40,7 @@ pub(crate) async fn declaration(
                         if let Some((key, _)) = lookup_table.entry(ident) {
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(&key.range, &doc_info.text),
+                                range: convert_range(&key.to_range(), &doc_info.text),
                             }));
                         }
                     }
@@ -69,13 +70,11 @@ pub(crate) async fn type_definition(
 ) -> Result<Option<Location>> {
     let doc_params = params.text_document_position_params;
     let uri = doc_params.text_document.uri.clone();
-    if let Some(DocumentCursor {
-        doc_info,
-        index,
-        context,
-    }) = super::doc_cursor(doc_params, doctx).await?
-    {
-        if let Some(ident) = doc_info.ast.ident_at(index) {
+    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
+        if let Some(ident) = &cursor.ident() {
+            let DocumentCursor {
+                doc_info, context, ..
+            } = cursor;
             if let Some(ranged_entry) = context {
                 match &ranged_entry.entry {
                     Entry::Type(_) => {
@@ -84,7 +83,7 @@ pub(crate) async fn type_definition(
                                 Entry::Type(_) => {
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(&key.range, &doc_info.text),
+                                        range: convert_range(&key.to_range(), &doc_info.text),
                                     }));
                                 }
                                 Entry::Procedure(_) => { /* no type definition */ }
@@ -105,7 +104,7 @@ pub(crate) async fn type_definition(
                                 Entry::Type(_) => {
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(&key.range, &doc_info.text),
+                                        range: convert_range(&key.to_range(), &doc_info.text),
                                     }));
                                 }
                                 Entry::Procedure(_) => { /* no type definition */ }
@@ -113,7 +112,10 @@ pub(crate) async fn type_definition(
                                     if let Some(DataType::Array { creator, .. }) = &v.data_type {
                                         return Ok(Some(Location {
                                             uri,
-                                            range: convert_range(&creator.range, &doc_info.text),
+                                            range: convert_range(
+                                                &creator.to_range(),
+                                                &doc_info.text,
+                                            ),
                                         }));
                                     }
                                     /* cannot look up primitive types */
@@ -139,13 +141,11 @@ pub(crate) async fn implementation(
 ) -> Result<Option<Location>> {
     let doc_params = params.text_document_position_params;
     let uri = doc_params.text_document.uri.clone();
-    if let Some(DocumentCursor {
-        doc_info,
-        index,
-        context,
-    }) = super::doc_cursor(doc_params, doctx).await?
-    {
-        if let Some(ident) = doc_info.ast.ident_at(index) {
+    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
+        if let Some(ident) = &cursor.ident() {
+            let DocumentCursor {
+                doc_info, context, ..
+            } = cursor;
             if let Some(ranged_entry) = context {
                 match &ranged_entry.entry {
                     Entry::Procedure(p) => {
@@ -157,7 +157,7 @@ pub(crate) async fn implementation(
                             if let Entry::Procedure(_) = ranged_entry.entry {
                                 return Ok(Some(Location {
                                     uri,
-                                    range: convert_range(&key.range, &doc_info.text),
+                                    range: convert_range(&key.to_range(), &doc_info.text),
                                 }));
                             }
                             /* no implementation for types and variables */

@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::ops::Range;
 use thiserror::Error;
-use crate::ast::Identifier;
+use crate::{ast::Identifier, ToRange};
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("{1}")]
@@ -13,7 +13,7 @@ impl Identifier {
         M: Fn(String) -> T,
         T: ToString,
     {
-        SplError(self.range.clone(), msg(self.value.clone()).to_string())
+        SplError(self.info.tokens.to_range(), msg(self.value.clone()).to_string())
     }
 }
 

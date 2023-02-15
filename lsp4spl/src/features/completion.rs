@@ -3,6 +3,7 @@ use color_eyre::eyre::Result;
 use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams};
 use spl_frontend::{
     ast::{GlobalDeclaration, Statement},
+    lexer::token::TokenType,
     table::{Entry, SymbolTable},
     ToRange,
 };
@@ -53,17 +54,17 @@ pub(crate) async fn completion(
                             let local_table = &entry.local_table;
                             let global_table = &cursor.doc_info.table;
                             let body_start = if let Some(vd) = p.variable_declarations.first() {
-                                vd.range.start
+                                vd.to_range().start
                             } else if let Some(stmt) = p.statements.first() {
                                 stmt.to_range().start
                             } else {
-                                p.range.end
+                                p.to_range().end
                             };
                             if index < body_start {
                                 if let Some(param) = p
                                     .parameters
                                     .iter()
-                                    .find(|param| param.range.contains(&index))
+                                    .find(|param| param.to_range().contains(&index))
                                 {
                                     if param.type_expr.is_none() {
                                         let completions = search_types(global_table);
@@ -73,7 +74,7 @@ pub(crate) async fn completion(
                             } else if let Some(vd) = p
                                 .variable_declarations
                                 .iter()
-                                .find(|vd| vd.range.contains(&index))
+                                .find(|vd| vd.to_range().contains(&index))
                             {
                                 if vd.type_expr.is_none() {
                                     let completions = search_types(global_table);
@@ -126,10 +127,14 @@ pub(crate) async fn completion(
                                         If(i) => {
                                             let body_start = if let Some(stmt) = &i.if_branch {
                                                 stmt.to_range().start
-                                            } else if let Some(range) = &i.else_kw {
-                                                range.start
+                                            } else if let Some(else_token) =
+                                                &i.info.tokens.iter().find(|token| {
+                                                    matches!(token.token_type, TokenType::Else)
+                                                })
+                                            {
+                                                else_token.range.start
                                             } else {
-                                                i.range.end
+                                                i.to_range().end
                                             };
                                             if index < body_start {
                                                 let completions = search_variables(local_table);
@@ -200,7 +205,7 @@ pub(crate) async fn completion(
                                             let body_start = if let Some(stmt) = &w.statement {
                                                 stmt.to_range().start
                                             } else {
-                                                w.range.end
+                                                w.to_range().end
                                             };
                                             if index < body_start {
                                                 let completions = search_variables(local_table);

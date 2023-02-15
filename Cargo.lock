@@ -630,8 +630,17 @@ dependencies = [
  "nom",
  "nom_locate",
  "pretty_assertions",
+ "spl_frontend_macros",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "spl_frontend_macros"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]

@@ -3,6 +3,7 @@
 members = [
     "lsp4spl",
     "spl_frontend",
+    "spl_frontend/spl_frontend_macros",
 ]
 
 [workspace.package]

@@ -1,7 +1,7 @@
 use crate::document::{convert_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{FoldingRange, FoldingRangeKind, FoldingRangeParams};
-use spl_frontend::ast::GlobalDeclaration;
+use spl_frontend::{ast::GlobalDeclaration, ToRange};
 use tokio::sync::mpsc::Sender;
 
 pub(crate) async fn fold(
@@ -19,7 +19,7 @@ pub(crate) async fn fold(
                 _ => None,
             })
             .map(|p| {
-                let range = convert_range(&p.range, &doc_info.text);
+                let range = convert_range(&p.to_range(), &doc_info.text);
                 FoldingRange {
                     start_line: range.start.line,
                     end_line: range.end.line,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::{ast::*, error::SplError};
+use crate::{ast::*, error::SplError, ToRange};
 
 #[cfg(test)]
 mod tests;
@@ -29,7 +29,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
                 if let Entry::Procedure(main) = &ranged_entry.entry {
                     if !main.parameters.is_empty() {
                         broker.report_error(SplError(
-                            main.name.range.clone(),
+                            main.name.to_range(),
                             BuildErrorMessage::MainMustNotHaveParameters.to_string(),
                         ));
                     }
@@ -59,7 +59,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
         if let Some(name) = &self.name {
             if name.value == "main" {
                 broker.report_error(SplError(
-                    name.range.clone(),
+                    name.to_range(),
                     BuildErrorMessage::MainIsNotAProcedure.to_string(),
                 ));
                 return;
@@ -67,7 +67,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
             table.enter(
                 name.clone(),
                 RangedEntry {
-                    range: self.range.clone(),
+                    range: self.to_range(),
                     entry: Entry::Type(get_data_type(
                         &self.type_expr,
                         &self.name,
@@ -101,7 +101,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
             table.enter(
                 name.clone(),
                 RangedEntry {
-                    range: self.range.clone(),
+                    range: self.to_range(),
                     entry: Entry::Procedure(entry),
                 },
                 || {
@@ -120,7 +120,7 @@ fn build_parameter<B: DiagnosticsBroker>(
 ) -> VariableEntry {
     let param_entry = VariableEntry {
         name: param.name.clone(),
-        is_ref: param.ref_kw.is_some(),
+        is_ref: param.is_ref,
         data_type: get_data_type(&param.type_expr, &param.name, global_table, broker.clone()),
     };
     if let Some(name) = &param.name {
@@ -132,7 +132,7 @@ fn build_parameter<B: DiagnosticsBroker>(
         local_table.enter(
             name.clone(),
             RangedEntry {
-                range: param.range.clone(),
+                range: param.to_range(),
                 entry: Entry::Variable(param_entry.clone()),
             },
             || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter)),
@@ -164,7 +164,7 @@ fn build_variable<B: DiagnosticsBroker>(
         local_table.enter(
             name.clone(),
             RangedEntry {
-                range: var.range.clone(),
+                range: var.to_range(),
                 entry: Entry::Variable(entry),
             },
             || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable)),

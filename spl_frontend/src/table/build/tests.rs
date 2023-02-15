@@ -1,3 +1,4 @@
+use crate::lexer::token::Token;
 use crate::{
     ast::Identifier,
     error::SplError,
@@ -10,22 +11,22 @@ use crate::{
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 
-fn test(src: &str) -> (SymbolTable, LocalBroker) {
+fn test(src: &str) -> (SymbolTable, Vec<Token>, LocalBroker) {
     eprintln!("Testing: {}", src);
     let tokens = crate::lexer::lex(src);
     let program = crate::parser::parse(&tokens, LocalBroker::default());
     let broker = LocalBroker::default();
     let table = crate::table::build(&program, broker.clone());
-    (table, broker)
+    (table, tokens, broker)
 }
 
 #[test]
 fn type_decs() {
-    let (table, broker) = test("type a = int;");
+    let (table, tokens, broker) = test("type a = int;");
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("a", 5..6),
+            Identifier::new("a", &tokens[1..2]),
             RangedEntry {
                 range: 0..13,
                 entry: Entry::Type(Some(DataType::Int)),
@@ -37,17 +38,17 @@ fn type_decs() {
         vec![SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())]
     );
 
-    let (table, broker) = test("type a = array [5] of int");
+    let (table, tokens, broker) = test("type a = array [5] of int");
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("a", 5..6),
+            Identifier::new("a", &tokens[1..2]),
             RangedEntry {
                 range: 0..25,
                 entry: Entry::Type(Some(DataType::Array {
                     size: 5,
                     base_type: Box::new(DataType::Int),
-                    creator: Identifier::new("a", 5..6),
+                    creator: Identifier::new("a", &tokens[1..2]),
                 })),
             }
         )])
@@ -57,11 +58,11 @@ fn type_decs() {
         vec![SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())]
     );
 
-    let (table, broker) = test("type a = bool;");
+    let (table, tokens, broker) = test("type a = bool;");
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("a", 5..6),
+            Identifier::new("a", &tokens[1..2]),
             RangedEntry {
                 range: 0..14,
                 entry: Entry::Type(None),
@@ -82,15 +83,15 @@ fn type_decs() {
 
 #[test]
 fn test_main() {
-    let (table, broker) = test("proc main() {}");
+    let (table, tokens, broker) = test("proc main() {}");
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("main", 5..9),
+            Identifier::new("main", &tokens[1..2]),
             RangedEntry {
                 range: 0..14,
                 entry: Entry::Procedure(ProcedureEntry {
-                    name: Identifier::new("main", 5..9),
+                    name: Identifier::new("main", &tokens[1..2]),
                     local_table: SymbolTable::new(),
                     parameters: Vec::new(),
                 }),
@@ -99,14 +100,14 @@ fn test_main() {
     );
     assert_eq!(broker.errors(), Vec::new());
 
-    let (table, broker) = test("");
+    let (table, _, broker) = test("");
     assert_eq!(table, SymbolTable::initialized());
     assert_eq!(
         broker.errors(),
         vec![SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())]
     );
 
-    let (table, broker) = test("type main = int;");
+    let (table, _, broker) = test("type main = int;");
     assert_eq!(table, SymbolTable::initialized());
     assert_eq!(
         broker.errors(),
@@ -116,15 +117,15 @@ fn test_main() {
         ]
     );
 
-    let (table, broker) = test("type main = int; proc main() {}");
+    let (table, tokens, broker) = test("type main = int; proc main() {}");
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("main", 22..26),
+            Identifier::new("main", &tokens[6..7]),
             RangedEntry {
                 range: 17..31,
                 entry: Entry::Procedure(ProcedureEntry {
-                    name: Identifier::new("main", 22..26),
+                    name: Identifier::new("main", &tokens[6..7]),
                     local_table: SymbolTable::new(),
                     parameters: Vec::new(),
                 }),
@@ -139,22 +140,22 @@ fn test_main() {
         ),]
     );
 
-    let (table, broker) = test("proc main(a: int) {}");
+    let (table, tokens, broker) = test("proc main(a: int) {}");
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("main", 5..9),
+            Identifier::new("main", &tokens[1..2]),
             RangedEntry {
                 range: 0..20,
                 entry: Entry::Procedure(ProcedureEntry {
-                    name: Identifier::new("main", 5..9),
+                    name: Identifier::new("main", &tokens[1..2]),
                     local_table: SymbolTable {
                         entries: HashMap::from([(
-                            Identifier::new("a", 10..11),
+                            Identifier::new("a", &tokens[3..4]),
                             RangedEntry {
                                 range: 10..16,
                                 entry: Entry::Variable(VariableEntry {
-                                    name: Some(Identifier::new("a", 10..11)),
+                                    name: Some(Identifier::new("a", &tokens[3..4])),
                                     is_ref: false,
                                     data_type: Some(DataType::Int)
                                 }),
@@ -162,7 +163,7 @@ fn test_main() {
                         )])
                     },
                     parameters: vec![VariableEntry {
-                        name: Some(Identifier::new("a", 10..11)),
+                        name: Some(Identifier::new("a", &tokens[3..4])),
                         is_ref: false,
                         data_type: Some(DataType::Int)
                     }],
@@ -181,7 +182,7 @@ fn test_main() {
 
 #[test]
 fn redeclaration() {
-    let (_, broker) = test("type a = int; proc a() {}");
+    let (_, _, broker) = test("type a = int; proc a() {}");
     assert_eq!(
         broker.errors(),
         vec![
@@ -193,7 +194,7 @@ fn redeclaration() {
         ]
     );
 
-    let (_, broker) = test("proc a() {}\ntype a = int; ");
+    let (_, _, broker) = test("proc a() {}\ntype a = int; ");
     assert_eq!(
         broker.errors(),
         vec![
@@ -205,7 +206,7 @@ fn redeclaration() {
         ]
     );
 
-    let (_, broker) = test("proc a(i: int, i: int) {}");
+    let (_, _, broker) = test("proc a(i: int, i: int) {}");
     assert_eq!(
         broker.errors(),
         vec![
@@ -217,7 +218,7 @@ fn redeclaration() {
         ]
     );
 
-    let (_, broker) = test(
+    let (_, _, broker) = test(
         "proc main() {
             var i: int;
             var i: int;

@@ -1,7 +1,7 @@
 use crate::document::{convert_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind, Range};
-use spl_frontend::table::{Entry, LookupTable, Table};
+use spl_frontend::{table::{Entry, LookupTable, Table}, ToRange};
 use tokio::sync::mpsc::Sender;
 
 use super::DocumentCursor;
@@ -21,20 +21,17 @@ pub(crate) async fn hover(
     params: HoverParams,
 ) -> Result<Option<Hover>> {
     let doc_params = params.text_document_position_params;
-    if let Some(DocumentCursor {
-        doc_info,
-        index,
-        context,
-    }) = super::doc_cursor(doc_params, doctx).await?
+    if let Some(cursor) = super::doc_cursor(doc_params, doctx).await?
     {
-        if let Some(ident) = doc_info.ast.ident_at(index) {
+        if let Some(ident) = &cursor.ident() {
+            let DocumentCursor { doc_info, context, .. } = cursor;
             if let Some(ranged_entry) = context {
                 match &ranged_entry.entry {
                     Entry::Type(_) => {
                         if let Some(ranged_entry) = doc_info.table.lookup(ident) {
                             return Ok(Some(create_hover(
                                 &ranged_entry.entry,
-                                convert_range(&ident.range, &doc_info.text),
+                                convert_range(&ident.to_range(), &doc_info.text),
                             )));
                         }
                     }
@@ -46,7 +43,7 @@ pub(crate) async fn hover(
                         if let Some(ranged_entry) = lookup_table.lookup(ident) {
                             return Ok(Some(create_hover(
                                 &ranged_entry.entry,
-                                convert_range(&ident.range, &doc_info.text),
+                                convert_range(&ident.to_range(), &doc_info.text),
                             )));
                         }
                     }

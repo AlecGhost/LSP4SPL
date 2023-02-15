@@ -1,23 +1,38 @@
 use crate::document::{self, DocumentInfo, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{TextDocumentPositionParams, Url};
-use spl_frontend::table::RangedEntry;
+use spl_frontend::{
+    ast::Identifier,
+    lexer::token::{TokenAt, TokenType},
+    table::RangedEntry,
+};
 use tokio::sync::{mpsc::Sender, oneshot};
 
 mod completion;
-pub(crate) mod goto;
 mod fold;
+pub(crate) mod goto;
 mod hover;
 pub(crate) mod references;
 
 pub(crate) use completion::completion;
-pub(crate) use hover::hover;
 pub(crate) use fold::fold;
+pub(crate) use hover::hover;
 
 struct DocumentCursor {
     doc_info: DocumentInfo,
     index: usize,
     context: Option<RangedEntry>,
+}
+
+impl DocumentCursor {
+    fn ident(&self) -> Option<Identifier> {
+        let token = self.doc_info.tokens.token_at(self.index)?;
+        if let TokenType::Ident(name) = &token.token_type {
+            Some(Identifier::new(name.clone(), &[token.clone()]))
+        } else {
+            None
+        }
+    }
 }
 
 async fn get_doc_info(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option<DocumentInfo>> {

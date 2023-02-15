@@ -22,11 +22,11 @@ impl SymbolTable {
             entries: HashMap::from([
                 // printi(i: int)
                 (
-                    Identifier::new("printi", 0..0),
+                    Identifier::new("printi", &[]),
                     procedure_entry(
-                        Identifier::new("printi", 0..0),
+                        Identifier::new("printi", &[]),
                         vec![VariableEntry {
-                            name: Some(Identifier::new("i", 0..0)),
+                            name: Some(Identifier::new("i", &[])),
                             is_ref: false,
                             data_type: Some(DataType::Int),
                         }],
@@ -34,11 +34,11 @@ impl SymbolTable {
                 ),
                 // printc(i: int)
                 (
-                    Identifier::new("printc", 0..0),
+                    Identifier::new("printc", &[]),
                     procedure_entry(
-                        Identifier::new("printc", 0..0),
+                        Identifier::new("printc", &[]),
                         vec![VariableEntry {
-                            name: Some(Identifier::new("i", 0..0)),
+                            name: Some(Identifier::new("i", &[])),
                             is_ref: false,
                             data_type: Some(DataType::Int),
                         }],
@@ -46,11 +46,11 @@ impl SymbolTable {
                 ),
                 // readi(ref i: int)
                 (
-                    Identifier::new("readi", 0..0),
+                    Identifier::new("readi", &[]),
                     procedure_entry(
-                        Identifier::new("readi", 0..0),
+                        Identifier::new("readi", &[]),
                         vec![VariableEntry {
-                            name: Some(Identifier::new("i", 0..0)),
+                            name: Some(Identifier::new("i", &[])),
                             is_ref: true,
                             data_type: Some(DataType::Int),
                         }],
@@ -58,11 +58,11 @@ impl SymbolTable {
                 ),
                 // readc(ref i: int)
                 (
-                    Identifier::new("readc", 0..0),
+                    Identifier::new("readc", &[]),
                     procedure_entry(
-                        Identifier::new("readc", 0..0),
+                        Identifier::new("readc", &[]),
                         vec![VariableEntry {
-                            name: Some(Identifier::new("i", 0..0)),
+                            name: Some(Identifier::new("i", &[])),
                             is_ref: true,
                             data_type: Some(DataType::Int),
                         }],
@@ -70,16 +70,16 @@ impl SymbolTable {
                 ),
                 // exit()
                 (
-                    Identifier::new("exit", 0..0),
-                    procedure_entry(Identifier::new("exit", 0..0), vec![]),
+                    Identifier::new("exit", &[]),
+                    procedure_entry(Identifier::new("exit", &[]), vec![]),
                 ),
                 // time(ref i: int)
                 (
-                    Identifier::new("time", 0..0),
+                    Identifier::new("time", &[]),
                     procedure_entry(
-                        Identifier::new("time", 0..0),
+                        Identifier::new("time", &[]),
                         vec![VariableEntry {
-                            name: Some(Identifier::new("i", 0..0)),
+                            name: Some(Identifier::new("i", &[])),
                             is_ref: true,
                             data_type: Some(DataType::Int),
                         }],
@@ -87,11 +87,11 @@ impl SymbolTable {
                 ),
                 // clearAll(color: int)
                 (
-                    Identifier::new("clearAll", 0..0),
+                    Identifier::new("clearAll", &[]),
                     procedure_entry(
-                        Identifier::new("clearAll", 0..0),
+                        Identifier::new("clearAll", &[]),
                         vec![VariableEntry {
-                            name: Some(Identifier::new("color", 0..0)),
+                            name: Some(Identifier::new("color", &[])),
                             is_ref: false,
                             data_type: Some(DataType::Int),
                         }],
@@ -99,22 +99,22 @@ impl SymbolTable {
                 ),
                 // setPixel(x: int, y: int, color: int)
                 (
-                    Identifier::new("setPixel", 0..0),
+                    Identifier::new("setPixel", &[]),
                     procedure_entry(
-                        Identifier::new("setPixel", 0..0),
+                        Identifier::new("setPixel", &[]),
                         vec![
                             VariableEntry {
-                                name: Some(Identifier::new("x", 0..0)),
+                                name: Some(Identifier::new("x", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("y", 0..0)),
+                                name: Some(Identifier::new("y", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("z", 0..0)),
+                                name: Some(Identifier::new("z", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
@@ -123,32 +123,32 @@ impl SymbolTable {
                 ),
                 // drawLine(x1: int, y1: int, x2: int, y2: int, color: int)
                 (
-                    Identifier::new("drawLine", 0..0),
+                    Identifier::new("drawLine", &[]),
                     procedure_entry(
-                        Identifier::new("drawLine", 0..0),
+                        Identifier::new("drawLine", &[]),
                         vec![
                             VariableEntry {
-                                name: Some(Identifier::new("x1", 0..0)),
+                                name: Some(Identifier::new("x1", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("y1", 0..0)),
+                                name: Some(Identifier::new("y1", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("x2", 0..0)),
+                                name: Some(Identifier::new("x2", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("y2", 0..0)),
+                                name: Some(Identifier::new("y2", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("color", 0..0)),
+                                name: Some(Identifier::new("color", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
@@ -157,27 +157,27 @@ impl SymbolTable {
                 ),
                 // drawCircle(x0: int, y0: int, radius: int, color: int)
                 (
-                    Identifier::new("drawCircle", 0..0),
+                    Identifier::new("drawCircle", &[]),
                     procedure_entry(
-                        Identifier::new("drawCircle", 0..0),
+                        Identifier::new("drawCircle", &[]),
                         vec![
                             VariableEntry {
-                                name: Some(Identifier::new("x0", 0..0)),
+                                name: Some(Identifier::new("x0", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("y0", 0..0)),
+                                name: Some(Identifier::new("y0", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("radius", 0..0)),
+                                name: Some(Identifier::new("radius", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },
                             VariableEntry {
-                                name: Some(Identifier::new("color", 0..0)),
+                                name: Some(Identifier::new("color", &[])),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
                             },

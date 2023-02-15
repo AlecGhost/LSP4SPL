@@ -6,9 +6,11 @@ use crate::{
 };
 use nom::{
     branch::alt,
+    bytes::complete::take,
     combinator::{all_consuming, map, opt, peek, recognize},
     multi::many0,
-    sequence::{pair, terminated, tuple},
+    sequence::{pair, preceded, terminated, tuple},
+    Offset,
 };
 use utility::{expect, ignore_until, ignore_until1};
 
@@ -18,7 +20,7 @@ mod utility;
 
 type IResult<'a, T, B> = nom::IResult<Tokens<'a, B>, T>;
 
-/// Parses the given source code and returns an AST.
+/// Parses the given tokens and returns an AST.
 /// Errors are reported by the specified broker.
 /// Panics if parsing fails.
 ///
@@ -27,10 +29,12 @@ type IResult<'a, T, B> = nom::IResult<Tokens<'a, B>, T>;
 /// ```
 /// use spl_frontend::parser::parse;
 /// use spl_frontend::ast::Program;
+/// use spl_frontend::lexer::lex;
 /// # use spl_frontend::LocalBroker;
 ///
+/// let tokens = lex("");
 /// # let broker = LocalBroker::default();
-/// let program = parse("", broker);
+/// let program = parse(&tokens, broker);
 ///
 /// assert_eq!(program, Program {
 ///     global_declarations: Vec::new()
@@ -49,46 +53,59 @@ trait Parser<B>: Sized {
 
 impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        alt((
-            map(hex, |token| Self {
-                value: Some(if let TokenType::Hex(value) = token.fragment().token_type {
+        let tokens = input.clone();
+        let (input, value) = alt((
+            map(hex, |token| {
+                if let TokenType::Hex(value) = token.fragment().token_type {
                     value
                 } else {
                     panic!("Invalid hex parse")
-                }),
-                range: token.to_range(),
+                }
             }),
-            map(char, |token| Self {
-                value: Some(if let TokenType::Char(c) = token.fragment().token_type {
+            map(char, |token| {
+                if let TokenType::Char(c) = token.fragment().token_type {
                     (c as u8).into()
                 } else {
                     panic!("Invalid char parse")
-                }),
-                range: token.to_range(),
+                }
             }),
-            map(int, |token| Self {
-                value: Some(if let TokenType::Int(value) = token.fragment().token_type {
+            map(int, |token| {
+                if let TokenType::Int(value) = token.fragment().token_type {
                     value
                 } else {
                     panic!("Invalid int parse")
-                }),
-                range: token.to_range(),
+                }
             }),
-        ))(input)
+        ))(input)?;
+        let offset = tokens.offset(&input);
+        Ok((
+            input,
+            Self {
+                value: Some(value),
+                info: AstInfo::new(&tokens[..offset]),
+            },
+        ))
     }
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Identifier {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        map(ident, |token| Self {
-            value: token.fragment().to_string(),
-            range: token.to_range(),
-        })(input)
+        let tokens = input.clone();
+        let (input, ident) = ident(input)?;
+        let offset = tokens.offset(&input);
+        Ok((
+            input,
+            Self {
+                value: ident.fragment().to_string(),
+                info: AstInfo::new(&tokens[..offset]),
+            },
+        ))
     }
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Variable {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
+        let tokens = input.clone();
         let (input, mut name) = map(Identifier::parse, Self::NamedVariable)(input)?;
         let (input, accesses) = many0(tuple((
             symbols::lbracket,
@@ -97,11 +114,11 @@ impl<B: DiagnosticsBroker> Parser<B> for Variable {
         )))(input)?;
         for access in accesses {
             let expression = access.1;
-            let range = name.to_range().start..access.2.to_range().end;
+            let offset = tokens.offset(&input);
             name = Self::ArrayAccess(ArrayAccess {
                 array: Box::new(name),
                 index: Box::new(expression),
-                range,
+                info: AstInfo::new(&tokens[..offset]),
             });
         }
         Ok((input, name))
@@ -136,30 +153,35 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             ))(input)
         }
 
-        fn parse_unary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
-            // Unary := Primary | "-" Primary
-            alt((
-                parse_primary,
-                map(pair(symbols::minus, parse_unary), |pair| {
-                    let minus = pair.0;
-                    let primary = pair.1;
-                    let range = minus.to_range().start..primary.to_range().end;
-                    Expression::Binary(BinaryExpression {
-                        operator: Operator::Sub,
-                        lhs: Box::new(Expression::IntLiteral(IntLiteral::new(0, minus.to_range()))),
-                        rhs: Box::new(primary),
-                        range,
-                    })
-                }),
-            ))(input)
+        fn parse_negated<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+            let tokens = input.clone();
+            let (input, _) = symbols::minus(input)?;
+            let (input, primary) = parse_unary(input)?;
+            let offset = tokens.offset(&input);
+            let expr = Expression::Binary(BinaryExpression {
+                operator: Operator::Sub,
+                lhs: Box::new(Expression::IntLiteral(IntLiteral::new(
+                    0,
+                    AstInfo::new(&Vec::new()),
+                ))),
+                rhs: Box::new(primary),
+                info: AstInfo::new(&tokens[..offset]),
+            });
+            Ok((input, expr))
         }
 
-        fn parse_rhs<P, B: DiagnosticsBroker>(
-            input: Tokens<B>,
+        fn parse_unary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+            // Unary := Primary | "-" Primary
+            alt((parse_primary, parse_negated))(input)
+        }
+
+        fn parse_rhs<'a, P, B: DiagnosticsBroker>(
+            input: Tokens<'a, B>,
+            tokens: Tokens<B>,
             lhs: Expression,
             operator: Operator,
             parser: P,
-        ) -> IResult<Expression, B>
+        ) -> IResult<'a, Expression, B>
         where
             P: Fn(Tokens<B>) -> IResult<Expression, B>,
         {
@@ -168,41 +190,54 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             )(input)?;
             let rhs = rhs.unwrap_or_else(|| {
-                let pos = input.location_offset();
+                let pos = input.to_range().start;
                 Expression::Error(pos..pos)
             });
-            let range = lhs.to_range().start..rhs.to_range().end;
+            let offset = tokens.offset(&input);
             let exp = Expression::Binary(BinaryExpression {
                 operator,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
-                range,
+                info: AstInfo::new(&tokens[..offset]),
             });
             Ok((input, exp))
         }
 
         fn parse_mul<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Mul := Unary (("*" | "/") Unary)*
+            let tokens = input.clone();
             let (mut input, mut exp) = parse_unary(input)?;
             while let Ok((i, op)) = alt((symbols::times, symbols::divide))(input.clone()) {
-                (input, exp) =
-                    parse_rhs(i, exp, op.fragment().token_type.clone().into(), parse_unary)?;
+                (input, exp) = parse_rhs(
+                    i,
+                    tokens.clone(),
+                    exp,
+                    op.fragment().token_type.clone().into(),
+                    parse_unary,
+                )?;
             }
             Ok((input, exp))
         }
 
         fn parse_add<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Add := Mul (("+" | "-") Mul)*
+            let tokens = input.clone();
             let (mut input, mut exp) = parse_mul(input)?;
             while let Ok((i, op)) = alt((symbols::plus, symbols::minus))(input.clone()) {
-                (input, exp) =
-                    parse_rhs(i, exp, op.fragment().token_type.clone().into(), parse_mul)?;
+                (input, exp) = parse_rhs(
+                    i,
+                    tokens.clone(),
+                    exp,
+                    op.fragment().token_type.clone().into(),
+                    parse_mul,
+                )?;
             }
             Ok((input, exp))
         }
 
         fn parse_comparison<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Comp := Add (("=" | "#" | "<" | "<=" | ">" | ">=") Add)?
+            let tokens = input.clone();
             let (mut input, mut exp) = parse_add(input)?;
             if let Ok((i, op)) = alt((
                 symbols::eq,
@@ -213,8 +248,13 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                 symbols::gt,
             ))(input.clone())
             {
-                (input, exp) =
-                    parse_rhs(i, exp, op.fragment().token_type.clone().into(), parse_add)?;
+                (input, exp) = parse_rhs(
+                    i,
+                    tokens,
+                    exp,
+                    op.fragment().token_type.clone().into(),
+                    parse_add,
+                )?;
             }
             Ok((input, exp))
         }
@@ -227,8 +267,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         fn parse_array_type<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<TypeExpression, B> {
-            let (input, array_kw) = keywords::array(input)?;
-            let start = array_kw.to_range().start;
+            let tokens = input.clone();
+            let (input, _) = keywords::array(input)?;
             let (input, _) = expect(
                 symbols::lbracket,
                 ParseErrorMessage::ExpectedToken("[".to_string()),
@@ -239,7 +279,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
             )(input)?;
             let (input, _) =
                 expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']'))(input)?;
-            let (input, of_kw) = expect(
+            let (input, _) = expect(
                 keywords::of,
                 ParseErrorMessage::ExpectedToken("of".to_string()),
             )(input)?;
@@ -247,15 +287,13 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
                 TypeExpression::parse,
                 ParseErrorMessage::ExpectedToken("type expression".to_string()),
             )(input)?;
-            let end = input.location_offset();
+            let offset = tokens.offset(&input);
             Ok((
                 input,
                 TypeExpression::ArrayType {
-                    array_kw: array_kw.to_range(),
-                    of_kw: of_kw.map(|token| token.to_range()),
                     size: size.flatten(),
                     base_type: type_expr.map(Box::new),
-                    range: start..end,
+                    info: AstInfo::new(&tokens[..offset]),
                 },
             ))
         }
@@ -266,8 +304,8 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
 
 impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        let (input, type_kw) = keywords::r#type(input)?;
-        let start = type_kw.to_range().start;
+        let tokens = input.clone();
+        let (input, _) = keywords::r#type(input)?;
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -281,14 +319,13 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
             ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
         let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
-        let end = input.location_offset();
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
-                type_kw: type_kw.to_range(),
                 name,
                 type_expr,
-                range: start..end,
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -296,8 +333,8 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
 
 impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        let (input, var_kw) = keywords::var(input)?;
-        let start = var_kw.to_range().start;
+        let tokens = input.clone();
+        let (input, _) = keywords::var(input)?;
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -311,14 +348,13 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
             ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
         let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
-        let end = input.location_offset();
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
-                var_kw: var_kw.to_range(),
                 name,
                 type_expr,
-                range: start..end,
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -326,7 +362,8 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
 
 impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        let (input, (start, ref_kw, name)) = alt((
+        let tokens = input.clone();
+        let (input, (ref_kw, name)) = alt((
             map(
                 pair(
                     keywords::r#ref,
@@ -335,12 +372,11 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
                         ParseErrorMessage::ExpectedToken("identifier".to_string()),
                     ),
                 ),
-                |pair| (pair.0.to_range().start, Some(pair.0.to_range()), pair.1),
+                |pair| (Some(pair.0), pair.1),
             ),
-            map(Identifier::parse, |ident| {
-                (ident.range.start, None, Some(ident))
-            }),
+            map(Identifier::parse, |ident| (None, Some(ident))),
         ))(input)?;
+        let is_ref = ref_kw.is_some();
         let (input, _) = expect(
             symbols::colon,
             ParseErrorMessage::ExpectedToken(":".to_string()),
@@ -349,14 +385,14 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
             TypeExpression::parse,
             ParseErrorMessage::ExpectedToken("type expression".to_string()),
         )(input)?;
-        let end = input.location_offset();
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
-                ref_kw,
+                is_ref,
                 name,
                 type_expr,
-                range: start..end,
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -364,8 +400,8 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
 
 impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
+        let tokens = input.clone();
         let (input, name) = terminated(Identifier::parse, symbols::lparen)(input)?;
-        let start = name.range.start;
         let (input, mut arguments) = many0(terminated(Expression::parse, symbols::comma))(input)?;
         let (input, opt_argument) = if arguments.is_empty() {
             opt(Expression::parse)(input)?
@@ -380,13 +416,13 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
         };
         let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
         let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
-        let end = input.location_offset();
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
                 name,
                 arguments,
-                range: start..end,
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -394,20 +430,20 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
 
 impl<B: DiagnosticsBroker> Parser<B> for Assignment {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
+        let tokens = input.clone();
         let (input, variable) = terminated(Variable::parse, symbols::assign)(input)?;
-        let start = variable.to_range().start;
         let (input, expr) = expect(
             Expression::parse,
             ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
         let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
-        let end = input.location_offset();
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
                 variable,
                 expr,
-                range: start..end,
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -415,8 +451,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
 
 impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        let (input, if_kw) = keywords::r#if(input)?;
-        let start = if_kw.to_range().start;
+        let tokens = input.clone();
+        let (input, _) = keywords::r#if(input)?;
         let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
@@ -427,29 +463,21 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
             Statement::parse,
             ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
-        let (input, (else_kw, else_branch)) = map(
-            opt(pair(
-                keywords::r#else,
-                expect(
-                    Statement::parse,
-                    ParseErrorMessage::ExpectedToken("statement".to_string()),
-                ),
-            )),
-            |opt| match opt {
-                Some(pair) => (Some(pair.0.to_range()), pair.1),
-                None => (None, None),
-            },
-        )(input)?;
-        let end = input.location_offset();
+        let (input, else_branch) = opt(preceded(
+            keywords::r#else,
+            expect(
+                Statement::parse,
+                ParseErrorMessage::ExpectedToken("statement".to_string()),
+            ),
+        ))(input)?;
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
-                if_kw: if_kw.to_range(),
                 condition,
                 if_branch: if_branch.map(Box::new),
-                else_kw,
-                else_branch: else_branch.map(Box::new),
-                range: start..end,
+                else_branch: else_branch.flatten().map(Box::new),
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -457,8 +485,8 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
 
 impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        let (input, while_kw) = keywords::r#while(input)?;
-        let start = while_kw.to_range().start;
+        let tokens = input.clone();
+        let (input, _) = keywords::r#while(input)?;
         let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
         let (input, condition) = expect(
             Expression::parse,
@@ -469,14 +497,13 @@ impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
             Statement::parse,
             ParseErrorMessage::ExpectedToken("expression".to_string()),
         )(input)?;
-        let end = input.location_offset();
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
-                while_kw: while_kw.to_range(),
                 condition,
                 statement: stmt.map(Box::new),
-                range: start..end,
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -484,16 +511,16 @@ impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
 
 impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        let (input, curly) = symbols::lcurly(input)?;
-        let start = curly.to_range().start;
+        let tokens = input.clone();
+        let (input, _) = symbols::lcurly(input)?;
         let (input, statements) = many0(Statement::parse)(input)?;
         let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
-        let end = input.location_offset();
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
                 statements,
-                range: start..end,
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -502,7 +529,9 @@ impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
 impl<B: DiagnosticsBroker> Parser<B> for Statement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         alt((
-            map(symbols::semic, |semic| Self::Empty(semic.to_range())),
+            map(symbols::semic, |semic| {
+                Self::Empty(AstInfo::new(&semic[0..0]))
+            }),
             map(IfStatement::parse, Self::If),
             map(WhileStatement::parse, Self::While),
             map(BlockStatement::parse, Self::Block),
@@ -524,7 +553,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
                         match var {
                             Variable::NamedVariable(ident) => {
                                 let tokens = pair.1;
-                                let range = ident.range.start..tokens.to_range().end;
+                                let range = ident.to_range().start..tokens.to_range().end;
                                 let err = SplError(
                                     range.clone(),
                                     ParseErrorMessage::UnexpectedCharacters(
@@ -546,8 +575,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
 
 impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        let (input, proc_kw) = keywords::proc(input)?;
-        let start = proc_kw.to_range().start;
+        let tokens = input.clone();
+        let (input, _) = keywords::proc(input)?;
         let (input, name) = expect(
             Identifier::parse,
             ParseErrorMessage::ExpectedToken("identifier".to_string()),
@@ -571,16 +600,15 @@ impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
         let (input, variable_declarations) = many0(VariableDeclaration::parse)(input)?;
         let (input, statements) = many0(Statement::parse)(input)?;
         let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
-        let end = input.location_offset();
+        let offset = tokens.offset(&input);
         Ok((
             input,
             Self {
-                proc_kw: proc_kw.to_range(),
                 name,
                 parameters,
                 variable_declarations,
                 statements,
-                range: start..end,
+                info: AstInfo::new(&tokens[..offset]),
             },
         ))
     }
@@ -600,7 +628,7 @@ impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
                             .to_string(),
                     );
                     token.broker.report_error(err);
-                    Self::Error(token.to_range())
+                    Self::Error(AstInfo::new(&token[0..0]))
                 },
             ),
         ))(input)
@@ -620,14 +648,31 @@ impl<B: DiagnosticsBroker> Parser<B> for Program {
     }
 }
 
+// Comment parser is separated from the other token parsers,
+// because it is used in the `tag_parser` macro
+fn comment<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Tokens<B>, B> {
+    let original_input = input.clone();
+    let (input, tokens) = take(1usize)(input)?;
+    if matches!(tokens.fragment().token_type, TokenType::Comment(_)) {
+        Ok((input, tokens))
+    } else {
+        Err(nom::Err::Error(nom::error::Error::new(
+            original_input,
+            nom::error::ErrorKind::Tag,
+        )))
+    }
+}
+
 macro_rules! tag_parser {
     ($name:ident, $token_type:pat) => {
         pub(super) fn $name<B: crate::DiagnosticsBroker>(
             input: crate::lexer::token::Tokens<B>,
         ) -> crate::parser::IResult<crate::lexer::token::Tokens<B>, B> {
-            use crate::lexer::token::TokenType;
-            use nom::bytes::complete::take;
+            use crate::{lexer::token::TokenType, parser::comment};
+            use nom::{bytes::complete::take, multi::many0};
             let original_input = input.clone();
+            // Consume comments in front of any `tag_parser`
+            let (input, _) = many0(comment)(input)?;
             let (input, tokens) = take(1usize)(input)?;
             if matches!(tokens.fragment().token_type, $token_type) {
                 Ok((input, tokens))
@@ -645,7 +690,6 @@ tag_parser!(ident, TokenType::Ident(_));
 tag_parser!(char, TokenType::Char(_));
 tag_parser!(int, TokenType::Int(_));
 tag_parser!(hex, TokenType::Hex(_));
-tag_parser!(comment, TokenType::Comment(_));
 tag_parser!(eof, TokenType::Eof);
 
 mod keywords {

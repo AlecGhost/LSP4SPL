@@ -1,5 +1,5 @@
 use super::IResult;
-use crate::{error::ParseErrorMessage, lexer::token::Tokens, DiagnosticsBroker};
+use crate::{error::ParseErrorMessage, lexer::token::Tokens, DiagnosticsBroker, ToRange};
 use nom::{
     bytes::complete::take,
     error::ErrorKind,
@@ -96,7 +96,7 @@ where
         Ok((input, out)) => Ok((input, Some(out))),
         Err(_) => {
             // TODO: look into error range reporting
-            let pos = input.location_offset();
+            let pos = input.to_range().start;
             let err = crate::error::SplError(pos..pos, error_msg.to_string());
             input.broker.report_error(err);
             Ok((input, None))

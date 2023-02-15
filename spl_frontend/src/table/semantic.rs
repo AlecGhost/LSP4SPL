@@ -73,12 +73,12 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for Assignment {
             if let (Some(left), Some(right)) = (left, right) {
                 if left != right {
                     broker.report_error(SplError(
-                        self.range.clone(),
+                        self.to_range(),
                         SemanticErrorMessage::AssignmentHasDifferentTypes.to_string(),
                     ));
                 } else if !matches!(left, DataType::Int) {
                     broker.report_error(SplError(
-                        self.range.clone(),
+                        self.to_range(),
                         SemanticErrorMessage::AssignmentRequiresIntegers.to_string(),
                     ));
                 }
@@ -104,14 +104,14 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                 match arg_len.cmp(&param_len) {
                     Ordering::Less => {
                         broker.report_error(SplError(
-                            self.range.clone(),
+                            self.to_range(),
                             SemanticErrorMessage::TooFewArguments(self.name.value.clone())
                                 .to_string(),
                         ));
                     }
                     Ordering::Greater => {
                         broker.report_error(SplError(
-                            self.range.clone(),
+                            self.to_range(),
                             SemanticErrorMessage::TooManyArguments(self.name.value.clone())
                                 .to_string(),
                         ));
@@ -123,7 +123,7 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                 {
                     if param.is_ref && !matches!(arg, Expression::Variable(_)) {
                         broker.report_error(SplError(
-                            self.name.range.clone(),
+                            self.name.to_range(),
                             SemanticErrorMessage::ArgumentMustBeAVariable(
                                 self.name.value.clone(),
                                 // enumeration starts with 1
@@ -134,7 +134,7 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                     }
                     if arg.analyze(table, broker.clone()) != param.data_type {
                         broker.report_error(SplError(
-                            self.name.range.clone(),
+                            self.name.to_range(),
                             SemanticErrorMessage::ArgumentsTypeMismatch(
                                 self.name.value.clone(),
                                 // enumeration starts with 1
@@ -146,13 +146,13 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                 }
             } else {
                 broker.report_error(SplError(
-                    self.range.clone(),
+                    self.to_range(),
                     SemanticErrorMessage::CallOfNoneProcedure(self.name.value.clone()).to_string(),
                 ));
             }
         } else {
             broker.report_error(SplError(
-                self.range.clone(),
+                self.to_range(),
                 SemanticErrorMessage::UndefinedProcedure(self.name.value.clone()).to_string(),
             ));
         }
@@ -263,7 +263,7 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for BinaryExpression {
         let rhs = self.rhs.analyze(table, broker.clone());
         if lhs != rhs {
             broker.report_error(SplError(
-                self.range.clone(),
+                self.to_range(),
                 SemanticErrorMessage::OperatorDifferentTypes.to_string(),
             ));
             // no immediate return with None
@@ -272,12 +272,12 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for BinaryExpression {
         if lhs != Some(DataType::Int) {
             if self.operator.is_arithmetic() {
                 broker.report_error(SplError(
-                    self.range.clone(),
+                    self.to_range(),
                     SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
                 ));
             } else {
                 broker.report_error(SplError(
-                    self.range.clone(),
+                    self.to_range(),
                     SemanticErrorMessage::ComparisonNonInteger.to_string(),
                 ));
             }
