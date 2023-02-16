@@ -339,7 +339,7 @@ fn type_declarations() {
         input.broker.errors(),
         vec![
             SplError(
-                5..5,
+                4..4,
                 ParseErrorMessage::ExpectedToken("identifier".to_string()).to_string()
             ),
             SplError(

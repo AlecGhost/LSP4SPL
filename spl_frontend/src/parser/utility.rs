@@ -1,5 +1,5 @@
 use super::IResult;
-use crate::{error::ParseErrorMessage, lexer::token::Tokens, DiagnosticsBroker, ToRange};
+use crate::{error::ParseErrorMessage, lexer::token::Tokens, DiagnosticsBroker};
 use nom::{
     bytes::complete::take,
     combinator::opt,
@@ -98,8 +98,7 @@ where
     move |input: Tokens<B>| match parser.parse(input.clone()) {
         Ok((input, out)) => Ok((input, Some(out))),
         Err(_) => {
-            // TODO: look into error range reporting
-            let pos = input.to_range().start;
+            let pos = input.error_pos;
             let err = crate::error::SplError(pos..pos, error_msg.to_string());
             input.broker.report_error(err);
             Ok((input, None))

@@ -58,7 +58,7 @@ pub trait TokenAt {
 }
 
 impl TokenAt for Vec<Token> {
-    fn token_at(&self, index: usize) -> Option<&Token>{
+    fn token_at(&self, index: usize) -> Option<&Token> {
         self.iter().find(|token| token.range.contains(&index))
     }
 }
@@ -70,7 +70,6 @@ impl ToRange for Vec<Token> {
         start..end
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TokenType {
@@ -204,6 +203,8 @@ impl std::fmt::Display for TokenType {
 pub struct Tokens<'a, B> {
     tokens: &'a [Token],
     pub broker: B,
+    // error_pos is the end position of the previous token
+    pub error_pos: usize,
 }
 
 /// source: https://stackoverflow.com/a/57203324
@@ -221,7 +222,11 @@ where
 
 impl<'a, B: Clone> Tokens<'a, B> {
     pub fn new(tokens: &'a [Token], broker: B) -> Self {
-        Self { tokens, broker }
+        Self {
+            tokens,
+            broker,
+            error_pos: 0,
+        }
     }
 
     pub fn fragment(&self) -> &Token {
@@ -249,19 +254,26 @@ impl<'a, B: Clone> nom::InputTake for Tokens<'a, B> {
     fn take(&self, count: usize) -> Self {
         Self {
             tokens: &self.tokens[0..count],
-            broker: self.broker.clone(),
+            ..self.clone()
         }
     }
 
     fn take_split(&self, count: usize) -> (Self, Self) {
+        // if no previous token exists, error_pos stays 0
+        let error_pos = if count > 0 {
+            self.tokens[count - 1].range.end
+        } else {
+            0
+        };
         (
             Self {
                 tokens: &self.tokens[count..],
-                broker: self.broker.clone(),
+                error_pos,
+                ..self.clone()
             },
             Self {
                 tokens: &self.tokens[0..count],
-                broker: self.broker.clone(),
+                ..self.clone()
             },
         )
     }
@@ -282,9 +294,16 @@ impl<'a, B> nom::Offset for Tokens<'a, B> {
 
 impl<'a, B: Clone> nom::Slice<RangeTo<usize>> for Tokens<'a, B> {
     fn slice(&self, range: RangeTo<usize>) -> Self {
+        // if no previous token exists, error_pos stays 0
+        let error_pos = if range.end > 0 {
+            self.tokens[range.end - 1].range.end
+        } else {
+            0
+        };
         Self {
             tokens: &self.tokens[range],
-            broker: self.broker.clone(),
+            error_pos,
+            ..self.clone()
         }
     }
 }
