@@ -2,7 +2,10 @@ use super::IResult;
 use crate::{error::ParseErrorMessage, lexer::token::Tokens, DiagnosticsBroker, ToRange};
 use nom::{
     bytes::complete::take,
+    combinator::opt,
     error::ErrorKind,
+    multi::many0,
+    sequence::terminated,
     {InputTake, Offset},
 };
 
@@ -101,5 +104,29 @@ where
             input.broker.report_error(err);
             Ok((input, None))
         }
+    }
+}
+
+/// Parses a comma separated list of parsers
+pub(super) fn parse_list<'a, O, B: DiagnosticsBroker, F>(
+    mut parser: F,
+    error_msg: ParseErrorMessage,
+) -> impl FnMut(Tokens<'a, B>) -> IResult<Vec<O>, B>
+where
+    F: InnerParser<'a, O, B>,
+{
+    // Create new parser from closure because `InnerParser` must be used with `parse` function
+    let mut parser = move |input| parser.parse(input);
+    move |input: Tokens<B>| {
+        let (input, mut list) = many0(terminated(&mut parser, super::symbols::comma))(input)?;
+        let (input, opt_argument) = if list.is_empty() {
+            opt(&mut parser)(input)?
+        } else {
+            expect(&mut parser, error_msg.clone())(input)?
+        };
+        if let Some(argument) = opt_argument {
+            list.push(argument);
+        };
+        Ok((input, list))
     }
 }

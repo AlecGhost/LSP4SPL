@@ -9,10 +9,12 @@ use nom::{
     bytes::complete::take,
     combinator::{all_consuming, map, opt, peek, recognize},
     multi::many0,
-    sequence::{pair, preceded, terminated, tuple},
+    sequence::{delimited, pair, preceded, terminated, tuple},
     Offset,
 };
 use utility::{expect, ignore_until, ignore_until1};
+
+use self::utility::parse_list;
 
 #[cfg(test)]
 mod tests;
@@ -106,57 +108,54 @@ impl<B: DiagnosticsBroker> Parser<B> for Identifier {
 impl<B: DiagnosticsBroker> Parser<B> for Variable {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, mut name) = map(Identifier::parse, Self::NamedVariable)(input)?;
-        let (input, accesses) = many0(tuple((
-            symbols::lbracket,
-            Expression::parse,
-            symbols::rbracket,
-        )))(input)?;
+        let (input, (mut variable, accesses)) = tuple((
+            map(Identifier::parse, Self::NamedVariable),
+            many0(delimited(
+                symbols::lbracket,
+                Expression::parse,
+                symbols::rbracket,
+            )),
+        ))(input)?;
         for access in accesses {
-            let expression = access.1;
             let offset = tokens.offset(&input);
-            name = Self::ArrayAccess(ArrayAccess {
-                array: Box::new(name),
-                index: Box::new(expression),
+            variable = Self::ArrayAccess(ArrayAccess {
+                array: Box::new(variable),
+                index: Box::new(access),
                 info: AstInfo::new(&tokens[..offset]),
             });
         }
-        Ok((input, name))
+        Ok((input, variable))
     }
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Expression {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
+        fn parse_bracketed<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+            let (input, (lparen, expr, _)) = tuple((
+                symbols::lparen,
+                expect(
+                    Expression::parse,
+                    ParseErrorMessage::ExpectedToken("expression".to_string()),
+                ),
+                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+            ))(input)?;
+            let after_paren = lparen.to_range().end;
+            let expr = expr.unwrap_or_else(|| Expression::Error(after_paren..after_paren));
+            Ok((input, expr))
+        }
+
         fn parse_primary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             // Primary := IntLit | Variable | "(" Expr ")"
             alt((
                 map(IntLiteral::parse, Expression::IntLiteral),
                 map(Variable::parse, Expression::Variable),
-                map(
-                    tuple((
-                        symbols::lparen,
-                        expect(
-                            Expression::parse,
-                            ParseErrorMessage::ExpectedToken("expression".to_string()),
-                        ),
-                        expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-                    )),
-                    |tuple| {
-                        let paren = tuple.0;
-                        let expr = tuple.1;
-                        expr.unwrap_or_else(|| {
-                            let after_paren = paren.to_range().end;
-                            Expression::Error(after_paren..after_paren)
-                        })
-                    },
-                ),
+                parse_bracketed,
             ))(input)
         }
 
         fn parse_negated<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
             let tokens = input.clone();
-            let (input, _) = symbols::minus(input)?;
-            let (input, primary) = parse_unary(input)?;
+            let (input, primary) = preceded(symbols::minus, parse_unary)(input)?;
             let offset = tokens.offset(&input);
             let expr = Expression::Binary(BinaryExpression {
                 operator: Operator::Sub,
@@ -189,10 +188,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                 parser,
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             )(input)?;
-            let rhs = rhs.unwrap_or_else(|| {
-                let pos = input.to_range().start;
-                Expression::Error(pos..pos)
-            });
+            let pos = input.to_range().start;
+            let rhs = rhs.unwrap_or_else(|| Expression::Error(pos..pos));
             let offset = tokens.offset(&input);
             let exp = Expression::Binary(BinaryExpression {
                 operator,
@@ -268,25 +265,26 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         fn parse_array_type<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<TypeExpression, B> {
             let tokens = input.clone();
-            let (input, _) = keywords::array(input)?;
-            let (input, _) = expect(
-                symbols::lbracket,
-                ParseErrorMessage::ExpectedToken("[".to_string()),
-            )(input)?;
-            let (input, size) = expect(
-                map(IntLiteral::parse, |int_lit| int_lit.value),
-                ParseErrorMessage::ExpectedToken("int literal".to_string()),
-            )(input)?;
-            let (input, _) =
-                expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']'))(input)?;
-            let (input, _) = expect(
-                keywords::of,
-                ParseErrorMessage::ExpectedToken("of".to_string()),
-            )(input)?;
-            let (input, type_expr) = expect(
-                TypeExpression::parse,
-                ParseErrorMessage::ExpectedToken("type expression".to_string()),
-            )(input)?;
+            let (input, (_, _, size, _, _, type_expr)) = tuple((
+                keywords::array,
+                expect(
+                    symbols::lbracket,
+                    ParseErrorMessage::ExpectedToken("[".to_string()),
+                ),
+                expect(
+                    map(IntLiteral::parse, |int_lit| int_lit.value),
+                    ParseErrorMessage::ExpectedToken("int literal".to_string()),
+                ),
+                expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
+                expect(
+                    keywords::of,
+                    ParseErrorMessage::ExpectedToken("of".to_string()),
+                ),
+                expect(
+                    TypeExpression::parse,
+                    ParseErrorMessage::ExpectedToken("type expression".to_string()),
+                ),
+            ))(input)?;
             let offset = tokens.offset(&input);
             Ok((
                 input,
@@ -305,20 +303,22 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
 impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, _) = keywords::r#type(input)?;
-        let (input, name) = expect(
-            Identifier::parse,
-            ParseErrorMessage::ExpectedToken("identifier".to_string()),
-        )(input)?;
-        let (input, _) = expect(
-            symbols::eq,
-            ParseErrorMessage::ExpectedToken("=".to_string()),
-        )(input)?;
-        let (input, type_expr) = expect(
-            TypeExpression::parse,
-            ParseErrorMessage::ExpectedToken("type expression".to_string()),
-        )(input)?;
-        let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
+        let (input, (_, name, _, type_expr, _)) = tuple((
+            keywords::r#type,
+            expect(
+                Identifier::parse,
+                ParseErrorMessage::ExpectedToken("identifier".to_string()),
+            ),
+            expect(
+                symbols::eq,
+                ParseErrorMessage::ExpectedToken("=".to_string()),
+            ),
+            expect(
+                TypeExpression::parse,
+                ParseErrorMessage::ExpectedToken("type expression".to_string()),
+            ),
+            expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+        ))(input)?;
         let offset = tokens.offset(&input);
         Ok((
             input,
@@ -334,20 +334,22 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
 impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, _) = keywords::var(input)?;
-        let (input, name) = expect(
-            Identifier::parse,
-            ParseErrorMessage::ExpectedToken("identifier".to_string()),
-        )(input)?;
-        let (input, _) = expect(
-            symbols::colon,
-            ParseErrorMessage::ExpectedToken(":".to_string()),
-        )(input)?;
-        let (input, type_expr) = expect(
-            TypeExpression::parse,
-            ParseErrorMessage::ExpectedToken("type expression".to_string()),
-        )(input)?;
-        let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
+        let (input, (_, name, _, type_expr, _)) = tuple((
+            keywords::var,
+            expect(
+                Identifier::parse,
+                ParseErrorMessage::ExpectedToken("identifier".to_string()),
+            ),
+            expect(
+                symbols::colon,
+                ParseErrorMessage::ExpectedToken(":".to_string()),
+            ),
+            expect(
+                TypeExpression::parse,
+                ParseErrorMessage::ExpectedToken("type expression".to_string()),
+            ),
+            expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+        ))(input)?;
         let offset = tokens.offset(&input);
         Ok((
             input,
@@ -363,29 +365,31 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
 impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, (ref_kw, name)) = alt((
-            map(
-                pair(
-                    keywords::r#ref,
-                    expect(
-                        Identifier::parse,
-                        ParseErrorMessage::ExpectedToken("identifier".to_string()),
+        let (input, ((ref_kw, name), _, type_expr)) = tuple((
+            alt((
+                map(
+                    pair(
+                        keywords::r#ref,
+                        expect(
+                            Identifier::parse,
+                            ParseErrorMessage::ExpectedToken("identifier".to_string()),
+                        ),
                     ),
+                    |pair| (Some(pair.0), pair.1),
                 ),
-                |pair| (Some(pair.0), pair.1),
+                map(Identifier::parse, |ident| (None, Some(ident))),
+            )),
+            expect(
+                symbols::colon,
+                ParseErrorMessage::ExpectedToken(":".to_string()),
             ),
-            map(Identifier::parse, |ident| (None, Some(ident))),
+            expect(
+                TypeExpression::parse,
+                ParseErrorMessage::ExpectedToken("type expression".to_string()),
+            ),
         ))(input)?;
-        let is_ref = ref_kw.is_some();
-        let (input, _) = expect(
-            symbols::colon,
-            ParseErrorMessage::ExpectedToken(":".to_string()),
-        )(input)?;
-        let (input, type_expr) = expect(
-            TypeExpression::parse,
-            ParseErrorMessage::ExpectedToken("type expression".to_string()),
-        )(input)?;
         let offset = tokens.offset(&input);
+        let is_ref = ref_kw.is_some();
         Ok((
             input,
             Self {
@@ -401,21 +405,15 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
 impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, name) = terminated(Identifier::parse, symbols::lparen)(input)?;
-        let (input, mut arguments) = many0(terminated(Expression::parse, symbols::comma))(input)?;
-        let (input, opt_argument) = if arguments.is_empty() {
-            opt(Expression::parse)(input)?
-        } else {
-            expect(
+        let (input, (name, arguments, _, _)) = tuple((
+            terminated(Identifier::parse, symbols::lparen),
+            parse_list(
                 Expression::parse,
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
-            )(input)?
-        };
-        if let Some(argument) = opt_argument {
-            arguments.push(argument);
-        };
-        let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
-        let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
+            ),
+            expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+            expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+        ))(input)?;
         let offset = tokens.offset(&input);
         Ok((
             input,
@@ -431,12 +429,14 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
 impl<B: DiagnosticsBroker> Parser<B> for Assignment {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, variable) = terminated(Variable::parse, symbols::assign)(input)?;
-        let (input, expr) = expect(
-            Expression::parse,
-            ParseErrorMessage::ExpectedToken("expression".to_string()),
-        )(input)?;
-        let (input, _) = expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic)(input)?;
+        let (input, (variable, expr, _)) = tuple((
+            terminated(Variable::parse, symbols::assign),
+            expect(
+                Expression::parse,
+                ParseErrorMessage::ExpectedToken("expression".to_string()),
+            ),
+            expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+        ))(input)?;
         let offset = tokens.offset(&input);
         Ok((
             input,
@@ -452,23 +452,25 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
 impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, _) = keywords::r#if(input)?;
-        let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
-        let (input, condition) = expect(
-            Expression::parse,
-            ParseErrorMessage::ExpectedToken("expression".to_string()),
-        )(input)?;
-        let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
-        let (input, if_branch) = expect(
-            Statement::parse,
-            ParseErrorMessage::ExpectedToken("expression".to_string()),
-        )(input)?;
-        let (input, else_branch) = opt(preceded(
-            keywords::r#else,
+        let (input, (_, _, condition, _, if_branch, else_branch)) = tuple((
+            keywords::r#if,
+            expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
+            expect(
+                Expression::parse,
+                ParseErrorMessage::ExpectedToken("expression".to_string()),
+            ),
+            expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
             expect(
                 Statement::parse,
-                ParseErrorMessage::ExpectedToken("statement".to_string()),
+                ParseErrorMessage::ExpectedToken("expression".to_string()),
             ),
+            opt(preceded(
+                keywords::r#else,
+                expect(
+                    Statement::parse,
+                    ParseErrorMessage::ExpectedToken("statement".to_string()),
+                ),
+            )),
         ))(input)?;
         let offset = tokens.offset(&input);
         Ok((
@@ -486,17 +488,19 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
 impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, _) = keywords::r#while(input)?;
-        let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
-        let (input, condition) = expect(
-            Expression::parse,
-            ParseErrorMessage::ExpectedToken("expression".to_string()),
-        )(input)?;
-        let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
-        let (input, stmt) = expect(
-            Statement::parse,
-            ParseErrorMessage::ExpectedToken("expression".to_string()),
-        )(input)?;
+        let (input, (_, _, condition, _, stmt)) = tuple((
+            keywords::r#while,
+            expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
+            expect(
+                Expression::parse,
+                ParseErrorMessage::ExpectedToken("expression".to_string()),
+            ),
+            expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+            expect(
+                Statement::parse,
+                ParseErrorMessage::ExpectedToken("expression".to_string()),
+            ),
+        ))(input)?;
         let offset = tokens.offset(&input);
         Ok((
             input,
@@ -512,9 +516,11 @@ impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
 impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, _) = symbols::lcurly(input)?;
-        let (input, statements) = many0(Statement::parse)(input)?;
-        let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
+        let (input, statements) = delimited(
+            symbols::lcurly,
+            many0(Statement::parse),
+            expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
+        )(input)?;
         let offset = tokens.offset(&input);
         Ok((
             input,
@@ -576,30 +582,24 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
 impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, _) = keywords::proc(input)?;
-        let (input, name) = expect(
-            Identifier::parse,
-            ParseErrorMessage::ExpectedToken("identifier".to_string()),
-        )(input)?;
-        let (input, _) = expect(symbols::lparen, ParseErrorMessage::MissingOpening('('))(input)?;
-        let (input, mut parameters) =
-            many0(terminated(ParameterDeclaration::parse, symbols::comma))(input)?;
-        let (input, opt_parameter) = if parameters.is_empty() {
-            opt(ParameterDeclaration::parse)(input)?
-        } else {
-            expect(
-                ParameterDeclaration::parse,
-                ParseErrorMessage::ExpectedToken("parameter declaration".to_string()),
-            )(input)?
-        };
-        if let Some(parameter) = opt_parameter {
-            parameters.push(parameter);
-        };
-        let (input, _) = expect(symbols::rparen, ParseErrorMessage::MissingClosing(')'))(input)?;
-        let (input, _) = expect(symbols::lcurly, ParseErrorMessage::MissingOpening('{'))(input)?;
-        let (input, variable_declarations) = many0(VariableDeclaration::parse)(input)?;
-        let (input, statements) = many0(Statement::parse)(input)?;
-        let (input, _) = expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}'))(input)?;
+        let (input, (_, name, _, parameters, _, _, variable_declarations, statements, _)) =
+            tuple((
+                keywords::proc,
+                expect(
+                    Identifier::parse,
+                    ParseErrorMessage::ExpectedToken("identifier".to_string()),
+                ),
+                expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
+                parse_list(
+                    ParameterDeclaration::parse,
+                    ParseErrorMessage::ExpectedToken("parameter declaration".to_string()),
+                ),
+                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+                expect(symbols::lcurly, ParseErrorMessage::MissingOpening('{')),
+                many0(VariableDeclaration::parse),
+                many0(Statement::parse),
+                expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
+            ))(input)?;
         let offset = tokens.offset(&input);
         Ok((
             input,
