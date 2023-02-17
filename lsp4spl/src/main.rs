@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use clap::Parser;
 use color_eyre::eyre::{Context, Result};
 use lsp_types::{
     CompletionOptions, DeclarationCapability, FoldingRangeProviderCapability,
@@ -8,6 +9,7 @@ use lsp_types::{
 };
 use server::LanguageServer;
 use simplelog::{Config, LevelFilter, WriteLogger};
+use std::path::{Path, PathBuf};
 
 mod document;
 mod error;
@@ -15,10 +17,26 @@ mod features;
 mod io;
 mod server;
 
+#[derive(Parser)]
+struct Args {
+    /// Log to specified file
+    #[arg(short, long, value_name = "FILE")]
+    log: Option<PathBuf>,
+
+    // No use. 
+    // But for whatever reason VSCode passes this option.
+    // stdio is the only protocol this server supports.
+    #[arg(long)]
+    stdio: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
-    register_logger().wrap_err("Cannot register logger")?;
+    let args = Args::parse();
+    if let Some(log_file) = &args.log {
+        register_logger(log_file).wrap_err("Cannot register logger")?;
+    }
     log::info!("Startup");
     let ls = LanguageServer::setup(
         Some(ServerInfo {
@@ -80,11 +98,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn register_logger() -> Result<()> {
+fn register_logger(log_file: &Path) -> Result<()> {
     WriteLogger::init(
         LevelFilter::Debug,
         Config::default(),
-        std::fs::File::create("lsp4spl.log").wrap_err("Cannot open file")?,
+        std::fs::File::create(log_file).wrap_err("Cannot open file")?,
     )?;
     Ok(())
 }
