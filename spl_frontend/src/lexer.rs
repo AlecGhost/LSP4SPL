@@ -106,7 +106,7 @@ impl Lexer for Token {
                 lex_keyword!(TokenType::Type),
                 lex_keyword!(TokenType::Var),
             )),
-            alt((Char::lex, Int::lex, Hex::lex, Ident::lex)),
+            alt((Char::lex, Hex::lex, Int::lex, Ident::lex)),
             Unknown::lex,
         ))(input)
     }
