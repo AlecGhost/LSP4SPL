@@ -10,7 +10,7 @@ use nom::{
     combinator::{all_consuming, map, opt, peek, recognize},
     multi::many0,
     sequence::{delimited, pair, preceded, terminated, tuple},
-    Offset,
+    Offset, InputLength,
 };
 use utility::{expect, ignore_until, ignore_until1};
 
@@ -559,11 +559,18 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
                         match var {
                             Variable::NamedVariable(ident) => {
                                 let tokens = pair.1;
-                                let range = ident.to_range().start..tokens.to_range().end;
+                                // tokens' input might be empty 
+                                // and then we cannot use `fragment()` or `to_range()`
+                                let (end, token_string) = if tokens.input_len() > 0 {
+                                    (tokens.to_range().end, tokens.fragment().to_string())
+                                } else {
+                                    (tokens.error_pos, "".to_string())
+                                };
+                                let range = ident.to_range().start..end;
                                 let err = SplError(
                                     range.clone(),
                                     ParseErrorMessage::UnexpectedCharacters(
-                                        ident.value + &tokens.fragment().to_string(),
+                                        ident.value + &token_string,
                                     )
                                     .to_string(),
                                 );
