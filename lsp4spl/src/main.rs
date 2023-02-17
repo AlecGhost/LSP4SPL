@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Context, Result};
 use lsp_types::{
     CompletionOptions, DeclarationCapability, FoldingRangeProviderCapability,
     HoverProviderCapability, ImplementationProviderCapability, OneOf, RenameOptions,
@@ -16,8 +16,9 @@ mod io;
 mod server;
 
 #[tokio::main]
-async fn main() {
-    register_logger().expect("Cannot register logger");
+async fn main() -> Result<()> {
+    color_eyre::install()?;
+    register_logger().wrap_err("Cannot register logger")?;
     log::info!("Startup");
     let ls = LanguageServer::setup(
         Some(ServerInfo {
@@ -74,15 +75,16 @@ async fn main() {
             position_encoding: None,
         },
     );
-    ls.run().await;
+    ls.run().await?;
     log::info!("Shutdown");
+    Ok(())
 }
 
 fn register_logger() -> Result<()> {
     WriteLogger::init(
         LevelFilter::Debug,
         Config::default(),
-        std::fs::File::create("lsp4spl.log")?,
+        std::fs::File::create("lsp4spl.log").wrap_err("Cannot open file")?,
     )?;
     Ok(())
 }

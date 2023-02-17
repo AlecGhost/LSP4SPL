@@ -1,4 +1,5 @@
 use crate::{document, io};
+use color_eyre::eyre::{Context, Result};
 use lsp_types::*;
 use tokio::sync::mpsc;
 use tokio_util::codec::FramedRead;
@@ -36,7 +37,7 @@ impl LanguageServer {
         }
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> Result<()> {
         let mut handles = vec![];
         // spawn thread which handles sending back messages to the client
         let stdout = tokio::io::stdout();
@@ -47,11 +48,9 @@ impl LanguageServer {
         let stdin = tokio::io::stdin();
         let mut framed_read = FramedRead::new(stdin, io::LSCodec);
 
-        // initialization phase
-        if let Err(err) = phases::initialization(&mut self, &mut framed_read, iotx.clone()).await {
-            log::error!("Unexpected error occured during initialization: {:#?}", err);
-            panic!("Unexpected error occured during initialization: {:#?}", err);
-        }
+        phases::initialization(&mut self, &mut framed_read, iotx.clone())
+            .await
+            .wrap_err("Unexpected error occured during initialization")?;
 
         // spawn thread which handles document synchronization
         let (doctx, docrx) = mpsc::channel(32);
@@ -61,39 +60,20 @@ impl LanguageServer {
             self.client_details.diagnostics,
         )));
 
-        // main phase
-        if let Err(err) = phases::main(&mut framed_read, iotx.clone(), doctx.clone()).await {
-            log::error!("Unexpected error occured during main phase: {:#?}", err);
-            panic!("Unexpected error occured during main phase: {:#?}", err);
-        }
+        phases::main(&mut framed_read, iotx.clone(), doctx.clone())
+            .await
+            .wrap_err("Unexpected error occured during main phase")?;
 
-        // shutdown phase
-        if let Err(err) = phases::shutdown(&mut framed_read, iotx).await {
-            log::error!("Unexpected error occured during shutdown: {:#?}", err);
-            panic!("Unexpected error occured during shutdown: {:#?}", err);
-        }
+        phases::shutdown(&mut framed_read, iotx)
+            .await
+            .wrap_err("Unexpected error occured during shutdown")?;
+
         drop(doctx);
         for handle in handles {
             handle.await.expect("Cannot await handle");
         }
-        // tokio::join!(responder_handle, document_broker_handle);
+        Ok(())
     }
-}
-
-macro_rules! respond {
-    ($request:ident, $func:path, $doctx:expr) => {{
-        let (params, response) = $request.split();
-        let params = serde_json::from_value(params)?;
-        let result = $func($doctx, params).await?;
-        response.into_result_response(result)
-    }};
-}
-
-macro_rules! note {
-    ($notification:ident, $func:path, $doctx:expr) => {{
-        let params = serde_json::from_value($notification.params)?;
-        $func($doctx, params).await?;
-    }};
 }
 
 mod phases {
@@ -104,12 +84,32 @@ mod phases {
         features,
         io::{LSCodec, Message, Response},
     };
-    use color_eyre::eyre::{eyre, Result};
+    use color_eyre::eyre::{eyre, Context, Result};
     use futures::StreamExt;
     use lsp_types::{notification::*, request::*};
     use serde_json::Value;
     use tokio::{io::Stdin, sync::mpsc::Sender};
     use tokio_util::codec::FramedRead;
+
+    macro_rules! respond {
+        ($request:ident, $func:path, $doctx:expr) => {{
+            let (params, response) = $request.split();
+            let params = serde_json::from_value(params)?;
+            let result = $func($doctx, params)
+                .await
+                .wrap_err("Cannot process request")?;
+            response.into_result_response(result)
+        }};
+    }
+
+    macro_rules! note {
+        ($notification:ident, $func:path, $doctx:expr) => {{
+            let params = serde_json::from_value($notification.params)?;
+            $func($doctx, params)
+                .await
+                .wrap_err("Cannot process notification")?;
+        }};
+    }
 
     pub(super) async fn initialization(
         ls: &mut LanguageServer,
@@ -117,7 +117,7 @@ mod phases {
         iotx: Sender<Message>,
     ) -> Result<()> {
         while let Some(frame) = framed_read.next().await {
-            let message = frame?;
+            let message = frame.wrap_err("Recieved frame with error")?;
             match message {
                 Message::Request(request) => {
                     let response: Response = if request.method.as_str() == Initialize::METHOD {
@@ -142,13 +142,12 @@ mod phases {
                     }
                 }
                 Message::Response(response) => {
-                    log::error!("Cannot handle responses: {:?}", response);
-                    panic!("Cannot handle responses: {:?}", response);
+                    return Err(eyre!("Cannot handle responses: {:?}", response));
                 }
             };
         }
         while let Some(frame) = framed_read.next().await {
-            let message = frame?;
+            let message = frame.wrap_err("Recieved frame with error")?;
             match message {
                 Message::Request(request) => {
                     // Answer all incoming requests with an error
@@ -165,8 +164,7 @@ mod phases {
                     _ => { /* drop all other notifications */ }
                 },
                 Message::Response(response) => {
-                    log::error!("Cannot handle responses: {:?}", response);
-                    panic!("Cannot handle responses: {:?}", response);
+                    return Err(eyre!("Cannot handle responses: {:?}", response));
                 }
             };
         }
@@ -179,90 +177,84 @@ mod phases {
         doctx: Sender<DocumentRequest>,
     ) -> Result<()> {
         while let Some(frame) = framed_read.next().await {
-            match frame {
-                Ok(message) => match message {
-                    Message::Request(request) => {
-                        let response: Response = match request.method.as_str() {
-                            Initialize::METHOD => {
-                                let (_, response) = request.split();
-                                response.into_error_response(ResponseError::new(
-                                    ErrorCode::InvalidRequest,
-                                    "Initialize method shall only be send once".to_string(),
-                                ))
-                            }
-                            Shutdown::METHOD => {
-                                // exit main phase
-                                let (_, response) = request.split();
-                                let response = response.into_result_response(Value::Null);
-                                iotx.send(Message::Response(response)).await?;
-                                return Ok(());
-                            }
-                            GotoDeclaration::METHOD => {
-                                respond!(request, features::goto::declaration, doctx.clone())
-                            }
-                            GotoDefinition::METHOD => {
-                                respond!(request, features::goto::definition, doctx.clone())
-                            }
-                            GotoImplementation::METHOD => {
-                                respond!(request, features::goto::implementation, doctx.clone())
-                            }
-                            GotoTypeDefinition::METHOD => {
-                                respond!(request, features::goto::type_definition, doctx.clone())
-                            }
-                            References::METHOD => {
-                                respond!(request, features::references::find, doctx.clone())
-                            }
-                            HoverRequest::METHOD => {
-                                respond!(request, features::hover, doctx.clone())
-                            }
-                            Rename::METHOD => {
-                                respond!(request, features::references::rename, doctx.clone())
-                            }
-                            PrepareRenameRequest::METHOD => {
-                                respond!(request, features::references::prepare_rename, doctx.clone())
-                            }
-                            Completion::METHOD => {
-                                respond!(request, features::completion, doctx.clone())
-                            }
-                            FoldingRangeRequest::METHOD => {
-                                respond!(request, features::fold, doctx.clone())
-                            }
-                            unknown_method => {
-                                let method_name = unknown_method.to_string();
-                                let (_, response) = request.split();
-                                response.into_error_response(ResponseError::new(
-                                    ErrorCode::MethodNotFound,
-                                    format!("Unknown method {}", method_name),
-                                ))
-                            }
-                        };
-                        iotx.send(Message::Response(response)).await?;
-                    }
-                    Message::Notification(notification) => {
-                        match notification.method.as_str() {
-                            DidOpenTextDocument::METHOD => {
-                                note!(notification, document::open, doctx.clone())
-                            }
-                            DidChangeTextDocument::METHOD => {
-                                note!(notification, document::change, doctx.clone())
-                            }
-                            DidCloseTextDocument::METHOD => {
-                                note!(notification, document::close, doctx.clone())
-                            }
-                            Exit::METHOD => std::process::exit(1), // ungraceful exit
-                            _ => { /* drop all other notifications */ }
-                        };
-                    }
-                    Message::Response(response) => {
-                        log::error!("Cannot handle responses: {:?}", response);
-                        return Err(eyre!("Cannot handle responses: {:?}", response));
-                    }
-                },
-                Err(err) => {
-                    log::error!("Recieved frame with error: {:?}", err);
-                    return Err(err.into());
+            let message = frame.wrap_err("Recieved frame with error")?;
+            match message {
+                Message::Request(request) => {
+                    let response: Response = match request.method.as_str() {
+                        Initialize::METHOD => {
+                            let (_, response) = request.split();
+                            response.into_error_response(ResponseError::new(
+                                ErrorCode::InvalidRequest,
+                                "Initialize method shall only be send once".to_string(),
+                            ))
+                        }
+                        Shutdown::METHOD => {
+                            // exit main phase
+                            let (_, response) = request.split();
+                            let response = response.into_result_response(Value::Null);
+                            iotx.send(Message::Response(response)).await?;
+                            return Ok(());
+                        }
+                        GotoDeclaration::METHOD => {
+                            respond!(request, features::goto::declaration, doctx.clone())
+                        }
+                        GotoDefinition::METHOD => {
+                            respond!(request, features::goto::definition, doctx.clone())
+                        }
+                        GotoImplementation::METHOD => {
+                            respond!(request, features::goto::implementation, doctx.clone())
+                        }
+                        GotoTypeDefinition::METHOD => {
+                            respond!(request, features::goto::type_definition, doctx.clone())
+                        }
+                        References::METHOD => {
+                            respond!(request, features::references::find, doctx.clone())
+                        }
+                        HoverRequest::METHOD => {
+                            respond!(request, features::hover, doctx.clone())
+                        }
+                        Rename::METHOD => {
+                            respond!(request, features::references::rename, doctx.clone())
+                        }
+                        PrepareRenameRequest::METHOD => {
+                            respond!(request, features::references::prepare_rename, doctx.clone())
+                        }
+                        Completion::METHOD => {
+                            respond!(request, features::completion, doctx.clone())
+                        }
+                        FoldingRangeRequest::METHOD => {
+                            respond!(request, features::fold, doctx.clone())
+                        }
+                        unknown_method => {
+                            let method_name = unknown_method.to_string();
+                            let (_, response) = request.split();
+                            response.into_error_response(ResponseError::new(
+                                ErrorCode::MethodNotFound,
+                                format!("Unknown method {}", method_name),
+                            ))
+                        }
+                    };
+                    iotx.send(Message::Response(response)).await?;
                 }
-            };
+                Message::Notification(notification) => {
+                    match notification.method.as_str() {
+                        DidOpenTextDocument::METHOD => {
+                            note!(notification, document::open, doctx.clone())
+                        }
+                        DidChangeTextDocument::METHOD => {
+                            note!(notification, document::change, doctx.clone())
+                        }
+                        DidCloseTextDocument::METHOD => {
+                            note!(notification, document::close, doctx.clone())
+                        }
+                        Exit::METHOD => std::process::exit(1), // ungraceful exit
+                        _ => { /* drop all other notifications */ }
+                    };
+                }
+                Message::Response(response) => {
+                    return Err(eyre!("Cannot handle responses: {:#?}", response));
+                }
+            }
         }
         Ok(())
     }
@@ -272,7 +264,7 @@ mod phases {
         tx: Sender<Message>,
     ) -> Result<()> {
         while let Some(frame) = framed_read.next().await {
-            let message = frame?;
+            let message = frame.wrap_err("Recieved frame with error")?;
             match message {
                 Message::Request(request) => {
                     // Answer all incoming requests with an error
@@ -290,8 +282,7 @@ mod phases {
                     }
                 }
                 Message::Response(response) => {
-                    log::error!("Cannot handle responses: {:?}", response);
-                    panic!("Cannot handle responses: {:?}", response);
+                    return Err(eyre!("Cannot handle responses {:#?}", response));
                 }
             };
         }

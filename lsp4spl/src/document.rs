@@ -1,4 +1,4 @@
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Result, Context};
 use lsp_types::{
     notification::{Notification, PublishDiagnostics},
     *,
@@ -6,9 +6,10 @@ use lsp_types::{
 use spl_frontend::{
     ast::Program,
     error::SplError,
+    lexer::{self, token::Token},
     parser,
     table::{self, SymbolTable},
-    LocalBroker, lexer::{self, token::Token},
+    LocalBroker,
 };
 use std::collections::HashMap;
 use tokio::sync::{
@@ -35,7 +36,8 @@ pub(super) async fn open(
             params.text_document.uri,
             params.text_document.text,
         ))
-        .await?;
+        .await
+        .wrap_err("Cannot send document request")?;
     Ok(())
 }
 
@@ -48,7 +50,8 @@ pub(super) async fn change(
             params.text_document.uri,
             params.content_changes,
         ))
-        .await?;
+        .await
+        .wrap_err("Cannot send document request")?;
     Ok(())
 }
 
@@ -58,7 +61,8 @@ pub(super) async fn close(
 ) -> Result<()> {
     broker
         .send(DocumentRequest::Close(params.text_document.uri))
-        .await?;
+        .await
+        .wrap_err("Cannot send document request")?;
     Ok(())
 }
 

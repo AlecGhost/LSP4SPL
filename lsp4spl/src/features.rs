@@ -1,9 +1,9 @@
 use crate::document::{self, DocumentInfo, DocumentRequest};
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Context, Result};
 use lsp_types::{TextDocumentPositionParams, Url};
 use spl_frontend::{
     ast::Identifier,
-    lexer::token::{TokenAt, TokenType},
+    lexer::token::{TokenList, TokenType},
     table::RangedEntry,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
@@ -37,8 +37,11 @@ impl DocumentCursor {
 
 async fn get_doc_info(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option<DocumentInfo>> {
     let (tx, rx) = oneshot::channel();
-    doctx.send(DocumentRequest::GetInfo(uri, tx)).await?;
-    let doc_info = rx.await?;
+    doctx
+        .send(DocumentRequest::GetInfo(uri, tx))
+        .await
+        .wrap_err("Cannot send document request")?;
+    let doc_info = rx.await.wrap_err("Cannot recieve document request")?;
     Ok(doc_info)
 }
 
