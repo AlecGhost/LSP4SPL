@@ -1,6 +1,6 @@
 use crate::document::DocumentRequest;
 use color_eyre::eyre::Result;
-use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams};
+use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentation, MarkupKind};
 use spl_frontend::{
     ast::{GlobalDeclaration, ProcedureDeclaration, Statement, TypeDeclaration},
     lexer::token::{Token, TokenList, TokenType},
@@ -9,7 +9,7 @@ use spl_frontend::{
 };
 use tokio::sync::mpsc::Sender;
 
-pub(crate) async fn completion(
+pub(crate) async fn propose(
     doctx: Sender<DocumentRequest>,
     params: CompletionParams,
 ) -> Result<Option<Vec<CompletionItem>>> {
@@ -305,9 +305,16 @@ fn search_types(table: &SymbolTable) -> Vec<CompletionItem> {
         .entries
         .iter()
         .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Type(_)))
-        .map(|(ident, _)| CompletionItem {
+        .map(|(ident, ranged_entry)| CompletionItem {
             label: ident.value.clone(),
             kind: Some(CompletionItemKind::STRUCT),
+            detail: Some(ranged_entry.entry.to_string()),
+            documentation: ranged_entry.entry.documentation().map(|docu| {
+                Documentation::MarkupContent(lsp_types::MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: docu.trim_start().to_string(),
+                })
+            }),
             ..Default::default()
         })
         .collect();
@@ -320,9 +327,16 @@ fn search_variables(table: &SymbolTable) -> Vec<CompletionItem> {
         .entries
         .iter()
         .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Variable(_)))
-        .map(|(ident, _)| CompletionItem {
+        .map(|(ident, ranged_entry)| CompletionItem {
             label: ident.value.clone(),
             kind: Some(CompletionItemKind::VARIABLE),
+            detail: Some(ranged_entry.entry.to_string()),
+            documentation: ranged_entry.entry.documentation().map(|docu| {
+                Documentation::MarkupContent(lsp_types::MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: docu.trim_start().to_string(),
+                })
+            }),
             ..Default::default()
         })
         .collect()
@@ -333,9 +347,16 @@ fn search_procedures(table: &SymbolTable) -> Vec<CompletionItem> {
         .entries
         .iter()
         .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Procedure(_)))
-        .map(|(ident, _)| CompletionItem {
+        .map(|(ident, ranged_entry)| CompletionItem {
             label: ident.value.clone(),
             kind: Some(CompletionItemKind::FUNCTION),
+            detail: Some(ranged_entry.entry.to_string()),
+            documentation: ranged_entry.entry.documentation().map(|docu| {
+                Documentation::MarkupContent(lsp_types::MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: docu.trim_start().to_string(),
+                })
+            }),
             ..Default::default()
         })
         .collect()

@@ -1,5 +1,10 @@
 use super::*;
-use crate::{ast::*, error::SplError, ToRange};
+use crate::{
+    ast::*,
+    error::SplError,
+    lexer::token::{Token, TokenType},
+    ToRange,
+};
 
 #[cfg(test)]
 mod tests;
@@ -64,16 +69,21 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
                 ));
                 return;
             }
+            let documentation = get_documentation(&self.info.tokens);
             table.enter(
                 name.clone(),
                 RangedEntry {
                     range: self.to_range(),
-                    entry: Entry::Type(get_data_type(
-                        &self.type_expr,
-                        &self.name,
-                        table,
-                        broker.clone(),
-                    )),
+                    entry: Entry::Type(TypeEntry {
+                        name: name.clone(),
+                        data_type: get_data_type(
+                            &self.type_expr,
+                            &self.name,
+                            table,
+                            broker.clone(),
+                        ),
+                        documentation,
+                    }),
                 },
                 || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsType)),
             );
@@ -84,6 +94,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
 impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
+            let documentation = get_documentation(&self.info.tokens);
             let mut local_table = SymbolTable::default();
             let parameters = self
                 .parameters
@@ -97,6 +108,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
                 name: name.clone(),
                 local_table,
                 parameters,
+                documentation,
             };
             table.enter(
                 name.clone(),
@@ -118,10 +130,12 @@ fn build_parameter<B: DiagnosticsBroker>(
     local_table: &mut SymbolTable,
     broker: B,
 ) -> VariableEntry {
+    let documentation = get_documentation(&param.info.tokens);
     let param_entry = VariableEntry {
         name: param.name.clone(),
         is_ref: param.is_ref,
         data_type: get_data_type(&param.type_expr, &param.name, global_table, broker.clone()),
+        documentation,
     };
     if let Some(name) = &param.name {
         if let Some(data_type) = &param_entry.data_type {
@@ -147,6 +161,7 @@ fn build_variable<B: DiagnosticsBroker>(
     local_table: &mut SymbolTable,
     broker: B,
 ) {
+    let documentation = get_documentation(&var.info.tokens);
     let entry = VariableEntry {
         name: var.name.clone(),
         is_ref: false,
@@ -159,6 +174,7 @@ fn build_variable<B: DiagnosticsBroker>(
             },
             broker.clone(),
         ),
+        documentation,
     };
     if let Some(name) = &var.name {
         local_table.enter(
@@ -207,7 +223,7 @@ fn get_data_type<T: Table, B: DiagnosticsBroker>(
                     Some(DataType::Int)
                 } else if let Some(ranged_entry) = table.lookup(name) {
                     if let Entry::Type(t) = &ranged_entry.entry {
-                        t.clone()
+                        t.data_type.clone()
                     } else {
                         broker.report_error(name.to_error(BuildErrorMessage::NotAType));
                         None
@@ -220,5 +236,20 @@ fn get_data_type<T: Table, B: DiagnosticsBroker>(
         }
     } else {
         None
+    }
+}
+
+fn get_documentation(tokens: &[Token]) -> Option<String> {
+    let documentation: String = tokens
+        .iter()
+        .map_while(|token| match &token.token_type {
+            TokenType::Comment(comment) => Some(String::new() + comment + "\n"),
+            _ => None,
+        })
+        .collect();
+    if documentation.is_empty() {
+        None
+    } else {
+        Some(documentation)
     }
 }

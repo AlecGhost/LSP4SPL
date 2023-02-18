@@ -1,4 +1,5 @@
 use crate::lexer::token::Token;
+use crate::table::TypeEntry;
 use crate::{
     ast::Identifier,
     error::SplError,
@@ -29,7 +30,11 @@ fn type_decs() {
             Identifier::new("a", &tokens[1..2]),
             RangedEntry {
                 range: 0..13,
-                entry: Entry::Type(Some(DataType::Int)),
+                entry: Entry::Type(TypeEntry {
+                    name: Identifier::new("a", &tokens[1..2]),
+                    data_type: Some(DataType::Int),
+                    documentation: None
+                }),
             },
         )])
     );
@@ -45,11 +50,15 @@ fn type_decs() {
             Identifier::new("a", &tokens[1..2]),
             RangedEntry {
                 range: 0..25,
-                entry: Entry::Type(Some(DataType::Array {
-                    size: 5,
-                    base_type: Box::new(DataType::Int),
-                    creator: Identifier::new("a", &tokens[1..2]),
-                })),
+                entry: Entry::Type(TypeEntry {
+                    name: Identifier::new("a", &tokens[1..2]),
+                    data_type: Some(DataType::Array {
+                        size: 5,
+                        base_type: Box::new(DataType::Int),
+                        creator: Identifier::new("a", &tokens[1..2]),
+                    }),
+                    documentation: None
+                }),
             }
         )])
     );
@@ -65,7 +74,11 @@ fn type_decs() {
             Identifier::new("a", &tokens[1..2]),
             RangedEntry {
                 range: 0..14,
-                entry: Entry::Type(None),
+                entry: Entry::Type(TypeEntry {
+                    name: Identifier::new("a", &tokens[1..2]),
+                    data_type: None,
+                    documentation: None
+                }),
             },
         )])
     );
@@ -92,8 +105,9 @@ fn test_main() {
                 range: 0..14,
                 entry: Entry::Procedure(ProcedureEntry {
                     name: Identifier::new("main", &tokens[1..2]),
-                    local_table: SymbolTable::new(),
+                    local_table: SymbolTable::default(),
                     parameters: Vec::new(),
+                    documentation: None,
                 }),
             }
         )])
@@ -126,8 +140,9 @@ fn test_main() {
                 range: 17..31,
                 entry: Entry::Procedure(ProcedureEntry {
                     name: Identifier::new("main", &tokens[6..7]),
-                    local_table: SymbolTable::new(),
+                    local_table: SymbolTable::default(),
                     parameters: Vec::new(),
+                    documentation: None,
                 }),
             }
         )])
@@ -157,7 +172,8 @@ fn test_main() {
                                 entry: Entry::Variable(VariableEntry {
                                     name: Some(Identifier::new("a", &tokens[3..4])),
                                     is_ref: false,
-                                    data_type: Some(DataType::Int)
+                                    data_type: Some(DataType::Int),
+                                    documentation: None,
                                 }),
                             }
                         )])
@@ -165,8 +181,10 @@ fn test_main() {
                     parameters: vec![VariableEntry {
                         name: Some(Identifier::new("a", &tokens[3..4])),
                         is_ref: false,
-                        data_type: Some(DataType::Int)
+                        data_type: Some(DataType::Int),
+                        documentation: None,
                     }],
+                    documentation: None,
                 }),
             }
         )])

@@ -25,10 +25,18 @@ impl DataType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeEntry {
+    pub name: Identifier,
+    pub data_type: Option<DataType>,
+    pub documentation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableEntry {
     pub name: Option<Identifier>,
     pub is_ref: bool,
     pub data_type: Option<DataType>,
+    pub documentation: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,13 +44,24 @@ pub struct ProcedureEntry {
     pub name: Identifier,
     pub local_table: SymbolTable,
     pub parameters: Vec<VariableEntry>,
+    pub documentation: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Entry {
-    Type(Option<DataType>),
+    Type(TypeEntry),
     Variable(VariableEntry),
     Procedure(ProcedureEntry),
+}
+
+impl Entry {
+    pub fn documentation(&self) -> Option<String> {
+        match self {
+            Entry::Procedure(p) => p.documentation.clone(),
+            Entry::Type(t) => t.documentation.clone(),
+            Entry::Variable(v) => v.documentation.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -162,6 +181,7 @@ impl Display for Entry {
         let display = match self {
             Entry::Procedure(p) => p.to_string(),
             Entry::Type(t) => t
+                .data_type
                 .as_ref()
                 .map(|dt| dt.to_string())
                 .unwrap_or_else(|| "_".to_string()),

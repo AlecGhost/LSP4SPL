@@ -220,7 +220,7 @@ mod phases {
                             respond!(request, features::references::prepare_rename, doctx.clone())
                         }
                         Completion::METHOD => {
-                            respond!(request, features::completion, doctx.clone())
+                            respond!(request, features::completion::propose, doctx.clone())
                         }
                         FoldingRangeRequest::METHOD => {
                             respond!(request, features::fold, doctx.clone())

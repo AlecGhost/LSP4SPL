@@ -8,13 +8,12 @@ use spl_frontend::{
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
-mod completion;
+pub(crate) mod completion;
 mod fold;
 pub(crate) mod goto;
 mod hover;
 pub(crate) mod references;
 
-pub(crate) use completion::completion;
 pub(crate) use fold::fold;
 pub(crate) use hover::hover;
 
@@ -68,3 +67,15 @@ async fn doc_cursor(
     }
     Ok(None)
 }
+
+pub(super) trait ToSpl {
+    /// Turns input into a SPL markdown code block
+    fn to_spl(&self) -> String;
+}
+
+impl ToSpl for String {
+    fn to_spl(&self) -> String {
+        String::new() + "```spl\n" + self + "\n```"
+    }
+}
+
