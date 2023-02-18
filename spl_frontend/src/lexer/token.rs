@@ -5,35 +5,35 @@ use std::{
     ops::{Range, RangeTo},
 };
 
-const LPAREN: &str = "(";
-const RPAREN: &str = ")";
-const LBRACKET: &str = "[";
-const RBRACKET: &str = "]";
-const LCURLY: &str = "{";
-const RCURLY: &str = "}";
-const EQ: &str = "=";
-const NEQ: &str = "#";
-const LT: &str = "<";
-const LE: &str = "<=";
-const GT: &str = ">";
-const GE: &str = ">=";
-const ASSIGN: &str = ":=";
-const COLON: &str = ":";
-const COMMA: &str = ",";
-const SEMIC: &str = ";";
-const PLUS: &str = "+";
-const MINUS: &str = "-";
-const TIMES: &str = "*";
-const DIVIDE: &str = "/";
-const IF: &str = "if";
-const ELSE: &str = "else";
-const WHILE: &str = "while";
-const ARRAY: &str = "array";
-const OF: &str = "of";
-const PROC: &str = "proc";
-const REF: &str = "ref";
-const TYPE: &str = "type";
-const VAR: &str = "var";
+pub const LPAREN: &str = "(";
+pub const RPAREN: &str = ")";
+pub const LBRACKET: &str = "[";
+pub const RBRACKET: &str = "]";
+pub const LCURLY: &str = "{";
+pub const RCURLY: &str = "}";
+pub const EQ: &str = "=";
+pub const NEQ: &str = "#";
+pub const LT: &str = "<";
+pub const LE: &str = "<=";
+pub const GT: &str = ">";
+pub const GE: &str = ">=";
+pub const ASSIGN: &str = ":=";
+pub const COLON: &str = ":";
+pub const COMMA: &str = ",";
+pub const SEMIC: &str = ";";
+pub const PLUS: &str = "+";
+pub const MINUS: &str = "-";
+pub const TIMES: &str = "*";
+pub const DIVIDE: &str = "/";
+pub const IF: &str = "if";
+pub const ELSE: &str = "else";
+pub const WHILE: &str = "while";
+pub const ARRAY: &str = "array";
+pub const OF: &str = "of";
+pub const PROC: &str = "proc";
+pub const REF: &str = "ref";
+pub const TYPE: &str = "type";
+pub const VAR: &str = "var";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Token {
@@ -53,13 +53,33 @@ impl std::fmt::Display for Token {
     }
 }
 
-pub trait TokenAt {
+pub trait TokenList {
     fn token_at(&self, index: usize) -> Option<&Token>;
+    fn token_before(&self, index: usize) -> Option<&Token>;
 }
 
-impl TokenAt for Vec<Token> {
+impl TokenList for Vec<Token> {
     fn token_at(&self, index: usize) -> Option<&Token> {
         self.iter().find(|token| token.range.contains(&index))
+    }
+
+    fn token_before(&self, index: usize) -> Option<&Token> {
+        if let Some(first) = self.first() {
+            if first.range.start > index {
+                return None;
+            }
+            let mut current = first;
+            for token in self.iter() {
+                if token.range.start >= index {
+                    break;
+                } else {
+                    current = token;
+                }
+            }
+            Some(current)
+        } else {
+            None
+        }
     }
 }
 
@@ -230,11 +250,8 @@ impl<'a, B: Clone> Tokens<'a, B> {
     }
 
     pub fn fragment(&self) -> &Token {
+        assert!(!self.tokens.is_empty(), "Token slice must not be empty");
         &self.tokens[0]
-    }
-
-    pub fn token(&self) -> Token {
-        self.fragment().clone()
     }
 }
 

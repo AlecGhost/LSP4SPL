@@ -56,18 +56,12 @@ pub trait Table {
     fn entry(&self, key: &Identifier) -> Option<(&Identifier, &RangedEntry)>;
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct SymbolTable {
     pub entries: HashMap<Identifier, RangedEntry>,
 }
 
 impl SymbolTable {
-    fn new() -> Self {
-        Self {
-            entries: HashMap::new(),
-        }
-    }
-
     fn enter(&mut self, key: Identifier, value: RangedEntry, mut on_error: impl FnMut()) {
         // TODO: More effective lookup
         if !self.entries.keys().any(|ident| ident.value == key.value) {

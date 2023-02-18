@@ -84,7 +84,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
 impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
     fn build(&self, table: &mut SymbolTable, broker: B) {
         if let Some(name) = &self.name {
-            let mut local_table = SymbolTable::new();
+            let mut local_table = SymbolTable::default();
             let parameters = self
                 .parameters
                 .iter()

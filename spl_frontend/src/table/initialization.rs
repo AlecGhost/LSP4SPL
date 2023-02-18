@@ -12,7 +12,7 @@ impl SymbolTable {
                 range: 0..0,
                 entry: Entry::Procedure(ProcedureEntry {
                     name,
-                    local_table: SymbolTable::new(),
+                    local_table: SymbolTable::default(),
                     parameters,
                 }),
             }
