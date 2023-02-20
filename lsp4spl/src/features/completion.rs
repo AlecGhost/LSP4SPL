@@ -75,9 +75,11 @@ pub(crate) async fn propose(
                                 let completions = match last_token.token_type {
                                     TokenType::Colon => Some(search_types(table)),
                                     TokenType::Semic | TokenType::LCurly => {
-                                        let completions =
-                                            vec![vec![items::var()], new_stmt(local_table, table)]
-                                                .concat();
+                                        let completions = vec![
+                                            vec![snippets::var(), items::var()],
+                                            new_stmt(local_table, table),
+                                        ]
+                                        .concat();
                                         Some(completions)
                                     }
                                     _ => None,
@@ -187,7 +189,11 @@ fn complete_statement(
 ) -> Option<Vec<CompletionItem>> {
     // provide completion support for `else` after if statement
     if last_stmt_is_if && matches!(last_token.token_type, TokenType::RCurly) {
-        let completions = vec![vec![items::r#else()], new_stmt(local_table, global_table)].concat();
+        let completions = vec![
+            vec![snippets::r#else(), items::r#else()],
+            new_stmt(local_table, global_table),
+        ]
+        .concat();
         return Some(completions);
     }
 
@@ -364,7 +370,12 @@ fn search_procedures(table: &SymbolTable) -> Vec<CompletionItem> {
 
 fn new_stmt(local_table: &SymbolTable, global_table: &SymbolTable) -> Vec<CompletionItem> {
     vec![
-        vec![items::r#if(), items::r#while()],
+        vec![
+            snippets::r#if(),
+            snippets::r#while(),
+            items::r#if(),
+            items::r#while(),
+        ],
         search_variables(local_table),
         search_procedures(global_table),
     ]
@@ -430,5 +441,9 @@ mod snippets {
     snippet!(main, "proc main() {\n    $0\n}");
     snippet!(array, "array [$1] of $0");
     snippet!(proc, "proc $1($2) {\n    $0\n}");
+    snippet!(var, "var $1: $0;");
     snippet!(r#type, "type", "type $1 = $0;");
+    snippet!(r#if, "while", "while ($1) {\n    $0\n}");
+    snippet!(r#while, "if", "if ($1) {\n    $0\n}");
+    snippet!(r#else, "else", "else {\n    $0\n}");
 }
