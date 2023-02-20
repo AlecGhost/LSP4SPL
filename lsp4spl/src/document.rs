@@ -1,4 +1,4 @@
-use color_eyre::eyre::{Result, Context};
+use color_eyre::eyre::{Context, Result};
 use lsp_types::{
     notification::{Notification, PublishDiagnostics},
     *,

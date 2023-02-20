@@ -26,7 +26,9 @@ impl ToRange for Range<usize> {
 
 impl AstInfo {
     pub fn new(tokens: &[Token]) -> Self {
-        Self { tokens: tokens.to_vec() }
+        Self {
+            tokens: tokens.to_vec(),
+        }
     }
 }
 

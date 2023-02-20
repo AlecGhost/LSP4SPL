@@ -2,9 +2,9 @@ use crate::document::{self, DocumentInfo, DocumentRequest};
 use color_eyre::eyre::{Context, Result};
 use lsp_types::{TextDocumentPositionParams, Url};
 use spl_frontend::{
-    ast::Identifier,
+    ast::{Identifier, ProcedureDeclaration},
     lexer::token::{TokenList, TokenType},
-    table::RangedEntry,
+    table::{Entry, RangedEntry, SymbolTable, Table},
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -13,9 +13,11 @@ mod fold;
 pub(crate) mod goto;
 mod hover;
 pub(crate) mod references;
+pub(crate) mod semantic_tokens;
 
 pub(crate) use fold::fold;
 pub(crate) use hover::hover;
+pub(crate) use semantic_tokens::semantic_tokens;
 
 struct DocumentCursor {
     doc_info: DocumentInfo,
@@ -79,3 +81,16 @@ impl ToSpl for String {
     }
 }
 
+fn get_local_table<'a>(
+    pd: &ProcedureDeclaration,
+    global_table: &'a SymbolTable,
+) -> Option<&'a SymbolTable> {
+    if let Some(name) = &pd.name {
+        if let Some(ranged_entry) = global_table.lookup(&name.value) {
+            if let Entry::Procedure(p) = &ranged_entry.entry {
+                return Some(&p.local_table);
+            }
+        }
+    }
+    None
+}

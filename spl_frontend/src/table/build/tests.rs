@@ -27,7 +27,7 @@ fn type_decs() {
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("a", &tokens[1..2]),
+            "a".to_string(),
             RangedEntry {
                 range: 0..13,
                 entry: Entry::Type(TypeEntry {
@@ -47,7 +47,7 @@ fn type_decs() {
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("a", &tokens[1..2]),
+            "a".to_string(),
             RangedEntry {
                 range: 0..25,
                 entry: Entry::Type(TypeEntry {
@@ -71,7 +71,7 @@ fn type_decs() {
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("a", &tokens[1..2]),
+            "a".to_string(),
             RangedEntry {
                 range: 0..14,
                 entry: Entry::Type(TypeEntry {
@@ -100,7 +100,7 @@ fn test_main() {
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("main", &tokens[1..2]),
+            "main".to_string(),
             RangedEntry {
                 range: 0..14,
                 entry: Entry::Procedure(ProcedureEntry {
@@ -135,7 +135,7 @@ fn test_main() {
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("main", &tokens[6..7]),
+            "main".to_string(),
             RangedEntry {
                 range: 17..31,
                 entry: Entry::Procedure(ProcedureEntry {
@@ -159,18 +159,18 @@ fn test_main() {
     assert_eq!(
         table,
         SymbolTable::initialize(vec![(
-            Identifier::new("main", &tokens[1..2]),
+            "main".to_string(),
             RangedEntry {
                 range: 0..20,
                 entry: Entry::Procedure(ProcedureEntry {
                     name: Identifier::new("main", &tokens[1..2]),
                     local_table: SymbolTable {
                         entries: HashMap::from([(
-                            Identifier::new("a", &tokens[3..4]),
+                            "a".to_string(),
                             RangedEntry {
                                 range: 10..16,
                                 entry: Entry::Variable(VariableEntry {
-                                    name: Some(Identifier::new("a", &tokens[3..4])),
+                                    name: Identifier::new("a", &tokens[3..4]),
                                     is_ref: false,
                                     data_type: Some(DataType::Int),
                                     documentation: None,
@@ -179,7 +179,7 @@ fn test_main() {
                         )])
                     },
                     parameters: vec![VariableEntry {
-                        name: Some(Identifier::new("a", &tokens[3..4])),
+                        name: Identifier::new("a", &tokens[3..4]),
                         is_ref: false,
                         data_type: Some(DataType::Int),
                         documentation: None,

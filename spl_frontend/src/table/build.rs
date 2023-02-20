@@ -29,8 +29,8 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
         self.global_declarations
             .iter()
             .for_each(|dec| dec.build(table, broker.clone()));
-        match &table.entries.iter().find(|(key, _)| key.value == "main") {
-            Some((_, ranged_entry)) => {
+        match &table.lookup("main") {
+            Some(ranged_entry) => {
                 if let Entry::Procedure(main) = &ranged_entry.entry {
                     if !main.parameters.is_empty() {
                         broker.report_error(SplError(
@@ -71,7 +71,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
             }
             let documentation = get_documentation(&self.info.tokens);
             table.enter(
-                name.clone(),
+                name.to_string(),
                 RangedEntry {
                     range: self.to_range(),
                     entry: Entry::Type(TypeEntry {
@@ -99,7 +99,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
             let parameters = self
                 .parameters
                 .iter()
-                .map(|param| build_parameter(param, table, &mut local_table, broker.clone()))
+                .filter_map(|param| build_parameter(param, table, &mut local_table, broker.clone()))
                 .collect();
             self.variable_declarations
                 .iter()
@@ -111,7 +111,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
                 documentation,
             };
             table.enter(
-                name.clone(),
+                name.to_string(),
                 RangedEntry {
                     range: self.to_range(),
                     entry: Entry::Procedure(entry),
@@ -129,30 +129,33 @@ fn build_parameter<B: DiagnosticsBroker>(
     global_table: &SymbolTable,
     local_table: &mut SymbolTable,
     broker: B,
-) -> VariableEntry {
-    let documentation = get_documentation(&param.info.tokens);
-    let param_entry = VariableEntry {
-        name: param.name.clone(),
-        is_ref: param.is_ref,
-        data_type: get_data_type(&param.type_expr, &param.name, global_table, broker.clone()),
-        documentation,
-    };
+) -> Option<VariableEntry> {
     if let Some(name) = &param.name {
+        let documentation = get_documentation(&param.info.tokens);
+        let param_entry = VariableEntry {
+            name: name.clone(),
+            is_ref: param.is_ref,
+            is_param: true,
+            data_type: get_data_type(&param.type_expr, &param.name, global_table, broker.clone()),
+            documentation,
+        };
         if let Some(data_type) = &param_entry.data_type {
             if !data_type.is_primitive() && !param_entry.is_ref {
                 broker.report_error(name.to_error(BuildErrorMessage::MustBeAReferenceParameter));
             }
         }
         local_table.enter(
-            name.clone(),
+            name.to_string(),
             RangedEntry {
                 range: param.to_range(),
                 entry: Entry::Variable(param_entry.clone()),
             },
             || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter)),
         );
-    };
-    param_entry
+        Some(param_entry)
+    } else {
+        None
+    }
 }
 
 fn build_variable<B: DiagnosticsBroker>(
@@ -161,24 +164,25 @@ fn build_variable<B: DiagnosticsBroker>(
     local_table: &mut SymbolTable,
     broker: B,
 ) {
-    let documentation = get_documentation(&var.info.tokens);
-    let entry = VariableEntry {
-        name: var.name.clone(),
-        is_ref: false,
-        data_type: get_data_type(
-            &var.type_expr,
-            &var.name,
-            &LookupTable {
-                global_table,
-                local_table,
-            },
-            broker.clone(),
-        ),
-        documentation,
-    };
     if let Some(name) = &var.name {
+        let documentation = get_documentation(&var.info.tokens);
+        let entry = VariableEntry {
+            name: name.clone(),
+            is_ref: false,
+            is_param: false,
+            data_type: get_data_type(
+                &var.type_expr,
+                &var.name,
+                &LookupTable {
+                    global_table,
+                    local_table,
+                },
+                broker.clone(),
+            ),
+            documentation,
+        };
         local_table.enter(
-            name.clone(),
+            name.to_string(),
             RangedEntry {
                 range: var.to_range(),
                 entry: Entry::Variable(entry),
@@ -221,7 +225,7 @@ fn get_data_type<T: Table, B: DiagnosticsBroker>(
             NamedType(name) => {
                 if name.value == "int" {
                     Some(DataType::Int)
-                } else if let Some(ranged_entry) = table.lookup(name) {
+                } else if let Some(ranged_entry) = table.lookup(&name.value) {
                     if let Entry::Type(t) = &ranged_entry.entry {
                         t.data_type.clone()
                     } else {

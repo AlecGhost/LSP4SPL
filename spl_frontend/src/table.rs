@@ -1,4 +1,4 @@
-use crate::{ast::Identifier, error::BuildErrorMessage, DiagnosticsBroker};
+use crate::{ast::Identifier, error::BuildErrorMessage, DiagnosticsBroker, ToRange};
 pub use build::build;
 pub use semantic::analyze;
 use std::{collections::HashMap, fmt::Display, ops::Range};
@@ -33,8 +33,9 @@ pub struct TypeEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableEntry {
-    pub name: Option<Identifier>,
+    pub name: Identifier,
     pub is_ref: bool,
+    pub is_param: bool,
     pub data_type: Option<DataType>,
     pub documentation: Option<String>,
 }
@@ -54,6 +55,17 @@ pub enum Entry {
     Procedure(ProcedureEntry),
 }
 
+impl ToRange for Entry {
+    fn to_range(&self) -> Range<usize> {
+        use Entry::*;
+        match self {
+            Type(t) => t.name.to_range(),
+            Procedure(p) => p.name.to_range(),
+            _ => 0..0,
+        }
+    }
+}
+
 impl Entry {
     pub fn documentation(&self) -> Option<String> {
         match self {
@@ -71,20 +83,19 @@ pub struct RangedEntry {
 }
 
 pub trait Table {
-    fn lookup(&self, key: &Identifier) -> Option<&RangedEntry>;
-    fn entry(&self, key: &Identifier) -> Option<(&Identifier, &RangedEntry)>;
+    fn lookup(&self, key: &str) -> Option<&RangedEntry>;
+    fn entry(&self, key: &str) -> Option<(&String, &RangedEntry)>;
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct SymbolTable {
-    pub entries: HashMap<Identifier, RangedEntry>,
+    pub entries: HashMap<String, RangedEntry>,
 }
 
 impl SymbolTable {
-    fn enter(&mut self, key: Identifier, value: RangedEntry, mut on_error: impl FnMut()) {
-        // TODO: More effective lookup
-        if !self.entries.keys().any(|ident| ident.value == key.value) {
-            self.entries.insert(key, value);
+    fn enter(&mut self, key: String, value: RangedEntry, mut on_error: impl FnMut()) {
+        if let std::collections::hash_map::Entry::Vacant(v) = self.entries.entry(key) {
+            v.insert(value);
         } else {
             on_error();
         }
@@ -92,15 +103,15 @@ impl SymbolTable {
 }
 
 impl Table for SymbolTable {
-    fn lookup(&self, key: &Identifier) -> Option<&RangedEntry> {
+    fn lookup(&self, key: &str) -> Option<&RangedEntry> {
         self.entries
             .iter()
-            .find(|(k, _)| k.value == key.value)
+            .find(|(k, _)| k.as_str() == key)
             .map(|(_, v)| v)
     }
 
-    fn entry(&self, key: &Identifier) -> Option<(&Identifier, &RangedEntry)> {
-        self.entries.iter().find(|(k, _)| k.value == key.value)
+    fn entry(&self, key: &str) -> Option<(&String, &RangedEntry)> {
+        self.entries.iter().find(|(k, _)| k.as_str() == key)
     }
 }
 
@@ -111,7 +122,7 @@ pub struct LookupTable<'a> {
 }
 
 impl<'a> Table for LookupTable<'a> {
-    fn lookup(&self, key: &Identifier) -> Option<&RangedEntry> {
+    fn lookup(&self, key: &str) -> Option<&RangedEntry> {
         let mut value = self.local_table.lookup(key);
         if value.is_none() {
             value = self.global_table.lookup(key);
@@ -119,7 +130,7 @@ impl<'a> Table for LookupTable<'a> {
         value
     }
 
-    fn entry(&self, key: &Identifier) -> Option<(&Identifier, &RangedEntry)> {
+    fn entry(&self, key: &str) -> Option<(&String, &RangedEntry)> {
         let mut result = self.local_table.entry(key);
         if result.is_none() {
             result = self.global_table.entry(key);
@@ -149,10 +160,7 @@ impl Display for VariableEntry {
             f,
             "{}{}: {}",
             if self.is_ref { "ref " } else { "" },
-            self.name
-                .as_ref()
-                .map(|ident| ident.to_string())
-                .unwrap_or_else(|| "_".to_string()),
+            self.name,
             self.data_type
                 .as_ref()
                 .map(|dt| dt.to_string())

@@ -2,9 +2,9 @@ use crate::document::DocumentRequest;
 use color_eyre::eyre::Result;
 use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentation, MarkupKind};
 use spl_frontend::{
-    ast::{GlobalDeclaration, ProcedureDeclaration, Statement, TypeDeclaration},
+    ast::{GlobalDeclaration, Statement, TypeDeclaration},
     lexer::token::{Token, TokenList, TokenType},
-    table::{Entry, SymbolTable, Table},
+    table::{Entry, SymbolTable},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -48,7 +48,8 @@ pub(crate) async fn propose(
                         } else {
                             // handle procedure body
                             let empty_table = SymbolTable::default();
-                            let local_table = get_local_table(pd, table).unwrap_or(&empty_table);
+                            let local_table =
+                                super::get_local_table(pd, table).unwrap_or(&empty_table);
 
                             let in_statements = if let Some(first_stmt) =
                                 &pd.statements.iter().find(|stmt| {
@@ -108,20 +109,6 @@ pub(crate) async fn propose(
     } else {
         Ok(None)
     }
-}
-
-fn get_local_table<'a>(
-    pd: &ProcedureDeclaration,
-    global_table: &'a SymbolTable,
-) -> Option<&'a SymbolTable> {
-    if let Some(name) = &pd.name {
-        if let Some(ranged_entry) = global_table.lookup(name) {
-            if let Entry::Procedure(p) = &ranged_entry.entry {
-                return Some(&p.local_table);
-            }
-        }
-    }
-    None
 }
 
 fn complete_type(
@@ -306,7 +293,7 @@ fn search_types(table: &SymbolTable) -> Vec<CompletionItem> {
         .iter()
         .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Type(_)))
         .map(|(ident, ranged_entry)| CompletionItem {
-            label: ident.value.clone(),
+            label: ident.clone(),
             kind: Some(CompletionItemKind::STRUCT),
             detail: Some(ranged_entry.entry.to_string()),
             documentation: ranged_entry.entry.documentation().map(|docu| {
@@ -318,6 +305,7 @@ fn search_types(table: &SymbolTable) -> Vec<CompletionItem> {
             ..Default::default()
         })
         .collect();
+    // TODO: remove int and lookup in lookup_table
     completions.push(items::int());
     completions
 }
@@ -328,7 +316,7 @@ fn search_variables(table: &SymbolTable) -> Vec<CompletionItem> {
         .iter()
         .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Variable(_)))
         .map(|(ident, ranged_entry)| CompletionItem {
-            label: ident.value.clone(),
+            label: ident.clone(),
             kind: Some(CompletionItemKind::VARIABLE),
             detail: Some(ranged_entry.entry.to_string()),
             documentation: ranged_entry.entry.documentation().map(|docu| {
@@ -348,7 +336,7 @@ fn search_procedures(table: &SymbolTable) -> Vec<CompletionItem> {
         .iter()
         .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Procedure(_)))
         .map(|(ident, ranged_entry)| CompletionItem {
-            label: ident.value.clone(),
+            label: ident.clone(),
             kind: Some(CompletionItemKind::FUNCTION),
             detail: Some(ranged_entry.entry.to_string()),
             documentation: ranged_entry.entry.documentation().map(|docu| {

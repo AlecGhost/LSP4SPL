@@ -25,10 +25,13 @@ pub(crate) async fn declaration(
             if let Some(ranged_entry) = context {
                 match &ranged_entry.entry {
                     Entry::Type(_) => {
-                        if let Some((key, _)) = doc_info.table.entry(ident) {
+                        if let Some(ranged_entry) = doc_info.table.lookup(&ident.value) {
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(&key.to_range(), &doc_info.text),
+                                range: convert_range(
+                                    &ranged_entry.entry.to_range(),
+                                    &doc_info.text,
+                                ),
                             }));
                         }
                     }
@@ -37,10 +40,13 @@ pub(crate) async fn declaration(
                             global_table: &doc_info.table,
                             local_table: &p.local_table,
                         };
-                        if let Some((key, _)) = lookup_table.entry(ident) {
+                        if let Some(ranged_entry) = lookup_table.lookup(&ident.value) {
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(&key.to_range(), &doc_info.text),
+                                range: convert_range(
+                                    &ranged_entry.entry.to_range(),
+                                    &doc_info.text,
+                                ),
                             }));
                         }
                     }
@@ -78,12 +84,15 @@ pub(crate) async fn type_definition(
             if let Some(ranged_entry) = context {
                 match &ranged_entry.entry {
                     Entry::Type(_) => {
-                        if let Some((key, ranged_entry)) = doc_info.table.entry(ident) {
+                        if let Some(ranged_entry) = doc_info.table.lookup(&ident.value) {
                             match &ranged_entry.entry {
                                 Entry::Type(_) => {
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(&key.to_range(), &doc_info.text),
+                                        range: convert_range(
+                                            &ranged_entry.entry.to_range(),
+                                            &doc_info.text,
+                                        ),
                                     }));
                                 }
                                 Entry::Procedure(_) => { /* no type definition */ }
@@ -99,12 +108,15 @@ pub(crate) async fn type_definition(
                             global_table: &doc_info.table,
                             local_table: &p.local_table,
                         };
-                        if let Some((key, ranged_entry)) = lookup_table.entry(ident) {
+                        if let Some(ranged_entry) = lookup_table.lookup(&ident.value) {
                             match &ranged_entry.entry {
                                 Entry::Type(_) => {
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(&key.to_range(), &doc_info.text),
+                                        range: convert_range(
+                                            &ranged_entry.entry.to_range(),
+                                            &doc_info.text,
+                                        ),
                                     }));
                                 }
                                 Entry::Procedure(_) => { /* no type definition */ }
@@ -153,11 +165,14 @@ pub(crate) async fn implementation(
                             global_table: &doc_info.table,
                             local_table: &p.local_table,
                         };
-                        if let Some((key, ranged_entry)) = lookup_table.entry(ident) {
+                        if let Some(ranged_entry) = lookup_table.lookup(&ident.value) {
                             if let Entry::Procedure(_) = ranged_entry.entry {
                                 return Ok(Some(Location {
                                     uri,
-                                    range: convert_range(&key.to_range(), &doc_info.text),
+                                    range: convert_range(
+                                        &ranged_entry.entry.to_range(),
+                                        &doc_info.text,
+                                    ),
                                 }));
                             }
                             /* no implementation for types and variables */

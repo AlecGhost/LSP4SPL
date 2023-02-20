@@ -114,7 +114,7 @@ fn find_referenced_idents(
                     global_table,
                     local_table: &p.local_table,
                 };
-                if let Some((_, ranged_entry)) = lookup_table.entry(ident) {
+                if let Some(ranged_entry) = lookup_table.lookup(&ident.value) {
                     match &ranged_entry.entry {
                         Entry::Type(_) => find_types(&ident.value, program),
                         Entry::Procedure(_) => find_procs(&ident.value, program),

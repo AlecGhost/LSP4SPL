@@ -10,7 +10,7 @@ use nom::{
     combinator::{all_consuming, map, opt, peek, recognize},
     multi::many0,
     sequence::{delimited, pair, preceded, terminated, tuple},
-    Offset, InputLength,
+    InputLength, Offset,
 };
 use utility::{expect, ignore_until, ignore_until1};
 
@@ -559,7 +559,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
                         match var {
                             Variable::NamedVariable(ident) => {
                                 let tokens = pair.1;
-                                // tokens' input might be empty 
+                                // tokens' input might be empty
                                 // and then we cannot use `fragment()` or `to_range()`
                                 let (end, token_string) = if tokens.input_len() > 0 {
                                     (tokens.to_range().end, tokens.fragment().to_string())

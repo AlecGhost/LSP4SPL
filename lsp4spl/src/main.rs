@@ -4,8 +4,10 @@ use color_eyre::eyre::{Context, Result};
 use lsp_types::{
     CompletionOptions, DeclarationCapability, FoldingRangeProviderCapability,
     HoverProviderCapability, ImplementationProviderCapability, OneOf, RenameOptions,
-    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TypeDefinitionProviderCapability, WorkDoneProgressOptions,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
+    SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, TypeDefinitionProviderCapability,
+    WorkDoneProgressOptions,
 };
 use server::LanguageServer;
 use simplelog::{Config, LevelFilter, WriteLogger};
@@ -23,7 +25,7 @@ struct Args {
     #[arg(short, long, value_name = "FILE")]
     log: Option<PathBuf>,
 
-    // No use. 
+    // No use.
     // But for whatever reason VSCode passes this option.
     // stdio is the only protocol this server supports.
     #[arg(long)]
@@ -84,7 +86,17 @@ async fn main() -> Result<()> {
             execute_command_provider: None,
             workspace: None,
             call_hierarchy_provider: None,
-            semantic_tokens_provider: None,
+            semantic_tokens_provider: Some(
+                SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
+                    legend: SemanticTokensLegend {
+                        token_types: features::semantic_tokens::TOKEN_TYPES.to_vec(),
+                        token_modifiers: features::semantic_tokens::TOKEN_MODIFIERS.to_vec(),
+                    },
+                    full: Some(SemanticTokensFullOptions::Bool(true)),
+                    range: None,
+                    ..Default::default()
+                }),
+            ),
             moniker_provider: None,
             linked_editing_range_provider: None,
             experimental: None,
