@@ -4,7 +4,7 @@ use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentat
 use spl_frontend::{
     ast::{GlobalDeclaration, Statement, TypeDeclaration},
     lexer::token::{Token, TokenList, TokenType},
-    table::{Entry, SymbolTable},
+    table::{Entry, RangedEntry, SymbolTable, Table},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -103,7 +103,22 @@ pub(crate) async fn propose(
             }
             // The cursor is not inside the scope of any global declaration,
             // which means, that a new one can be startet with the `proc` or `type` keywords.
-            let completions = vec![items::proc(), items::r#type()];
+            // Furthermore, some snippets are provided for those definitions
+            let mut completions = vec![
+                snippets::proc(),
+                snippets::r#type(),
+                items::proc(),
+                items::r#type(),
+            ];
+            if let Some(RangedEntry {
+                entry: Entry::Procedure(_),
+                ..
+            }) = cursor.doc_info.table.lookup("main")
+            {
+                // main already exists
+            } else {
+                completions.push(snippets::main());
+            }
             Ok(Some(completions))
         }
     } else {
@@ -119,11 +134,11 @@ fn complete_type(
     if let Some(last_token) = td.info.tokens.token_before(position) {
         use TokenType::*;
         match last_token.token_type {
-            Eq => Some(vec![items::array(), items::int()]),
+            Eq => Some(vec![snippets::array(), items::array(), items::int()]),
             RBracket => Some(vec![items::of()]),
             Of => {
-                let mut completions = search_types(table);
-                completions.push(items::array());
+                let completions =
+                    vec![vec![snippets::array(), items::array()], search_types(table)].concat();
                 Some(completions)
             }
             _ => None,
@@ -288,7 +303,7 @@ fn correct_index(index: usize) -> usize {
 }
 
 fn search_types(table: &SymbolTable) -> Vec<CompletionItem> {
-    let mut completions: Vec<CompletionItem> = table
+    table
         .entries
         .iter()
         .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Type(_)))
@@ -304,10 +319,7 @@ fn search_types(table: &SymbolTable) -> Vec<CompletionItem> {
             }),
             ..Default::default()
         })
-        .collect();
-    // TODO: remove int and lookup in lookup_table
-    completions.push(items::int());
-    completions
+        .collect()
 }
 
 fn search_variables(table: &SymbolTable) -> Vec<CompletionItem> {
@@ -393,4 +405,30 @@ mod items {
             ..Default::default()
         }
     }
+}
+
+mod snippets {
+    use lsp_types::{CompletionItem, CompletionItemKind, InsertTextFormat};
+
+    macro_rules! snippet {
+        ($name:ident, $label:expr, $text:expr) => {
+            pub(super) fn $name() -> CompletionItem {
+                CompletionItem {
+                    label: $label.to_string(),
+                    kind: Some(CompletionItemKind::SNIPPET),
+                    insert_text: Some($text.to_string()),
+                    insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    ..Default::default()
+                }
+            }
+        };
+        ($name:ident, $text:expr) => {
+            snippet!($name, stringify!($name), $text);
+        };
+    }
+
+    snippet!(main, "proc main() {\n    $0\n}");
+    snippet!(array, "array [$1] of $0");
+    snippet!(proc, "proc $1($2) {\n    $0\n}");
+    snippet!(r#type, "type", "type $1 = $0;");
 }
