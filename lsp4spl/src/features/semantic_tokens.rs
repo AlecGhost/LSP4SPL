@@ -190,7 +190,6 @@ pub(crate) async fn semantic_tokens(
                 }
             })
             .collect();
-        log::debug!("Semantic Tokens: {:#?}", semantic_tokens);
         Ok(Some(SemanticTokens {
             result_id: None,
             data: semantic_tokens,

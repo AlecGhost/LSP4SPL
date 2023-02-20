@@ -14,9 +14,11 @@ pub(crate) mod goto;
 mod hover;
 pub(crate) mod references;
 pub(crate) mod semantic_tokens;
+mod signature_help;
 
 pub(crate) use fold::fold;
 pub(crate) use hover::hover;
+pub(crate) use signature_help::signature_help;
 pub(crate) use semantic_tokens::semantic_tokens;
 
 struct DocumentCursor {

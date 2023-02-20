@@ -172,6 +172,7 @@ fn test_main() {
                                 entry: Entry::Variable(VariableEntry {
                                     name: Identifier::new("a", &tokens[3..4]),
                                     is_ref: false,
+                                    is_param: true,
                                     data_type: Some(DataType::Int),
                                     documentation: None,
                                 }),
@@ -181,6 +182,7 @@ fn test_main() {
                     parameters: vec![VariableEntry {
                         name: Identifier::new("a", &tokens[3..4]),
                         is_ref: false,
+                        is_param: true,
                         data_type: Some(DataType::Int),
                         documentation: None,
                     }],
