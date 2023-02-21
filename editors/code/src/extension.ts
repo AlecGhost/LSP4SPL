@@ -12,10 +12,10 @@ let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
   let debugExecutable = context.asAbsolutePath(
-    path.join('..', 'target', 'debug', 'lsp4spl')
+    path.join('..', '..', 'target', 'debug', 'lsp4spl')
   );
   let logFile = context.asAbsolutePath(
-    path.join('..', 'lsp4spl.log')
+    path.join('..', '..', 'lsp4spl.log')
   )
   // If the extension is launched in debug mode then the debug server options are used
   // Otherwise the run options are used
