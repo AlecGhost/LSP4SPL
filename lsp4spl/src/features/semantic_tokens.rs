@@ -97,8 +97,8 @@ pub(crate) async fn semantic_tokens(
                                         SemanticTokenModifier::Declaration.into(),
                                     ))
                                 } else if let TokenType::Ident(name) = &token.token_type {
-                                    if let Some(ranged_entry) = lookup_table.lookup(name) {
-                                        match &ranged_entry.entry {
+                                    if let Some(entry) = lookup_table.lookup(name) {
+                                        match &entry {
                                             Entry::Type(_) => Some(create_semantic_token(
                                                 token,
                                                 &previous_token_pos,

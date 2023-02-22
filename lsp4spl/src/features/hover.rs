@@ -32,12 +32,12 @@ pub(crate) async fn hover(
             let DocumentCursor {
                 doc_info, context, ..
             } = cursor;
-            if let Some(ranged_entry) = context {
-                match &ranged_entry.entry {
+            if let Some(entry) = context {
+                match &entry {
                     Entry::Type(_) => {
-                        if let Some(ranged_entry) = doc_info.table.lookup(&ident.value) {
+                        if let Some(entry) = doc_info.table.lookup(&ident.value) {
                             return Ok(Some(create_hover(
-                                &ranged_entry.entry,
+                                &entry,
                                 convert_range(&ident.to_range(), &doc_info.text),
                             )));
                         }
@@ -47,9 +47,9 @@ pub(crate) async fn hover(
                             global_table: &doc_info.table,
                             local_table: &p.local_table,
                         };
-                        if let Some(ranged_entry) = lookup_table.lookup(&ident.value) {
+                        if let Some(entry) = lookup_table.lookup(&ident.value) {
                             return Ok(Some(create_hover(
-                                &ranged_entry.entry,
+                                &entry,
                                 convert_range(&ident.to_range(), &doc_info.text),
                             )));
                         }

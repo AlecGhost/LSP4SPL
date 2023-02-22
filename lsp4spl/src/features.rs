@@ -2,9 +2,9 @@ use crate::document::{self, DocumentInfo, DocumentRequest};
 use color_eyre::eyre::{Context, Result};
 use lsp_types::{TextDocumentPositionParams, Url};
 use spl_frontend::{
-    ast::{Identifier, ProcedureDeclaration},
+    ast::{Identifier, ProcedureDeclaration, GlobalDeclaration},
     lexer::token::{TokenList, TokenType},
-    table::{Entry, RangedEntry, SymbolTable, Table},
+    table::{Entry,  SymbolTable, Table}, ToRange,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -24,7 +24,7 @@ pub(crate) use semantic_tokens::semantic_tokens;
 struct DocumentCursor {
     doc_info: DocumentInfo,
     index: usize,
-    context: Option<RangedEntry>,
+    context: Option<Entry>,
 }
 
 impl DocumentCursor {
@@ -56,12 +56,19 @@ async fn doc_cursor(
     let uri = doc_params.text_document.uri;
     if let Some(doc_info) = get_doc_info(uri, doctx).await? {
         if let Some(index) = document::get_index(pos, &doc_info.text) {
-            let context = doc_info
-                .table
-                .entries
-                .values()
-                .find(|entry| entry.range.contains(&index))
-                .cloned();
+            let context = doc_info.ast.global_declarations.iter().find(|gd| gd.to_range().contains(&index)).and_then(|gd| {
+                use GlobalDeclaration::*;
+                let name = match gd {
+                    Procedure(pd) => pd.name.as_ref(),
+                    Type(td) => td.name.as_ref(),
+                    Error(_) => None,
+                };
+                if let Some(name) = &name {
+                    doc_info.table.lookup(&name.value).cloned()
+                } else {
+                    None
+                }
+            });
             return Ok(Some(DocumentCursor {
                 doc_info,
                 index,
@@ -88,8 +95,8 @@ fn get_local_table<'a>(
     global_table: &'a SymbolTable,
 ) -> Option<&'a SymbolTable> {
     if let Some(name) = &pd.name {
-        if let Some(ranged_entry) = global_table.lookup(&name.value) {
-            if let Entry::Procedure(p) = &ranged_entry.entry {
+        if let Some(entry) = global_table.lookup(&name.value) {
+            if let Entry::Procedure(p) = &entry {
                 return Some(&p.local_table);
             }
         }

@@ -27,10 +27,10 @@ pub(crate) async fn rename(
             let DocumentCursor {
                 doc_info, context, ..
             } = cursor;
-            if let Some(ranged_entry) = context {
+            if let Some(entry) = context {
                 let idents = find_referenced_idents(
                     ident,
-                    &ranged_entry.entry,
+                    &entry,
                     &doc_info.ast,
                     &doc_info.table,
                 );
@@ -77,10 +77,10 @@ pub(crate) async fn find(
             let DocumentCursor {
                 doc_info, context, ..
             } = cursor;
-            if let Some(ranged_entry) = context {
+            if let Some(entry) = context {
                 let idents = find_referenced_idents(
                     ident,
-                    &ranged_entry.entry,
+                    &entry,
                     &doc_info.ast,
                     &doc_info.table,
                 );
@@ -114,8 +114,8 @@ fn find_referenced_idents(
                     global_table,
                     local_table: &p.local_table,
                 };
-                if let Some(ranged_entry) = lookup_table.lookup(&ident.value) {
-                    match &ranged_entry.entry {
+                if let Some(entry) = lookup_table.lookup(&ident.value) {
+                    match &entry {
                         Entry::Type(_) => find_types(&ident.value, program),
                         Entry::Procedure(_) => find_procs(&ident.value, program),
                         Entry::Variable(_) => find_vars(&ident.value, &p.name.value, program),

@@ -5,7 +5,7 @@ use lsp_types::{
 };
 use spl_frontend::{
     ast::{GlobalDeclaration, Statement},
-    table::{Entry, RangedEntry, Table},
+    table::{Entry, Table},
     ToRange, lexer::token::TokenType,
 };
 use tokio::sync::mpsc::Sender;
@@ -41,10 +41,7 @@ pub(crate) async fn signature_help(
                     .find(|call_stmt| call_stmt.to_range().contains(&cursor.index))
             })
         {
-            if let Some(RangedEntry {
-                entry: Entry::Procedure(proc_entry),
-                ..
-            }) = &cursor.doc_info.table.lookup(&call_stmt.name.value)
+            if let Some(Entry::Procedure(proc_entry)) = &cursor.doc_info.table.lookup(&call_stmt.name.value)
             {
                 let parameters: Vec<ParameterInformation> = proc_entry
                     .parameters

@@ -3,9 +3,7 @@ use crate::table::TypeEntry;
 use crate::{
     ast::Identifier,
     error::SplError,
-    table::{
-        BuildErrorMessage, DataType, Entry, ProcedureEntry, RangedEntry, SymbolTable, VariableEntry,
-    },
+    table::{BuildErrorMessage, DataType, Entry, ProcedureEntry, SymbolTable, VariableEntry},
     LocalBroker,
 };
 #[cfg(test)]
@@ -28,14 +26,11 @@ fn type_decs() {
         table,
         SymbolTable::initialize(vec![(
             "a".to_string(),
-            RangedEntry {
-                range: 0..13,
-                entry: Entry::Type(TypeEntry {
-                    name: Identifier::new("a", &tokens[1..2]),
-                    data_type: Some(DataType::Int),
-                    documentation: None
-                }),
-            },
+            Entry::Type(TypeEntry {
+                name: Identifier::new("a", &tokens[1..2]),
+                data_type: Some(DataType::Int),
+                documentation: None
+            })
         )])
     );
     assert_eq!(
@@ -48,18 +43,15 @@ fn type_decs() {
         table,
         SymbolTable::initialize(vec![(
             "a".to_string(),
-            RangedEntry {
-                range: 0..25,
-                entry: Entry::Type(TypeEntry {
-                    name: Identifier::new("a", &tokens[1..2]),
-                    data_type: Some(DataType::Array {
-                        size: 5,
-                        base_type: Box::new(DataType::Int),
-                        creator: Identifier::new("a", &tokens[1..2]),
-                    }),
-                    documentation: None
+            Entry::Type(TypeEntry {
+                name: Identifier::new("a", &tokens[1..2]),
+                data_type: Some(DataType::Array {
+                    size: 5,
+                    base_type: Box::new(DataType::Int),
+                    creator: Identifier::new("a", &tokens[1..2]),
                 }),
-            }
+                documentation: None
+            })
         )])
     );
     assert_eq!(
@@ -72,14 +64,11 @@ fn type_decs() {
         table,
         SymbolTable::initialize(vec![(
             "a".to_string(),
-            RangedEntry {
-                range: 0..14,
-                entry: Entry::Type(TypeEntry {
-                    name: Identifier::new("a", &tokens[1..2]),
-                    data_type: None,
-                    documentation: None
-                }),
-            },
+            Entry::Type(TypeEntry {
+                name: Identifier::new("a", &tokens[1..2]),
+                data_type: None,
+                documentation: None
+            }),
         )])
     );
     assert_eq!(
@@ -101,15 +90,12 @@ fn test_main() {
         table,
         SymbolTable::initialize(vec![(
             "main".to_string(),
-            RangedEntry {
-                range: 0..14,
-                entry: Entry::Procedure(ProcedureEntry {
-                    name: Identifier::new("main", &tokens[1..2]),
-                    local_table: SymbolTable::default(),
-                    parameters: Vec::new(),
-                    documentation: None,
-                }),
-            }
+            Entry::Procedure(ProcedureEntry {
+                name: Identifier::new("main", &tokens[1..2]),
+                local_table: SymbolTable::default(),
+                parameters: Vec::new(),
+                documentation: None,
+            })
         )])
     );
     assert_eq!(broker.errors(), Vec::new());
@@ -136,15 +122,12 @@ fn test_main() {
         table,
         SymbolTable::initialize(vec![(
             "main".to_string(),
-            RangedEntry {
-                range: 17..31,
-                entry: Entry::Procedure(ProcedureEntry {
-                    name: Identifier::new("main", &tokens[6..7]),
-                    local_table: SymbolTable::default(),
-                    parameters: Vec::new(),
-                    documentation: None,
-                }),
-            }
+            Entry::Procedure(ProcedureEntry {
+                name: Identifier::new("main", &tokens[6..7]),
+                local_table: SymbolTable::default(),
+                parameters: Vec::new(),
+                documentation: None,
+            })
         )])
     );
     assert_eq!(
@@ -160,35 +143,29 @@ fn test_main() {
         table,
         SymbolTable::initialize(vec![(
             "main".to_string(),
-            RangedEntry {
-                range: 0..20,
-                entry: Entry::Procedure(ProcedureEntry {
-                    name: Identifier::new("main", &tokens[1..2]),
-                    local_table: SymbolTable {
-                        entries: HashMap::from([(
-                            "a".to_string(),
-                            RangedEntry {
-                                range: 10..16,
-                                entry: Entry::Variable(VariableEntry {
-                                    name: Identifier::new("a", &tokens[3..4]),
-                                    is_ref: false,
-                                    is_param: true,
-                                    data_type: Some(DataType::Int),
-                                    documentation: None,
-                                }),
-                            }
-                        )])
-                    },
-                    parameters: vec![VariableEntry {
-                        name: Identifier::new("a", &tokens[3..4]),
-                        is_ref: false,
-                        is_param: true,
-                        data_type: Some(DataType::Int),
-                        documentation: None,
-                    }],
+            Entry::Procedure(ProcedureEntry {
+                name: Identifier::new("main", &tokens[1..2]),
+                local_table: SymbolTable {
+                    entries: HashMap::from([(
+                        "a".to_string(),
+                        Entry::Variable(VariableEntry {
+                            name: Identifier::new("a", &tokens[3..4]),
+                            is_ref: false,
+                            is_param: true,
+                            data_type: Some(DataType::Int),
+                            documentation: None,
+                        })
+                    )])
+                },
+                parameters: vec![VariableEntry {
+                    name: Identifier::new("a", &tokens[3..4]),
+                    is_ref: false,
+                    is_param: true,
+                    data_type: Some(DataType::Int),
                     documentation: None,
-                }),
-            }
+                }],
+                documentation: None,
+            })
         )])
     );
     assert_eq!(

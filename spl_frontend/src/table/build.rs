@@ -30,8 +30,8 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
             .iter()
             .for_each(|dec| dec.build(table, broker.clone()));
         match &table.lookup("main") {
-            Some(ranged_entry) => {
-                if let Entry::Procedure(main) = &ranged_entry.entry {
+            Some(entry) => {
+                if let Entry::Procedure(main) = &entry {
                     if !main.parameters.is_empty() {
                         broker.report_error(SplError(
                             main.name.to_range(),
@@ -72,9 +72,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
             let documentation = get_documentation(&self.info.tokens);
             table.enter(
                 name.to_string(),
-                RangedEntry {
-                    range: self.to_range(),
-                    entry: Entry::Type(TypeEntry {
+                 Entry::Type(TypeEntry {
                         name: name.clone(),
                         data_type: get_data_type(
                             &self.type_expr,
@@ -84,7 +82,6 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
                         ),
                         documentation,
                     }),
-                },
                 || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsType)),
             );
         }
@@ -112,10 +109,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
             };
             table.enter(
                 name.to_string(),
-                RangedEntry {
-                    range: self.to_range(),
-                    entry: Entry::Procedure(entry),
-                },
+                    Entry::Procedure(entry),
                 || {
                     broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsProcedure));
                 },
@@ -146,10 +140,7 @@ fn build_parameter<B: DiagnosticsBroker>(
         }
         local_table.enter(
             name.to_string(),
-            RangedEntry {
-                range: param.to_range(),
-                entry: Entry::Variable(param_entry.clone()),
-            },
+                Entry::Variable(param_entry.clone()),
             || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter)),
         );
         Some(param_entry)
@@ -183,10 +174,7 @@ fn build_variable<B: DiagnosticsBroker>(
         };
         local_table.enter(
             name.to_string(),
-            RangedEntry {
-                range: var.to_range(),
-                entry: Entry::Variable(entry),
-            },
+                Entry::Variable(entry),
             || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable)),
         );
     }
@@ -225,8 +213,8 @@ fn get_data_type<T: Table, B: DiagnosticsBroker>(
             NamedType(name) => {
                 if name.value == "int" {
                     Some(DataType::Int)
-                } else if let Some(ranged_entry) = table.lookup(&name.value) {
-                    if let Entry::Type(t) = &ranged_entry.entry {
+                } else if let Some(entry) = table.lookup(&name.value) {
+                    if let Entry::Type(t) = &entry {
                         t.data_type.clone()
                     } else {
                         broker.report_error(name.to_error(BuildErrorMessage::NotAType));

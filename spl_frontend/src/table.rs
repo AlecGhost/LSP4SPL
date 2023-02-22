@@ -76,24 +76,18 @@ impl Entry {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RangedEntry {
-    pub range: Range<usize>,
-    pub entry: Entry,
-}
-
 pub trait Table {
-    fn lookup(&self, key: &str) -> Option<&RangedEntry>;
-    fn entry(&self, key: &str) -> Option<(&String, &RangedEntry)>;
+    fn lookup(&self, key: &str) -> Option<&Entry>;
+    fn entry(&self, key: &str) -> Option<(&String, &Entry)>;
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct SymbolTable {
-    pub entries: HashMap<String, RangedEntry>,
+    pub entries: HashMap<String, Entry>,
 }
 
 impl SymbolTable {
-    fn enter(&mut self, key: String, value: RangedEntry, mut on_error: impl FnMut()) {
+    fn enter(&mut self, key: String, value: Entry, mut on_error: impl FnMut()) {
         if let std::collections::hash_map::Entry::Vacant(v) = self.entries.entry(key) {
             v.insert(value);
         } else {
@@ -103,14 +97,14 @@ impl SymbolTable {
 }
 
 impl Table for SymbolTable {
-    fn lookup(&self, key: &str) -> Option<&RangedEntry> {
+    fn lookup(&self, key: &str) -> Option<&Entry> {
         self.entries
             .iter()
             .find(|(k, _)| k.as_str() == key)
             .map(|(_, v)| v)
     }
 
-    fn entry(&self, key: &str) -> Option<(&String, &RangedEntry)> {
+    fn entry(&self, key: &str) -> Option<(&String, &Entry)> {
         self.entries.iter().find(|(k, _)| k.as_str() == key)
     }
 }
@@ -122,7 +116,7 @@ pub struct LookupTable<'a> {
 }
 
 impl<'a> Table for LookupTable<'a> {
-    fn lookup(&self, key: &str) -> Option<&RangedEntry> {
+    fn lookup(&self, key: &str) -> Option<&Entry> {
         let mut value = self.local_table.lookup(key);
         if value.is_none() {
             value = self.global_table.lookup(key);
@@ -130,7 +124,7 @@ impl<'a> Table for LookupTable<'a> {
         value
     }
 
-    fn entry(&self, key: &str) -> Option<(&String, &RangedEntry)> {
+    fn entry(&self, key: &str) -> Option<(&String, &Entry)> {
         let mut result = self.local_table.entry(key);
         if result.is_none() {
             result = self.global_table.entry(key);

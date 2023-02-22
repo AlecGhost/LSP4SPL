@@ -1,7 +1,7 @@
 use super::{DataType, SymbolTable, TypeEntry};
 use crate::{
     ast::Identifier,
-    table::{Entry, ProcedureEntry, RangedEntry, VariableEntry},
+    table::{Entry, ProcedureEntry, VariableEntry},
 };
 use std::collections::HashMap;
 
@@ -27,16 +27,13 @@ impl SymbolTable {
             name: Identifier,
             documentation: &str,
             parameters: Vec<VariableEntry>,
-        ) -> RangedEntry {
-            RangedEntry {
-                range: 0..0,
-                entry: Entry::Procedure(ProcedureEntry {
-                    name,
-                    local_table: SymbolTable::default(),
-                    parameters,
-                    documentation: Some(documentation.to_string()),
-                }),
-            }
+        ) -> Entry {
+            Entry::Procedure(ProcedureEntry {
+                name,
+                local_table: SymbolTable::default(),
+                parameters,
+                documentation: Some(documentation.to_string()),
+            })
         }
 
         Self {
@@ -44,14 +41,11 @@ impl SymbolTable {
                 // basic type int
                 (
                     INT.to_string(),
-                    RangedEntry {
-                        range: 0..0,
-                        entry: Entry::Type(TypeEntry {
-                            name: Identifier::new(INT, &[]),
-                            data_type: Some(DataType::Int),
-                            documentation: None,
-                        }),
-                    },
+                    Entry::Type(TypeEntry {
+                        name: Identifier::new(INT, &[]),
+                        data_type: Some(DataType::Int),
+                        documentation: None,
+                    }),
                 ),
                 // printi(i: int)
                 (
@@ -275,7 +269,7 @@ Grenzen wie bei setPixel.",
         }
     }
 
-    pub fn initialize(entries: Vec<(String, RangedEntry)>) -> Self {
+    pub fn initialize(entries: Vec<(String, Entry)>) -> Self {
         let mut table = Self::initialized();
         for (k, v) in entries {
             table.entries.insert(k, v);

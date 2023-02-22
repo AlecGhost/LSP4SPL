@@ -4,7 +4,7 @@ use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentat
 use spl_frontend::{
     ast::{GlobalDeclaration, Statement, TypeDeclaration},
     lexer::token::{Token, TokenList, TokenType},
-    table::{Entry, RangedEntry, SymbolTable, Table},
+    table::{Entry, SymbolTable, Table},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -112,11 +112,7 @@ pub(crate) async fn propose(
                 items::proc(),
                 items::r#type(),
             ];
-            if let Some(RangedEntry {
-                entry: Entry::Procedure(_),
-                ..
-            }) = cursor.doc_info.table.lookup("main")
-            {
+            if let Some(Entry::Procedure(_)) = cursor.doc_info.table.lookup("main") {
                 // main already exists
             } else {
                 completions.push(snippets::main());
@@ -312,12 +308,12 @@ fn search_types(table: &SymbolTable) -> Vec<CompletionItem> {
     table
         .entries
         .iter()
-        .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Type(_)))
-        .map(|(ident, ranged_entry)| CompletionItem {
+        .filter(|(_, entry)| matches!(entry, Entry::Type(_)))
+        .map(|(ident, entry)| CompletionItem {
             label: ident.clone(),
             kind: Some(CompletionItemKind::STRUCT),
-            detail: Some(ranged_entry.entry.to_string()),
-            documentation: ranged_entry.entry.documentation().map(|docu| {
+            detail: Some(entry.to_string()),
+            documentation: entry.documentation().map(|docu| {
                 Documentation::MarkupContent(lsp_types::MarkupContent {
                     kind: MarkupKind::Markdown,
                     value: docu.trim_start().to_string(),
@@ -332,12 +328,12 @@ fn search_variables(table: &SymbolTable) -> Vec<CompletionItem> {
     table
         .entries
         .iter()
-        .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Variable(_)))
-        .map(|(ident, ranged_entry)| CompletionItem {
+        .filter(|(_, entry)| matches!(entry, Entry::Variable(_)))
+        .map(|(ident, entry)| CompletionItem {
             label: ident.clone(),
             kind: Some(CompletionItemKind::VARIABLE),
-            detail: Some(ranged_entry.entry.to_string()),
-            documentation: ranged_entry.entry.documentation().map(|docu| {
+            detail: Some(entry.to_string()),
+            documentation: entry.documentation().map(|docu| {
                 Documentation::MarkupContent(lsp_types::MarkupContent {
                     kind: MarkupKind::Markdown,
                     value: docu.trim_start().to_string(),
@@ -352,12 +348,12 @@ fn search_procedures(table: &SymbolTable) -> Vec<CompletionItem> {
     table
         .entries
         .iter()
-        .filter(|(_, ranged_entry)| matches!(ranged_entry.entry, Entry::Procedure(_)))
-        .map(|(ident, ranged_entry)| CompletionItem {
+        .filter(|(_, entry)| matches!(entry, Entry::Procedure(_)))
+        .map(|(ident, entry)| CompletionItem {
             label: ident.clone(),
             kind: Some(CompletionItemKind::FUNCTION),
-            detail: Some(ranged_entry.entry.to_string()),
-            documentation: ranged_entry.entry.documentation().map(|docu| {
+            detail: Some(entry.to_string()),
+            documentation: entry.documentation().map(|docu| {
                 Documentation::MarkupContent(lsp_types::MarkupContent {
                     kind: MarkupKind::Markdown,
                     value: docu.trim_start().to_string(),
