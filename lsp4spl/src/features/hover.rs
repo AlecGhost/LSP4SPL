@@ -3,14 +3,14 @@ use crate::document::{convert_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind, Range};
 use spl_frontend::{
-    table::{Entry, LookupTable, Table},
+    table::{Entry, LookupTable, SymbolTable, GlobalEntry, TableEntry},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
 
-fn create_hover(entry: &Entry, range: Range) -> Hover {
+fn create_hover(entry: Entry, range: Range) -> Hover {
     let documentation = entry
-        .documentation()
+        .doc()
         .map(|doc| String::new() + "\n---\n" + doc.trim_start() + "\n")
         .unwrap_or_else(|| "".to_string());
     Hover {
@@ -34,29 +34,25 @@ pub(crate) async fn hover(
             } = cursor;
             if let Some(entry) = context {
                 match &entry {
-                    Entry::Type(_) => {
+                    GlobalEntry::Type(_) => {
                         if let Some(entry) = doc_info.table.lookup(&ident.value) {
                             return Ok(Some(create_hover(
-                                &entry,
+                                Entry::from(entry),
                                 convert_range(&ident.to_range(), &doc_info.text),
                             )));
                         }
                     }
-                    Entry::Procedure(p) => {
+                    GlobalEntry::Procedure(p) => {
                         let lookup_table = LookupTable {
-                            global_table: &doc_info.table,
-                            local_table: &p.local_table,
+                            global_table: Some(&doc_info.table),
+                            local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
                             return Ok(Some(create_hover(
-                                &entry,
+                                entry,
                                 convert_range(&ident.to_range(), &doc_info.text),
                             )));
                         }
-                    }
-                    Entry::Variable(v) => {
-                        log::error!("Found illegal variable in global table {:#?}", v);
-                        panic!("Found illegal variable in global table {:#?}", v);
                     }
                 }
             }

@@ -1,7 +1,7 @@
-use super::{DataType, SymbolTable, TypeEntry};
+use super::{DataType, GlobalTable, LocalTable, TypeEntry};
 use crate::{
     ast::Identifier,
-    table::{Entry, ProcedureEntry, VariableEntry},
+    table::{GlobalEntry, ProcedureEntry, VariableEntry},
 };
 use std::collections::HashMap;
 
@@ -21,18 +21,18 @@ const DEFAULT_ENTRIES: [&str; 11] = [
     PRINTI, PRINTC, READI, READC, EXIT, TIME, CLEARALL, SETPIXEL, DRAWLINE, DRAWCIRCLE, INT,
 ];
 
-impl SymbolTable {
+impl GlobalTable {
     pub fn initialized() -> Self {
         fn procedure_entry(
             name: Identifier,
             documentation: &str,
             parameters: Vec<VariableEntry>,
-        ) -> Entry {
-            Entry::Procedure(ProcedureEntry {
+        ) -> GlobalEntry {
+            GlobalEntry::Procedure(ProcedureEntry {
                 name,
-                local_table: SymbolTable::default(),
+                local_table: LocalTable::default(),
                 parameters,
-                documentation: Some(documentation.to_string()),
+                doc: Some(documentation.to_string()),
             })
         }
 
@@ -41,10 +41,10 @@ impl SymbolTable {
                 // basic type int
                 (
                     INT.to_string(),
-                    Entry::Type(TypeEntry {
+                    GlobalEntry::Type(TypeEntry {
                         name: Identifier::new(INT, &[]),
                         data_type: Some(DataType::Int),
-                        documentation: None,
+                        doc: None,
                     }),
                 ),
                 // printi(i: int)
@@ -56,9 +56,8 @@ impl SymbolTable {
                         vec![VariableEntry {
                             name: Identifier::new("i", &[]),
                             is_ref: false,
-                            is_param: true,
                             data_type: Some(DataType::Int),
-                            documentation: None,
+                            doc: None,
                         }],
                     ),
                 ),
@@ -71,9 +70,8 @@ impl SymbolTable {
                         vec![VariableEntry {
                             name: Identifier::new("i", &[]),
                             is_ref: false,
-                            is_param: true,
                             data_type: Some(DataType::Int),
-                            documentation: None,
+                            doc: None,
                         }],
                 ),
                 ),
@@ -87,9 +85,8 @@ Die Eingabe erfolgt zeilenweise gepuffert mit Echo.",
                         vec![VariableEntry {
                             name: Identifier::new("i", &[]),
                             is_ref: true,
-                            is_param: true,
                             data_type: Some(DataType::Int),
-                            documentation: None,
+                            doc: None,
                         }],
                     ),
                 ),
@@ -103,9 +100,8 @@ Die Eingabe erfolgt ungepuffert und ohne Echo.",
                         vec![VariableEntry {
                             name: Identifier::new("i", &[]),
                             is_ref: true,
-                            is_param: true,
                             data_type: Some(DataType::Int),
-                            documentation: None,
+                            doc: None,
                         }],
                     ),
                 ),
@@ -126,9 +122,8 @@ Die Eingabe erfolgt ungepuffert und ohne Echo.",
                         vec![VariableEntry {
                             name: Identifier::new("i", &[]),
                             is_ref: true,
-                            is_param: true,
                             data_type: Some(DataType::Int),
-                            documentation: None,
+                            doc: None,
                         }],
                     ),
                 ),
@@ -143,9 +138,8 @@ Es stehen also für jede Komponente die Werte 0..255 zur Verfügung.",
                         vec![VariableEntry {
                             name: Identifier::new("color", &[]),
                             is_ref: false,
-                            is_param: true,
                             data_type: Some(DataType::Int),
-                            documentation: None,
+                            doc: None,
                         }],
                     ),
                 ),
@@ -160,23 +154,20 @@ Grenzen: 0<= x <640, 0 <= y < 480.",
                             VariableEntry {
                                 name: Identifier::new("x", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("y", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("z", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                         ],
                     ),
@@ -192,37 +183,32 @@ Grenzen wie bei setPixel.",
                             VariableEntry {
                                 name: Identifier::new("x1", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("y1", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("x2", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("y2", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("color", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                         ],
                     ),
@@ -237,30 +223,26 @@ Grenzen wie bei setPixel.",
                             VariableEntry {
                                 name: Identifier::new("x0", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("y0", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("radius", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                             VariableEntry {
                                 name: Identifier::new("color", &[]),
                                 is_ref: false,
-                                is_param: true,
                                 data_type: Some(DataType::Int),
-                                documentation: None,
+                                doc: None,
                             },
                         ],
                     ),
@@ -269,7 +251,7 @@ Grenzen wie bei setPixel.",
         }
     }
 
-    pub fn initialize(entries: Vec<(String, Entry)>) -> Self {
+    pub fn initialize(entries: Vec<(String, GlobalEntry)>) -> Self {
         let mut table = Self::initialized();
         for (k, v) in entries {
             table.entries.insert(k, v);
@@ -278,7 +260,7 @@ Grenzen wie bei setPixel.",
     }
 }
 
-impl std::fmt::Debug for SymbolTable {
+impl std::fmt::Debug for GlobalTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_map()
             .entries(

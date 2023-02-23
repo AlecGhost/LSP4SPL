@@ -9,7 +9,7 @@ use spl_frontend::{
     ast::{
         Expression, GlobalDeclaration, Identifier, Program, Statement, TypeExpression, Variable,
     },
-    table::{Entry, LookupTable, SymbolTable, Table},
+    table::{Entry, GlobalEntry, GlobalTable, LookupTable},
     ToRange,
 };
 use std::collections::HashMap;
@@ -28,12 +28,7 @@ pub(crate) async fn rename(
                 doc_info, context, ..
             } = cursor;
             if let Some(entry) = context {
-                let idents = find_referenced_idents(
-                    ident,
-                    &entry,
-                    &doc_info.ast,
-                    &doc_info.table,
-                );
+                let idents = find_referenced_idents(ident, &entry, &doc_info.ast, &doc_info.table);
                 // it seems like the original identifier is changed automatically,
                 // so it does not need to be added to `idents`
                 let text_edits = idents
@@ -78,12 +73,7 @@ pub(crate) async fn find(
                 doc_info, context, ..
             } = cursor;
             if let Some(entry) = context {
-                let idents = find_referenced_idents(
-                    ident,
-                    &entry,
-                    &doc_info.ast,
-                    &doc_info.table,
-                );
+                let idents = find_referenced_idents(ident, &entry, &doc_info.ast, &doc_info.table);
                 let references = idents
                     .into_iter()
                     .filter(|i| i != ident)
@@ -101,35 +91,33 @@ pub(crate) async fn find(
 
 fn find_referenced_idents(
     ident: &Identifier,
-    entry: &Entry,
+    entry: &GlobalEntry,
     program: &Program,
-    global_table: &SymbolTable,
+    global_table: &GlobalTable,
 ) -> Vec<Identifier> {
     match entry {
-        Entry::Procedure(p) => {
+        GlobalEntry::Procedure(p) => {
             if &p.name == ident {
                 find_procs(&ident.value, program)
             } else {
                 let lookup_table = LookupTable {
-                    global_table,
-                    local_table: &p.local_table,
+                    global_table: Some(global_table),
+                    local_table: Some(&p.local_table),
                 };
                 if let Some(entry) = lookup_table.lookup(&ident.value) {
                     match &entry {
                         Entry::Type(_) => find_types(&ident.value, program),
                         Entry::Procedure(_) => find_procs(&ident.value, program),
-                        Entry::Variable(_) => find_vars(&ident.value, &p.name.value, program),
+                        Entry::Variable(_) | Entry::Parameter(_) => {
+                            find_vars(&ident.value, &p.name.value, program)
+                        }
                     }
                 } else {
                     Vec::new()
                 }
             }
         }
-        Entry::Type(_) => find_types(&ident.value, program),
-        Entry::Variable(v) => {
-            log::error!("Found illegal variable in global table {:#?}", v);
-            panic!("Found illegal variable in global table {:#?}", v);
-        }
+        GlobalEntry::Type(_) => find_types(&ident.value, program),
     }
 }
 

@@ -1,16 +1,16 @@
 use crate::lexer::token::Token;
-use crate::table::TypeEntry;
+use crate::table::{GlobalEntry, LocalEntry, LocalTable};
 use crate::{
     ast::Identifier,
     error::SplError,
-    table::{BuildErrorMessage, DataType, Entry, ProcedureEntry, SymbolTable, VariableEntry},
+    table::{BuildErrorMessage, DataType, GlobalTable, ProcedureEntry, TypeEntry, VariableEntry},
     LocalBroker,
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 
-fn test(src: &str) -> (SymbolTable, Vec<Token>, LocalBroker) {
+fn test(src: &str) -> (GlobalTable, Vec<Token>, LocalBroker) {
     eprintln!("Testing: {}", src);
     let tokens = crate::lexer::lex(src);
     let program = crate::parser::parse(&tokens, LocalBroker::default());
@@ -24,12 +24,12 @@ fn type_decs() {
     let (table, tokens, broker) = test("type a = int;");
     assert_eq!(
         table,
-        SymbolTable::initialize(vec![(
+        GlobalTable::initialize(vec![(
             "a".to_string(),
-            Entry::Type(TypeEntry {
+            GlobalEntry::Type(TypeEntry {
                 name: Identifier::new("a", &tokens[1..2]),
                 data_type: Some(DataType::Int),
-                documentation: None
+                doc: None
             })
         )])
     );
@@ -41,16 +41,16 @@ fn type_decs() {
     let (table, tokens, broker) = test("type a = array [5] of int");
     assert_eq!(
         table,
-        SymbolTable::initialize(vec![(
+        GlobalTable::initialize(vec![(
             "a".to_string(),
-            Entry::Type(TypeEntry {
+            GlobalEntry::Type(TypeEntry {
                 name: Identifier::new("a", &tokens[1..2]),
                 data_type: Some(DataType::Array {
                     size: 5,
                     base_type: Box::new(DataType::Int),
                     creator: Identifier::new("a", &tokens[1..2]),
                 }),
-                documentation: None
+                doc: None
             })
         )])
     );
@@ -62,12 +62,12 @@ fn type_decs() {
     let (table, tokens, broker) = test("type a = bool;");
     assert_eq!(
         table,
-        SymbolTable::initialize(vec![(
+        GlobalTable::initialize(vec![(
             "a".to_string(),
-            Entry::Type(TypeEntry {
+            GlobalEntry::Type(TypeEntry {
                 name: Identifier::new("a", &tokens[1..2]),
                 data_type: None,
-                documentation: None
+                doc: None
             }),
         )])
     );
@@ -88,27 +88,27 @@ fn test_main() {
     let (table, tokens, broker) = test("proc main() {}");
     assert_eq!(
         table,
-        SymbolTable::initialize(vec![(
+        GlobalTable::initialize(vec![(
             "main".to_string(),
-            Entry::Procedure(ProcedureEntry {
+            GlobalEntry::Procedure(ProcedureEntry {
                 name: Identifier::new("main", &tokens[1..2]),
-                local_table: SymbolTable::default(),
+                local_table: LocalTable::default(),
                 parameters: Vec::new(),
-                documentation: None,
+                doc: None,
             })
         )])
     );
     assert_eq!(broker.errors(), Vec::new());
 
     let (table, _, broker) = test("");
-    assert_eq!(table, SymbolTable::initialized());
+    assert_eq!(table, GlobalTable::initialized());
     assert_eq!(
         broker.errors(),
         vec![SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())]
     );
 
     let (table, _, broker) = test("type main = int;");
-    assert_eq!(table, SymbolTable::initialized());
+    assert_eq!(table, GlobalTable::initialized());
     assert_eq!(
         broker.errors(),
         vec![
@@ -120,13 +120,13 @@ fn test_main() {
     let (table, tokens, broker) = test("type main = int; proc main() {}");
     assert_eq!(
         table,
-        SymbolTable::initialize(vec![(
+        GlobalTable::initialize(vec![(
             "main".to_string(),
-            Entry::Procedure(ProcedureEntry {
+            GlobalEntry::Procedure(ProcedureEntry {
                 name: Identifier::new("main", &tokens[6..7]),
-                local_table: SymbolTable::default(),
+                local_table: LocalTable::default(),
                 parameters: Vec::new(),
-                documentation: None,
+                doc: None,
             })
         )])
     );
@@ -141,30 +141,28 @@ fn test_main() {
     let (table, tokens, broker) = test("proc main(a: int) {}");
     assert_eq!(
         table,
-        SymbolTable::initialize(vec![(
+        GlobalTable::initialize(vec![(
             "main".to_string(),
-            Entry::Procedure(ProcedureEntry {
+            GlobalEntry::Procedure(ProcedureEntry {
                 name: Identifier::new("main", &tokens[1..2]),
-                local_table: SymbolTable {
+                local_table: LocalTable {
                     entries: HashMap::from([(
                         "a".to_string(),
-                        Entry::Variable(VariableEntry {
+                        LocalEntry::Parameter(VariableEntry {
                             name: Identifier::new("a", &tokens[3..4]),
                             is_ref: false,
-                            is_param: true,
                             data_type: Some(DataType::Int),
-                            documentation: None,
+                            doc: None,
                         })
                     )])
                 },
                 parameters: vec![VariableEntry {
                     name: Identifier::new("a", &tokens[3..4]),
                     is_ref: false,
-                    is_param: true,
                     data_type: Some(DataType::Int),
-                    documentation: None,
+                    doc: None,
                 }],
-                documentation: None,
+                doc: None,
             })
         )])
     );

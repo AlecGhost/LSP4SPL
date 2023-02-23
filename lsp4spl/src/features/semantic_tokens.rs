@@ -4,7 +4,7 @@ use lsp_types::{Position, SemanticToken, SemanticTokens, SemanticTokensParams};
 use spl_frontend::{
     ast::{GlobalDeclaration, Identifier, TypeExpression},
     lexer::token::{Token, TokenType},
-    table::{Entry, LookupTable, SymbolTable, Table},
+    table::{Entry, LookupTable},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -76,12 +76,9 @@ pub(crate) async fn semantic_tokens(
                 use GlobalDeclaration::*;
                 match gd {
                     Procedure(pd) => {
-                        let empty_table = SymbolTable::default();
-                        let local_table =
-                            super::get_local_table(pd, global_table).unwrap_or(&empty_table);
                         let lookup_table = LookupTable {
-                            local_table,
-                            global_table,
+                            local_table: super::get_local_table(pd, global_table),
+                            global_table: Some(global_table),
                         };
                         pd.info
                             .tokens
@@ -114,11 +111,6 @@ pub(crate) async fn semantic_tokens(
                                                 SemanticTokenModifier::None.into(),
                                             )),
                                             Entry::Variable(variable) => {
-                                                let token_type = if variable.is_param {
-                                                    SemanticTokenType::Parameter
-                                                } else {
-                                                    SemanticTokenType::Variable
-                                                };
                                                 let modifier = if variable.name.to_range() == token.range {
                                                     SemanticTokenModifier::Declaration
                                                 } else {
@@ -128,10 +120,24 @@ pub(crate) async fn semantic_tokens(
                                                     token,
                                                     &previous_token_pos,
                                                     text,
-                                                    token_type.into(),
+                                                    SemanticTokenType::Variable.into(),
                                                     modifier.into(),
                                                 ))
                                             },
+                                            Entry::Parameter(param) => {
+                                                let modifier = if param.name.to_range() == token.range {
+                                                    SemanticTokenModifier::Declaration
+                                                } else {
+                                                    SemanticTokenModifier::None
+                                                };
+                                                Some(create_semantic_token(
+                                                    token,
+                                                    &previous_token_pos,
+                                                    text,
+                                                    SemanticTokenType::Parameter.into(),
+                                                    modifier.into(),
+                                                ))
+                                            }
                                         }
                                     } else {
                                         None

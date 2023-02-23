@@ -4,7 +4,7 @@ use lsp_types::{TextDocumentPositionParams, Url};
 use spl_frontend::{
     ast::{Identifier, ProcedureDeclaration, GlobalDeclaration},
     lexer::token::{TokenList, TokenType},
-    table::{Entry,  SymbolTable, Table}, ToRange,
+    table::{GlobalEntry, SymbolTable, GlobalTable, LocalTable}, ToRange,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -24,7 +24,7 @@ pub(crate) use semantic_tokens::semantic_tokens;
 struct DocumentCursor {
     doc_info: DocumentInfo,
     index: usize,
-    context: Option<Entry>,
+    context: Option<GlobalEntry>,
 }
 
 impl DocumentCursor {
@@ -92,11 +92,11 @@ impl ToSpl for String {
 
 fn get_local_table<'a>(
     pd: &ProcedureDeclaration,
-    global_table: &'a SymbolTable,
-) -> Option<&'a SymbolTable> {
+    global_table: &'a GlobalTable,
+) -> Option<&'a LocalTable> {
     if let Some(name) = &pd.name {
         if let Some(entry) = global_table.lookup(&name.value) {
-            if let Entry::Procedure(p) = &entry {
+            if let GlobalEntry::Procedure(p) = entry {
                 return Some(&p.local_table);
             }
         }

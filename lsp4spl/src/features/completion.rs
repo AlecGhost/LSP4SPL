@@ -4,7 +4,7 @@ use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentat
 use spl_frontend::{
     ast::{GlobalDeclaration, Statement, TypeDeclaration},
     lexer::token::{Token, TokenList, TokenType},
-    table::{Entry, SymbolTable, Table},
+    table::{GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, SymbolTable, TableEntry},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -47,10 +47,10 @@ pub(crate) async fn propose(
                             Ok(completions)
                         } else {
                             // handle procedure body
-                            let empty_table = SymbolTable::default();
-                            let local_table =
-                                super::get_local_table(pd, table).unwrap_or(&empty_table);
-
+                            let lookup_table = LookupTable {
+                                local_table: super::get_local_table(pd, table),
+                                global_table: Some(table),
+                            };
                             let in_statements = if let Some(first_stmt) =
                                 &pd.statements.iter().find(|stmt| {
                                     // prevent that error or empty statements disturb the calculation of
@@ -67,8 +67,7 @@ pub(crate) async fn propose(
                                     &pd.statements,
                                     position,
                                     last_token,
-                                    local_table,
-                                    table,
+                                    &lookup_table,
                                 ))
                             } else {
                                 // in variable declarations
@@ -77,7 +76,7 @@ pub(crate) async fn propose(
                                     TokenType::Semic | TokenType::LCurly => {
                                         let completions = vec![
                                             vec![snippets::var(), items::var()],
-                                            new_stmt(local_table, table),
+                                            new_stmt(&lookup_table),
                                         ]
                                         .concat();
                                         Some(completions)
@@ -112,7 +111,7 @@ pub(crate) async fn propose(
                 items::proc(),
                 items::r#type(),
             ];
-            if let Some(Entry::Procedure(_)) = cursor.doc_info.table.lookup("main") {
+            if let Some(GlobalEntry::Procedure(_)) = cursor.doc_info.table.lookup("main") {
                 // main already exists
             } else {
                 completions.push(snippets::main());
@@ -127,7 +126,7 @@ pub(crate) async fn propose(
 fn complete_type(
     td: &TypeDeclaration,
     position: usize,
-    table: &SymbolTable,
+    table: &GlobalTable,
 ) -> Option<Vec<CompletionItem>> {
     if let Some(last_token) = td.info.tokens.token_before(position) {
         use TokenType::*;
@@ -150,8 +149,7 @@ fn complete_statements(
     stmts: &[Statement],
     position: usize,
     last_token: &Token,
-    local_table: &SymbolTable,
-    global_table: &SymbolTable,
+    lookup_table: &LookupTable,
 ) -> Option<Vec<CompletionItem>> {
     let mut last_stmt_is_if = false;
     if let Some(stmt) = stmts.iter().find(|stmt| {
@@ -162,16 +160,9 @@ fn complete_statements(
             false
         }
     }) {
-        complete_statement(
-            stmt,
-            position,
-            last_token,
-            last_stmt_is_if,
-            local_table,
-            global_table,
-        )
+        complete_statement(stmt, position, last_token, last_stmt_is_if, lookup_table)
     } else {
-        Some(new_stmt(local_table, global_table))
+        Some(new_stmt(lookup_table))
     }
 }
 
@@ -180,14 +171,13 @@ fn complete_statement(
     position: usize,
     last_token: &Token,
     last_stmt_is_if: bool,
-    local_table: &SymbolTable,
-    global_table: &SymbolTable,
+    lookup_table: &LookupTable,
 ) -> Option<Vec<CompletionItem>> {
     // provide completion support for `else` after if statement
     if last_stmt_is_if && matches!(last_token.token_type, TokenType::RCurly) {
         let completions = vec![
             vec![snippets::r#else(), items::r#else()],
-            new_stmt(local_table, global_table),
+            new_stmt(lookup_table),
         ]
         .concat();
         return Some(completions);
@@ -203,17 +193,13 @@ fn complete_statement(
                 .expect("Cannot be recognized as an assignment without assign token.");
             // before assign is only an arbitrary identifier
             if position >= assign_token.range.end {
-                return Some(search_variables(local_table));
+                if let Some(local_table) = lookup_table.local_table {
+                    return Some(search_variables(local_table));
+                }
             }
         }
         Statement::Block(b) => {
-            return complete_statements(
-                &b.statements,
-                position,
-                last_token,
-                local_table,
-                global_table,
-            );
+            return complete_statements(&b.statements, position, last_token, lookup_table);
         }
         Statement::Call(c) => {
             let lparen_token = c
@@ -225,7 +211,9 @@ fn complete_statement(
             // procedure name completion is already provided by the
             // context based completions
             if position >= lparen_token.range.end {
-                return Some(search_variables(local_table));
+                if let Some(local_table) = lookup_table.local_table {
+                    return Some(search_variables(local_table));
+                }
             }
         }
         Statement::If(i) => {
@@ -236,8 +224,7 @@ fn complete_statement(
                         position,
                         last_token,
                         false,
-                        local_table,
-                        global_table,
+                        lookup_table,
                     );
                 }
             }
@@ -248,8 +235,7 @@ fn complete_statement(
                         position,
                         last_token,
                         false,
-                        local_table,
-                        global_table,
+                        lookup_table,
                     );
                 }
             }
@@ -260,7 +246,9 @@ fn complete_statement(
                 .find(|token| matches!(token.token_type, TokenType::LParen))
             {
                 if position >= lparen_token.range.end {
-                    return Some(search_variables(local_table));
+                    if let Some(local_table) = lookup_table.local_table {
+                        return Some(search_variables(local_table));
+                    }
                 }
             }
         }
@@ -272,8 +260,7 @@ fn complete_statement(
                         position,
                         last_token,
                         false,
-                        local_table,
-                        global_table,
+                        lookup_table,
                     );
                 }
             }
@@ -284,12 +271,14 @@ fn complete_statement(
                 .find(|token| matches!(token.token_type, TokenType::LParen))
             {
                 if position >= lparen_token.range.end {
-                    return Some(search_variables(local_table));
+                    if let Some(local_table) = lookup_table.local_table {
+                        return Some(search_variables(local_table));
+                    }
                 }
             }
         }
         Statement::Error(_) | Statement::Empty(_) => {
-            return Some(new_stmt(local_table, global_table))
+            return Some(new_stmt(lookup_table))
         }
     }
     None
@@ -304,16 +293,16 @@ fn correct_index(index: usize) -> usize {
     }
 }
 
-fn search_types(table: &SymbolTable) -> Vec<CompletionItem> {
+fn search_types(table: &GlobalTable) -> Vec<CompletionItem> {
     table
         .entries
         .iter()
-        .filter(|(_, entry)| matches!(entry, Entry::Type(_)))
+        .filter(|(_, entry)| matches!(entry, GlobalEntry::Type(_)))
         .map(|(ident, entry)| CompletionItem {
             label: ident.clone(),
             kind: Some(CompletionItemKind::STRUCT),
             detail: Some(entry.to_string()),
-            documentation: entry.documentation().map(|docu| {
+            documentation: entry.doc().map(|docu| {
                 Documentation::MarkupContent(lsp_types::MarkupContent {
                     kind: MarkupKind::Markdown,
                     value: docu.trim_start().to_string(),
@@ -324,16 +313,16 @@ fn search_types(table: &SymbolTable) -> Vec<CompletionItem> {
         .collect()
 }
 
-fn search_variables(table: &SymbolTable) -> Vec<CompletionItem> {
+fn search_variables(table: &LocalTable) -> Vec<CompletionItem> {
     table
         .entries
         .iter()
-        .filter(|(_, entry)| matches!(entry, Entry::Variable(_)))
+        .filter(|(_, entry)| matches!(entry, LocalEntry::Variable(_)))
         .map(|(ident, entry)| CompletionItem {
             label: ident.clone(),
             kind: Some(CompletionItemKind::VARIABLE),
             detail: Some(entry.to_string()),
-            documentation: entry.documentation().map(|docu| {
+            documentation: entry.doc().map(|docu| {
                 Documentation::MarkupContent(lsp_types::MarkupContent {
                     kind: MarkupKind::Markdown,
                     value: docu.trim_start().to_string(),
@@ -344,16 +333,16 @@ fn search_variables(table: &SymbolTable) -> Vec<CompletionItem> {
         .collect()
 }
 
-fn search_procedures(table: &SymbolTable) -> Vec<CompletionItem> {
+fn search_procedures(table: &GlobalTable) -> Vec<CompletionItem> {
     table
         .entries
         .iter()
-        .filter(|(_, entry)| matches!(entry, Entry::Procedure(_)))
+        .filter(|(_, entry)| matches!(entry, GlobalEntry::Procedure(_)))
         .map(|(ident, entry)| CompletionItem {
             label: ident.clone(),
             kind: Some(CompletionItemKind::FUNCTION),
             detail: Some(entry.to_string()),
-            documentation: entry.documentation().map(|docu| {
+            documentation: entry.doc().map(|docu| {
                 Documentation::MarkupContent(lsp_types::MarkupContent {
                     kind: MarkupKind::Markdown,
                     value: docu.trim_start().to_string(),
@@ -364,7 +353,7 @@ fn search_procedures(table: &SymbolTable) -> Vec<CompletionItem> {
         .collect()
 }
 
-fn new_stmt(local_table: &SymbolTable, global_table: &SymbolTable) -> Vec<CompletionItem> {
+fn new_stmt(lookup_table: &LookupTable) -> Vec<CompletionItem> {
     vec![
         vec![
             snippets::r#if(),
@@ -372,8 +361,16 @@ fn new_stmt(local_table: &SymbolTable, global_table: &SymbolTable) -> Vec<Comple
             items::r#if(),
             items::r#while(),
         ],
-        search_variables(local_table),
-        search_procedures(global_table),
+        if let Some(local_table) = lookup_table.local_table {
+            search_variables(local_table)
+        } else {
+            Vec::new()
+        },
+        if let Some(global_table) = lookup_table.global_table {
+            search_procedures(global_table)
+        } else {
+            Vec::new()
+        },
     ]
     .concat()
 }

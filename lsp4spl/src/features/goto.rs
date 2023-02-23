@@ -6,7 +6,7 @@ use lsp_types::{
     GotoDefinitionParams, Location,
 };
 use spl_frontend::{
-    table::{DataType, Entry, LookupTable, Table},
+    table::{DataType, Entry, GlobalEntry, LookupTable, SymbolTable},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -24,35 +24,25 @@ pub(crate) async fn declaration(
             } = cursor;
             if let Some(entry) = context {
                 match &entry {
-                    Entry::Type(_) => {
+                    GlobalEntry::Type(_) => {
                         if let Some(entry) = doc_info.table.lookup(&ident.value) {
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(
-                                    &entry.to_range(),
-                                    &doc_info.text,
-                                ),
+                                range: convert_range(&entry.to_range(), &doc_info.text),
                             }));
                         }
                     }
-                    Entry::Procedure(p) => {
+                    GlobalEntry::Procedure(p) => {
                         let lookup_table = LookupTable {
-                            global_table: &doc_info.table,
-                            local_table: &p.local_table,
+                            global_table: Some(&doc_info.table),
+                            local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(
-                                    &entry.to_range(),
-                                    &doc_info.text,
-                                ),
+                                range: convert_range(&entry.to_range(), &doc_info.text),
                             }));
                         }
-                    }
-                    Entry::Variable(v) => {
-                        log::error!("Found illegal variable in global table {:#?}", v);
-                        panic!("Found illegal variable in global table {:#?}", v);
                     }
                 }
             }
@@ -83,44 +73,34 @@ pub(crate) async fn type_definition(
             } = cursor;
             if let Some(entry) = context {
                 match &entry {
-                    Entry::Type(_) => {
+                    GlobalEntry::Type(_) => {
                         if let Some(entry) = doc_info.table.lookup(&ident.value) {
                             match &entry {
-                                Entry::Type(_) => {
+                                GlobalEntry::Type(_) => {
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(
-                                            &entry.to_range(),
-                                            &doc_info.text,
-                                        ),
+                                        range: convert_range(&entry.to_range(), &doc_info.text),
                                     }));
                                 }
-                                Entry::Procedure(_) => { /* no type definition */ }
-                                Entry::Variable(v) => {
-                                    log::error!("Found illegal variable in global table {:#?}", v);
-                                    panic!("Found illegal variable in global table {:#?}", v);
-                                }
+                                GlobalEntry::Procedure(_) => { /* no type definition */ }
                             }
                         }
                     }
-                    Entry::Procedure(p) => {
+                    GlobalEntry::Procedure(p) => {
                         let lookup_table = LookupTable {
-                            global_table: &doc_info.table,
-                            local_table: &p.local_table,
+                            global_table: Some(&doc_info.table),
+                            local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
                             match &entry {
                                 Entry::Type(_) => {
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(
-                                            &entry.to_range(),
-                                            &doc_info.text,
-                                        ),
+                                        range: convert_range(&entry.to_range(), &doc_info.text),
                                     }));
                                 }
                                 Entry::Procedure(_) => { /* no type definition */ }
-                                Entry::Variable(v) => {
+                                Entry::Variable(v) | Entry::Parameter(v) => {
                                     if let Some(DataType::Array { creator, .. }) = &v.data_type {
                                         return Ok(Some(Location {
                                             uri,
@@ -134,10 +114,6 @@ pub(crate) async fn type_definition(
                                 }
                             }
                         }
-                    }
-                    Entry::Variable(v) => {
-                        log::error!("Found illegal variable in global table {:#?}", v);
-                        panic!("Found illegal variable in global table {:#?}", v);
                     }
                 }
             }
@@ -160,29 +136,22 @@ pub(crate) async fn implementation(
             } = cursor;
             if let Some(entry) = context {
                 match &entry {
-                    Entry::Procedure(p) => {
+                    GlobalEntry::Procedure(p) => {
                         let lookup_table = LookupTable {
-                            global_table: &doc_info.table,
-                            local_table: &p.local_table,
+                            global_table: Some(&doc_info.table),
+                            local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
                             if let Entry::Procedure(_) = entry {
                                 return Ok(Some(Location {
                                     uri,
-                                    range: convert_range(
-                                        &entry.to_range(),
-                                        &doc_info.text,
-                                    ),
+                                    range: convert_range(&entry.to_range(), &doc_info.text),
                                 }));
                             }
                             /* no implementation for types and variables */
                         }
                     }
-                    Entry::Type(_) => { /* no implementation for types */ }
-                    Entry::Variable(v) => {
-                        log::error!("Found illegal variable in global table {:#?}", v);
-                        panic!("Found illegal variable in global table {:#?}", v);
-                    }
+                    GlobalEntry::Type(_) => { /* no implementation for types */ }
                 }
             }
         }

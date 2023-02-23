@@ -5,7 +5,7 @@ use lsp_types::{
 };
 use spl_frontend::{
     ast::{GlobalDeclaration, Statement},
-    table::{Entry, Table},
+    table::{SymbolTable, GlobalEntry},
     ToRange, lexer::token::TokenType,
 };
 use tokio::sync::mpsc::Sender;
@@ -41,7 +41,7 @@ pub(crate) async fn signature_help(
                     .find(|call_stmt| call_stmt.to_range().contains(&cursor.index))
             })
         {
-            if let Some(Entry::Procedure(proc_entry)) = &cursor.doc_info.table.lookup(&call_stmt.name.value)
+            if let Some(GlobalEntry::Procedure(proc_entry)) = &cursor.doc_info.table.lookup(&call_stmt.name.value)
             {
                 let parameters: Vec<ParameterInformation> = proc_entry
                     .parameters
@@ -65,7 +65,7 @@ pub(crate) async fn signature_help(
                 } else {
                     None
                 };
-                let documentation = proc_entry.documentation.as_ref().map(|doc| Documentation::MarkupContent(MarkupContent {
+                let documentation = proc_entry.doc.as_ref().map(|doc| Documentation::MarkupContent(MarkupContent {
                         kind: MarkupKind::Markdown,
                         value: doc.clone(),
                     }));

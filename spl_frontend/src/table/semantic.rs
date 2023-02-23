@@ -1,4 +1,4 @@
-use super::{DataType, Entry, LookupTable, SymbolTable, Table};
+use super::{DataType, Entry, LookupTable, SymbolTable, GlobalTable, GlobalEntry};
 use crate::{
     ast::{
         ArrayAccess, Assignment, BinaryExpression, BlockStatement, CallStatement, Expression,
@@ -16,7 +16,7 @@ mod tests;
 /// Errors are reported by the specified broker.
 pub fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker>(
     program: &Program,
-    table: &SymbolTable,
+    table: &GlobalTable,
     broker: B,
 ) {
     program
@@ -31,10 +31,10 @@ pub fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker>(
                 let entry = table
                     .lookup(&name.value)
                     .expect("Named declaration without entry");
-                if let Entry::Procedure(proc_entry) = &entry {
+                if let GlobalEntry::Procedure(proc_entry) = &entry {
                     let lookup_table = &LookupTable {
-                        local_table: &proc_entry.local_table,
-                        global_table: table,
+                        local_table: Some(&proc_entry.local_table),
+                        global_table: Some(table),
                     };
                     proc.statements
                         .iter()
@@ -207,7 +207,7 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Variable {
             Self::NamedVariable(named) => {
                 if let Some(entry) = table.lookup(&named.value) {
                     match &entry {
-                        Entry::Variable(v) => v.data_type.clone(),
+                        Entry::Variable(v) | Entry::Parameter(v) => v.data_type.clone(),
                         _ => {
                             broker.report_error(named.to_error(SemanticErrorMessage::NotAVariable));
                             None

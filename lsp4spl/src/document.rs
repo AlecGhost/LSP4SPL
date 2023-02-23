@@ -8,7 +8,7 @@ use spl_frontend::{
     error::SplError,
     lexer::{self, token::Token},
     parser,
-    table::{self, SymbolTable},
+    table::{self, GlobalTable},
     LocalBroker,
 };
 use std::collections::HashMap;
@@ -135,7 +135,7 @@ pub struct DocumentInfo {
     pub text: String,
     pub tokens: Vec<Token>,
     pub ast: Program,
-    pub table: SymbolTable,
+    pub table: GlobalTable,
     pub diagnostics: Vec<Diagnostic>,
 }
 

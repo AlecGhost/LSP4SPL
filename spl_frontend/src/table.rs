@@ -7,6 +7,71 @@ mod build;
 mod initialization;
 mod semantic;
 
+pub trait SymbolTable {
+    type Value;
+    fn lookup(&self, key: &str) -> Option<&Self::Value>;
+    fn enter(&mut self, key: String, value: Self::Value, on_error: impl FnMut());
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct GlobalTable {
+    pub entries: HashMap<String, GlobalEntry>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LocalTable {
+    pub entries: HashMap<String, LocalEntry>,
+}
+
+#[derive(Debug)]
+pub struct LookupTable<'a> {
+    pub local_table: Option<&'a LocalTable>,
+    pub global_table: Option<&'a GlobalTable>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GlobalEntry {
+    Type(TypeEntry),
+    Procedure(ProcedureEntry),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LocalEntry {
+    Variable(VariableEntry),
+    Parameter(VariableEntry),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Entry<'a> {
+    Type(&'a TypeEntry),
+    Procedure(&'a ProcedureEntry),
+    Variable(&'a VariableEntry),
+    Parameter(&'a VariableEntry),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeEntry {
+    pub name: Identifier,
+    pub data_type: Option<DataType>,
+    pub doc: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProcedureEntry {
+    pub name: Identifier,
+    pub local_table: LocalTable,
+    pub parameters: Vec<VariableEntry>,
+    pub doc: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VariableEntry {
+    pub name: Identifier,
+    pub is_ref: bool,
+    pub data_type: Option<DataType>,
+    pub doc: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DataType {
     Int,
@@ -24,70 +89,14 @@ impl DataType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypeEntry {
-    pub name: Identifier,
-    pub data_type: Option<DataType>,
-    pub documentation: Option<String>,
-}
+impl SymbolTable for GlobalTable {
+    type Value = GlobalEntry;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VariableEntry {
-    pub name: Identifier,
-    pub is_ref: bool,
-    pub is_param: bool,
-    pub data_type: Option<DataType>,
-    pub documentation: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProcedureEntry {
-    pub name: Identifier,
-    pub local_table: SymbolTable,
-    pub parameters: Vec<VariableEntry>,
-    pub documentation: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Entry {
-    Type(TypeEntry),
-    Variable(VariableEntry),
-    Procedure(ProcedureEntry),
-}
-
-impl ToRange for Entry {
-    fn to_range(&self) -> Range<usize> {
-        use Entry::*;
-        match self {
-            Type(t) => t.name.to_range(),
-            Procedure(p) => p.name.to_range(),
-            _ => 0..0,
-        }
+    fn lookup(&self, key: &str) -> Option<&GlobalEntry> {
+        self.entries.get(key)
     }
-}
 
-impl Entry {
-    pub fn documentation(&self) -> Option<String> {
-        match self {
-            Entry::Procedure(p) => p.documentation.clone(),
-            Entry::Type(t) => t.documentation.clone(),
-            Entry::Variable(v) => v.documentation.clone(),
-        }
-    }
-}
-
-pub trait Table {
-    fn lookup(&self, key: &str) -> Option<&Entry>;
-    fn entry(&self, key: &str) -> Option<(&String, &Entry)>;
-}
-
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct SymbolTable {
-    pub entries: HashMap<String, Entry>,
-}
-
-impl SymbolTable {
-    fn enter(&mut self, key: String, value: Entry, mut on_error: impl FnMut()) {
+    fn enter(&mut self, key: String, value: GlobalEntry, mut on_error: impl FnMut()) {
         if let std::collections::hash_map::Entry::Vacant(v) = self.entries.entry(key) {
             v.insert(value);
         } else {
@@ -96,40 +105,105 @@ impl SymbolTable {
     }
 }
 
-impl Table for SymbolTable {
-    fn lookup(&self, key: &str) -> Option<&Entry> {
-        self.entries
-            .iter()
-            .find(|(k, _)| k.as_str() == key)
-            .map(|(_, v)| v)
+impl SymbolTable for LocalTable {
+    type Value = LocalEntry;
+
+    fn lookup(&self, key: &str) -> Option<&LocalEntry> {
+        self.entries.get(key)
     }
 
-    fn entry(&self, key: &str) -> Option<(&String, &Entry)> {
-        self.entries.iter().find(|(k, _)| k.as_str() == key)
+    fn enter(&mut self, key: String, value: LocalEntry, mut on_error: impl FnMut()) {
+        if let std::collections::hash_map::Entry::Vacant(v) = self.entries.entry(key) {
+            v.insert(value);
+        } else {
+            on_error();
+        }
     }
 }
 
-#[derive(Debug)]
-pub struct LookupTable<'a> {
-    pub local_table: &'a SymbolTable,
-    pub global_table: &'a SymbolTable,
+pub trait TableEntry {
+    fn doc(&self) -> Option<String>;
 }
 
-impl<'a> Table for LookupTable<'a> {
-    fn lookup(&self, key: &str) -> Option<&Entry> {
-        let mut value = self.local_table.lookup(key);
-        if value.is_none() {
-            value = self.global_table.lookup(key);
+impl TableEntry for Entry<'_> {
+    fn doc(&self) -> Option<String> {
+        match self {
+            Entry::Procedure(p) => p.doc.clone(),
+            Entry::Type(t) => t.doc.clone(),
+            Entry::Variable(v) | Entry::Parameter(v) => v.doc.clone(),
         }
-        value
     }
+}
 
-    fn entry(&self, key: &str) -> Option<(&String, &Entry)> {
-        let mut result = self.local_table.entry(key);
-        if result.is_none() {
-            result = self.global_table.entry(key);
+impl TableEntry for GlobalEntry {
+    fn doc(&self) -> Option<String> {
+        match self {
+            GlobalEntry::Procedure(p) => p.doc.clone(),
+            GlobalEntry::Type(t) => t.doc.clone(),
         }
-        result
+    }
+}
+
+impl TableEntry for LocalEntry {
+    fn doc(&self) -> Option<String> {
+        match self {
+            LocalEntry::Variable(v) | LocalEntry::Parameter(v) => v.doc.clone(),
+        }
+    }
+}
+
+impl<'a> LookupTable<'a> {
+    pub fn lookup(&self, key: &str) -> Option<Entry<'a>> {
+        if let Some(entry) = self
+            .local_table
+            .and_then(|table| table.lookup(key))
+            .map(Entry::from)
+        {
+            Some(entry)
+        } else {
+            self.global_table
+                .and_then(|table| table.lookup(key))
+                .map(Entry::from)
+        }
+    }
+}
+
+impl<'a> From<&'a GlobalEntry> for Entry<'a> {
+    fn from(value: &'a GlobalEntry) -> Self {
+        match value {
+            GlobalEntry::Type(t) => Self::Type(t),
+            GlobalEntry::Procedure(p) => Self::Procedure(p),
+        }
+    }
+}
+
+impl<'a> From<&'a LocalEntry> for Entry<'a> {
+    fn from(value: &'a LocalEntry) -> Self {
+        match value {
+            LocalEntry::Variable(v) => Self::Variable(v),
+            LocalEntry::Parameter(p) => Self::Parameter(p),
+        }
+    }
+}
+
+impl ToRange for Entry<'_> {
+    fn to_range(&self) -> Range<usize> {
+        use Entry::*;
+        match self {
+            Type(t) => t.name.to_range(),
+            Procedure(p) => p.name.to_range(),
+            Variable(v) | Parameter(v) => v.name.to_range(),
+        }
+    }
+}
+
+impl ToRange for GlobalEntry {
+    fn to_range(&self) -> Range<usize> {
+        use GlobalEntry::*;
+        match self {
+            Procedure(p) => p.name.to_range(),
+            Type(t) => t.name.to_range(),
+        }
     }
 }
 
@@ -178,16 +252,45 @@ impl Display for ProcedureEntry {
     }
 }
 
-impl Display for Entry {
+impl Display for TypeEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.data_type
+                .as_ref()
+                .map(|dt| dt.to_string())
+                .unwrap_or_else(|| "_".to_string())
+        )
+    }
+}
+
+impl Display for Entry<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let display = match self {
             Entry::Procedure(p) => p.to_string(),
-            Entry::Type(t) => t
-                .data_type
-                .as_ref()
-                .map(|dt| dt.to_string())
-                .unwrap_or_else(|| "_".to_string()),
-            Entry::Variable(v) => v.to_string(),
+            Entry::Type(t) => t.to_string(),
+            Entry::Variable(v) | Entry::Parameter(v) => v.to_string(),
+        };
+        write!(f, "{}", display)
+    }
+}
+
+impl Display for GlobalEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
+            GlobalEntry::Type(t) => t.to_string(),
+            GlobalEntry::Procedure(p) => p.to_string(),
+        };
+        write!(f, "{}", display)
+    }
+}
+
+impl Display for LocalEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
+            LocalEntry::Variable(v) => v.to_string(),
+            LocalEntry::Parameter(p) => p.to_string(),
         };
         write!(f, "{}", display)
     }
