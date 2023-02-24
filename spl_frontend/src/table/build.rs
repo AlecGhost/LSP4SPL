@@ -71,7 +71,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
             }
             let documentation = get_documentation(&self.info.tokens);
             let lookup_table = LookupTable {
-                global_table: Some(&table),
+                global_table: Some(table),
                 local_table: None,
             };
             table.enter(

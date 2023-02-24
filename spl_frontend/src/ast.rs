@@ -116,6 +116,23 @@ impl Operator {
         matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div)
     }
 }
+ impl Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Operator::*;
+        write!(f, "{}", match self {
+            Add => "+",
+            Sub => "-",
+            Mul => "*",
+            Div => "/",
+            Equ => "=",
+            Neq => "#",
+            Lst => "<",
+            Lse => "<=",
+            Grt => ">",
+            Gre => ">=",
+        })
+    }
+ }
 
 impl From<TokenType> for Operator {
     fn from(value: TokenType) -> Self {

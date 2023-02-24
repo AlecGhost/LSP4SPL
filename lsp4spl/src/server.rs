@@ -231,6 +231,9 @@ mod phases {
                         SignatureHelpRequest::METHOD => {
                             respond!(request, features::signature_help, doctx.clone())
                         }
+                        Formatting::METHOD => {
+                            respond!(request, features::format, doctx.clone())
+                        }
                         unknown_method => {
                             let method_name = unknown_method.to_string();
                             let (_, response) = request.split();

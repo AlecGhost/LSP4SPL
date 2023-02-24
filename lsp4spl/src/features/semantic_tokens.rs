@@ -58,13 +58,13 @@ pub(crate) async fn semantic_tokens(
     params: SemanticTokensParams,
 ) -> Result<Option<SemanticTokens>> {
     let uri = params.text_document.uri;
-    if let Some(doc_info) = super::get_doc_info(uri, doctx).await? {
-        let DocumentInfo {
-            ast,
-            text,
-            table: global_table,
-            ..
-        } = &doc_info;
+    if let Some(DocumentInfo {
+        ast,
+        text,
+        table: global_table,
+        ..
+    }) = super::get_doc_info(uri, doctx).await?
+    {
         let mut previous_token_pos = Position {
             line: 0,
             character: 0,
@@ -77,8 +77,8 @@ pub(crate) async fn semantic_tokens(
                 match gd {
                     Procedure(pd) => {
                         let lookup_table = LookupTable {
-                            local_table: super::get_local_table(pd, global_table),
-                            global_table: Some(global_table),
+                            local_table: super::get_local_table(pd, &global_table),
+                            global_table: Some(&global_table),
                         };
                         pd.info
                             .tokens
@@ -89,7 +89,7 @@ pub(crate) async fn semantic_tokens(
                                     Some(create_semantic_token(
                                         token,
                                         &previous_token_pos,
-                                        text,
+                                        &text,
                                         SemanticTokenType::Function.into(),
                                         SemanticTokenModifier::Declaration.into(),
                                     ))
@@ -99,14 +99,14 @@ pub(crate) async fn semantic_tokens(
                                             Entry::Type(_) => Some(create_semantic_token(
                                                 token,
                                                 &previous_token_pos,
-                                                text,
+                                                &text,
                                                 SemanticTokenType::Type.into(),
                                                 SemanticTokenModifier::None.into(),
                                             )),
                                             Entry::Procedure(_) => Some(create_semantic_token(
                                                 token,
                                                 &previous_token_pos,
-                                                text,
+                                                &text,
                                                 SemanticTokenType::Function.into(),
                                                 SemanticTokenModifier::None.into(),
                                             )),
@@ -119,7 +119,7 @@ pub(crate) async fn semantic_tokens(
                                                 Some(create_semantic_token(
                                                     token,
                                                     &previous_token_pos,
-                                                    text,
+                                                    &text,
                                                     SemanticTokenType::Variable.into(),
                                                     modifier.into(),
                                                 ))
@@ -133,7 +133,7 @@ pub(crate) async fn semantic_tokens(
                                                 Some(create_semantic_token(
                                                     token,
                                                     &previous_token_pos,
-                                                    text,
+                                                    &text,
                                                     SemanticTokenType::Parameter.into(),
                                                     modifier.into(),
                                                 ))
@@ -143,10 +143,10 @@ pub(crate) async fn semantic_tokens(
                                         None
                                     }
                                 } else {
-                                    map_token(token, &previous_token_pos, text)
+                                    map_token(token, &previous_token_pos, &text)
                                 };
                                 if semantic_token.is_some() {
-                                    previous_token_pos = get_position(token.range.start, text);
+                                    previous_token_pos = get_position(token.range.start, &text);
                                 }
                                 semantic_token
                             })
@@ -161,7 +161,7 @@ pub(crate) async fn semantic_tokens(
                                 Some(create_semantic_token(
                                     token,
                                     &previous_token_pos,
-                                    text,
+                                    &text,
                                     SemanticTokenType::Type.into(),
                                     SemanticTokenModifier::Declaration.into(),
                                 ))
@@ -169,15 +169,15 @@ pub(crate) async fn semantic_tokens(
                                 Some(create_semantic_token(
                                     token,
                                     &previous_token_pos,
-                                    text,
+                                    &text,
                                     SemanticTokenType::Type.into(),
                                     SemanticTokenModifier::None.into(),
                                 ))
                             } else {
-                                map_token(token, &previous_token_pos, text)
+                                map_token(token, &previous_token_pos, &text)
                             };
                             if semantic_token.is_some() {
-                                previous_token_pos = get_position(token.range.start, text);
+                                previous_token_pos = get_position(token.range.start, &text);
                             }
                             semantic_token
                         })
@@ -186,9 +186,9 @@ pub(crate) async fn semantic_tokens(
                         .tokens
                         .iter()
                         .filter_map(|token| {
-                            let semantic_token = map_token(token,&previous_token_pos, text);
+                            let semantic_token = map_token(token,&previous_token_pos, &text);
                             if semantic_token.is_some() {
-                                previous_token_pos = get_position(token.range.start, text);
+                                previous_token_pos = get_position(token.range.start, &text);
                             }
                             semantic_token
                         })
