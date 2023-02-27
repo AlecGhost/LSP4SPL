@@ -1,26 +1,23 @@
-use super::ToRange;
 use crate::error::ParseErrorMessage;
-use crate::DiagnosticsBroker;
+use crate::{DiagnosticsBroker, ToRange};
 use nom::combinator::{eof, peek};
 use nom::sequence::terminated;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take, take_till, take_while},
-    character::{
-        complete::{alpha1, anychar, digit1, hex_digit1, multispace0},
-        is_alphanumeric,
-    },
+    bytes::complete::{tag, take, take_till},
+    character::complete::{alpha1, anychar, digit1, hex_digit1, multispace0},
     combinator::map,
-    error::ErrorKind,
     multi::many0,
     sequence::preceded,
 };
 use std::ops::Range;
 use token::{Token, TokenType};
+use utility::{alpha_numeric0, expect, is_alpha_numeric, verify};
 
 #[cfg(test)]
 mod tests;
 pub mod token;
+mod utility;
 
 pub(crate) type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
 
@@ -32,7 +29,7 @@ impl<B: DiagnosticsBroker> ToRange for Span<'_, B> {
     }
 }
 
-type IResult<'a, T, B> = nom::IResult<Span<'a, B>, T>;
+type IResult<'a, B> = nom::IResult<Span<'a, B>, Token>;
 
 pub fn lex<B: DiagnosticsBroker>(input: &str, broker: B) -> Vec<Token> {
     let span = Span::new_extra(input, broker);
@@ -44,7 +41,7 @@ pub fn lex<B: DiagnosticsBroker>(input: &str, broker: B) -> Vec<Token> {
 }
 
 trait Lexer<B>: Sized {
-    fn lex(input: Span<B>) -> IResult<Token, B>;
+    fn lex(input: Span<B>) -> IResult<B>;
 }
 
 macro_rules! lex_symbol {
@@ -70,7 +67,7 @@ macro_rules! lex_keyword {
 }
 
 impl<B: DiagnosticsBroker> Lexer<B> for Token {
-    fn lex(input: Span<B>) -> IResult<Self, B> {
+    fn lex(input: Span<B>) -> IResult<B> {
         alt((
             Comment::lex,
             alt((
@@ -115,7 +112,7 @@ impl<B: DiagnosticsBroker> Lexer<B> for Token {
 
 struct Ident;
 impl<B: DiagnosticsBroker> Lexer<B> for Ident {
-    fn lex(input: Span<B>) -> IResult<Token, B> {
+    fn lex(input: Span<B>) -> IResult<B> {
         let start = input.location_offset();
         let (input, first_letter) = alt((alpha1, tag("_")))(input)?;
         let (input, rest) = alpha_numeric0(input)?;
@@ -127,7 +124,7 @@ impl<B: DiagnosticsBroker> Lexer<B> for Ident {
 
 struct Char;
 impl<B: DiagnosticsBroker> Lexer<B> for Char {
-    fn lex(input: Span<B>) -> IResult<Token, B> {
+    fn lex(input: Span<B>) -> IResult<B> {
         let start = input.location_offset();
         let (input, _) = tag("'")(input)?;
         let (input, c) = alt((map(tag("\\n"), |_| '\n'), anychar))(input)?;
@@ -144,7 +141,7 @@ impl<B: DiagnosticsBroker> Lexer<B> for Char {
 
 struct Int;
 impl<B: DiagnosticsBroker> Lexer<B> for Int {
-    fn lex(input: Span<B>) -> IResult<Token, B> {
+    fn lex(input: Span<B>) -> IResult<B> {
         let (input, int) = digit1(input)?;
         Ok((
             input,
@@ -155,7 +152,7 @@ impl<B: DiagnosticsBroker> Lexer<B> for Int {
 
 struct Hex;
 impl<B: DiagnosticsBroker> Lexer<B> for Hex {
-    fn lex(input: Span<B>) -> IResult<Token, B> {
+    fn lex(input: Span<B>) -> IResult<B> {
         let start = input.location_offset();
         let (input, hex) = preceded(tag("0x"), hex_digit1)(input)?;
         let end = input.location_offset();
@@ -168,7 +165,7 @@ impl<B: DiagnosticsBroker> Lexer<B> for Hex {
 
 struct Comment;
 impl<B: DiagnosticsBroker> Lexer<B> for Comment {
-    fn lex(input: Span<B>) -> IResult<Token, B> {
+    fn lex(input: Span<B>) -> IResult<B> {
         let start = input.location_offset();
         let (input, _) = tag("//")(input)?;
         let (input, comment) = take_till(|c| c == '\n')(input)?;
@@ -182,7 +179,7 @@ impl<B: DiagnosticsBroker> Lexer<B> for Comment {
 
 struct Unknown;
 impl<B: DiagnosticsBroker> Lexer<B> for Unknown {
-    fn lex(input: Span<B>) -> IResult<Token, B> {
+    fn lex(input: Span<B>) -> IResult<B> {
         map(take(1u8), |span: Span<B>| {
             Token::new(TokenType::Unknown(span.to_string()), span.to_range())
         })(input)
@@ -191,65 +188,9 @@ impl<B: DiagnosticsBroker> Lexer<B> for Unknown {
 
 struct Eof;
 impl<B: DiagnosticsBroker> Lexer<B> for Eof {
-    fn lex(input: Span<B>) -> IResult<Token, B> {
+    fn lex(input: Span<B>) -> IResult<B> {
         map(eof, |span: Span<B>| {
             Token::new(TokenType::Eof, span.to_range())
         })(input)
-    }
-}
-
-/// Parser for alphanumeric characters or underscores
-fn alpha_numeric0<B: DiagnosticsBroker>(input: Span<B>) -> IResult<Span<B>, B> {
-    take_while(is_alpha_numeric)(input)
-}
-
-fn is_alpha_numeric(c: char) -> bool {
-    is_alphanumeric(c as u8) || c == '_'
-}
-
-/// Tries to parse the input with the given parser.
-/// If parsing succeeds and the output matches the given verification function,
-/// the result is returned.
-fn verify<'a, O, F, G, B: DiagnosticsBroker>(
-    mut parser: F,
-    verification: G,
-) -> impl FnMut(Span<'a, B>) -> IResult<O, B>
-where
-    F: FnMut(Span<'a, B>) -> IResult<'a, O, B>,
-    G: Fn(&O) -> bool,
-{
-    move |input: Span<B>| match parser(input) {
-        Ok((input, out)) => {
-            if verification(&out) {
-                Ok((input, out))
-            } else {
-                Err(nom::Err::Error(nom::error::Error::new(
-                    input,
-                    ErrorKind::Verify,
-                )))
-            }
-        }
-        Err(err) => Err(err),
-    }
-}
-
-/// Tries to parse the input with the given parser.
-/// If parsing succeeds, the result of inner is returned.
-/// If parsing fails, an error with the given message is reported.
-fn expect<'a, O, B: DiagnosticsBroker, F>(
-    mut parser: F,
-    error_msg: ParseErrorMessage,
-    error_range: Range<usize>,
-) -> impl FnMut(Span<'a, B>) -> IResult<Option<O>, B>
-where
-    F: FnMut(Span<'a, B>) -> IResult<'a, O, B>,
-{
-    move |input: Span<B>| match parser(input.clone()) {
-        Ok((input, out)) => Ok((input, Some(out))),
-        Err(_) => {
-            let err = crate::error::SplError(error_range.clone(), error_msg.to_string());
-            input.extra.report_error(err);
-            Ok((input, None))
-        }
     }
 }
