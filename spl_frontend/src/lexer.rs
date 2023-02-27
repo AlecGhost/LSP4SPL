@@ -1,7 +1,7 @@
-use crate::error::ParseErrorMessage;
+use crate::error::{LexErrorMessage, SplError};
 use crate::{DiagnosticsBroker, ToRange};
 use nom::combinator::{eof, peek};
-use nom::sequence::terminated;
+use nom::sequence::{pair, terminated};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_till},
@@ -31,11 +31,13 @@ impl<B: DiagnosticsBroker> ToRange for Span<'_, B> {
 
 type IResult<'a, B> = nom::IResult<Span<'a, B>, Token>;
 
-pub fn lex<B: DiagnosticsBroker>(input: &str, broker: B) -> Vec<Token> {
-    let span = Span::new_extra(input, broker);
-    let (input, mut tokens) =
-        many0(preceded(multispace0, Token::lex))(span).expect("Lexing must not fail.");
-    let (_, eof_token) = preceded(multispace0, Eof::lex)(input).expect("Lexing must not fail.");
+pub fn lex<B: DiagnosticsBroker>(src: &str, broker: B) -> Vec<Token> {
+    let input = Span::new_extra(src, broker);
+    let (_, (mut tokens, eof_token)) = pair(
+        many0(preceded(multispace0, Token::lex)),
+        preceded(multispace0, Eof::lex),
+    )(input)
+    .expect("Lexing must not fail.");
     tokens.push(eof_token);
     tokens
 }
@@ -129,11 +131,7 @@ impl<B: DiagnosticsBroker> Lexer<B> for Char {
         let (input, _) = tag("'")(input)?;
         let (input, c) = alt((map(tag("\\n"), |_| '\n'), anychar))(input)?;
         let pos = input.location_offset();
-        let (input, _) = expect(
-            tag("'"),
-            ParseErrorMessage::ExpectedToken("'".to_string()),
-            pos..pos,
-        )(input)?;
+        let (input, _) = expect(tag("'"), LexErrorMessage::MissingClosingTick, pos)(input)?;
         let end = input.location_offset();
         Ok((input, Token::new(TokenType::Char(c), start..end)))
     }
@@ -142,10 +140,20 @@ impl<B: DiagnosticsBroker> Lexer<B> for Char {
 struct Int;
 impl<B: DiagnosticsBroker> Lexer<B> for Int {
     fn lex(input: Span<B>) -> IResult<B> {
-        let (input, int) = digit1(input)?;
+        let (input, int_span) = digit1(input)?;
+        let result = match int_span.parse() {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                input.extra.report_error(SplError(
+                    int_span.to_range(),
+                    LexErrorMessage::InvalidIntLit(int_span.to_string()).to_string(),
+                ));
+                Err(int_span.to_string())
+            }
+        };
         Ok((
             input,
-            Token::new(TokenType::Int(int.to_string()), int.to_range()),
+            Token::new(TokenType::Int(result), int_span.to_range()),
         ))
     }
 }
@@ -156,18 +164,23 @@ impl<B: DiagnosticsBroker> Lexer<B> for Hex {
         let start = input.location_offset();
         let (input, _) = tag("0x")(input)?;
         let pos = input.location_offset();
-        let (input, hex) = expect(
-            hex_digit1,
-            ParseErrorMessage::ExpectedToken("hexadecimal number".to_string()),
-            pos..pos,
-        )(input)?;
-        let end = input.location_offset();
-        let hex_string = if let Some(span) = hex {
-            span.to_string()
+        let (input, opt_hex) = expect(hex_digit1, LexErrorMessage::ExpectedHexNumber, pos)(input)?;
+        let result = if let Some(hex_span) = opt_hex {
+            match u32::from_str_radix(&hex_span, 16) {
+                Ok(value) => Ok(value),
+                Err(_) => {
+                    input.extra.report_error(SplError(
+                        hex_span.to_range(),
+                        LexErrorMessage::InvalidIntLit("0x".to_string() + &hex_span).to_string(),
+                    ));
+                    Err(hex_span.to_string())
+                }
+            }
         } else {
-            "".to_string()
+            Err("".to_string())
         };
-        Ok((input, Token::new(TokenType::Hex(hex_string), start..end)))
+        let end = input.location_offset();
+        Ok((input, Token::new(TokenType::Hex(result), start..end)))
     }
 }
 
@@ -175,8 +188,7 @@ struct Comment;
 impl<B: DiagnosticsBroker> Lexer<B> for Comment {
     fn lex(input: Span<B>) -> IResult<B> {
         let start = input.location_offset();
-        let (input, _) = tag("//")(input)?;
-        let (input, comment) = take_till(|c| c == '\n')(input)?;
+        let (input, comment) = preceded(tag("//"), take_till(|c| c == '\n'))(input)?;
         let end = input.location_offset();
         Ok((
             input,

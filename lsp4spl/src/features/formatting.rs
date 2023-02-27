@@ -435,11 +435,18 @@ fn split_type_expr(type_expr: &TypeExpression) -> Vec<String> {
                 if let Some(IntLiteral { info, .. }) = &size {
                     for token in info.tokens.iter() {
                         match &token.token_type {
-                            TokenType::Int(int_string) => {
-                                break 'size int_string.clone();
+                            TokenType::Int(int_result) => {
+                                break 'size match int_result {
+                                    Ok(value) => value.to_string(),
+                                    Err(string) => string.to_string(),
+                                };
                             }
-                            TokenType::Hex(hex_string) => {
-                                break 'size "0x".to_string() + hex_string;
+                            TokenType::Hex(hex_result) => {
+                                let hex = match hex_result {
+                                    Ok(value) => value.to_string(),
+                                    Err(hex_string) => hex_string.to_string(),
+                                };
+                                break 'size format!("0x{}", hex);
                             }
                             TokenType::Char(c) => {
                                 break 'size format!("'{}'", c);

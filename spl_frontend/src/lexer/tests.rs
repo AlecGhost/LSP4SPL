@@ -51,9 +51,9 @@ fn tokens() {
         vec![
             Token::new(TokenType::If, 0..2),
             Token::new(TokenType::LParen, 3..4),
-            Token::new(TokenType::Int("1".to_string()), 4..5),
+            Token::new(TokenType::Int(Ok(1)), 4..5),
             Token::new(TokenType::Eq, 6..7),
-            Token::new(TokenType::Int("2".to_string()), 8..9),
+            Token::new(TokenType::Int(Ok(2)), 8..9),
             Token::new(TokenType::RParen, 9..10),
             Token::new(TokenType::LCurly, 11..12),
             Token::new(TokenType::RCurly, 12..13),

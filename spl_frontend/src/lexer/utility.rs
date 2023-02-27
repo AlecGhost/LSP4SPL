@@ -1,7 +1,6 @@
 use super::Span;
-use crate::{error::ParseErrorMessage, DiagnosticsBroker};
+use crate::{error::LexErrorMessage, DiagnosticsBroker};
 use nom::{bytes::complete::take_while, character::is_alphanumeric, error::ErrorKind};
-use std::ops::Range;
 
 type IResult<'a, O, B> = nom::IResult<Span<'a, B>, O>;
 
@@ -46,8 +45,8 @@ where
 /// If parsing fails, an error with the provided message is reported.
 pub(super) fn expect<'a, O, B: DiagnosticsBroker, F>(
     mut inner: F,
-    error_msg: ParseErrorMessage,
-    error_range: Range<usize>,
+    error_msg: LexErrorMessage,
+    error_pos: usize,
 ) -> impl FnMut(Span<'a, B>) -> IResult<Option<O>, B>
 where
     F: FnMut(Span<'a, B>) -> IResult<'a, O, B>,
@@ -55,7 +54,7 @@ where
     move |input: Span<B>| match inner(input.clone()) {
         Ok((input, out)) => Ok((input, Some(out))),
         Err(_) => {
-            let err = crate::error::SplError(error_range.clone(), error_msg.to_string());
+            let err = crate::error::SplError(error_pos..error_pos, error_msg.to_string());
             input.extra.report_error(err);
             Ok((input, None))
         }

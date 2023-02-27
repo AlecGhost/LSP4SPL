@@ -124,8 +124,8 @@ pub enum TokenType {
     Var,
     Ident(String),
     Char(char),
-    Int(String),
-    Hex(String),
+    Int(Result<u32, String>),
+    Hex(Result<u32, String>),
     Comment(String),
     Unknown(String),
     Eof,
@@ -209,8 +209,14 @@ impl std::fmt::Display for TokenType {
         let string = match self {
             Ident(s) => s.to_string(),
             Char(c) => c.to_string(),
-            Int(value) => value.to_string(),
-            Hex(value) => value.to_string(),
+            Int(result) => match result {
+                Ok(value) => value.to_string(),
+                Err(int_string) => int_string.to_string(),
+            },
+            Hex(result) => match result {
+                Ok(value) => value.to_string(),
+                Err(hex_string) => hex_string.to_string(),
+            },
             Comment(s) => s.to_string(),
             Unknown(s) => s.to_string(),
             token_type => token_type.as_static_str().to_string(),

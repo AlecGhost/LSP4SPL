@@ -58,18 +58,8 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
         let tokens = input.clone();
         let (input, value) = alt((
             map(hex, |token| {
-                if let TokenType::Hex(hex_string) = &token.fragment().token_type {
-                    match u32::from_str_radix(hex_string, 16) {
-                        Ok(value) => Some(value),
-                        Err(_) => {
-                            tokens.broker.report_error(SplError(
-                                token.to_range(),
-                                ParseErrorMessage::InvalidIntLit("0x".to_string() + hex_string)
-                                    .to_string(),
-                            ));
-                            None
-                        }
-                    }
+                if let TokenType::Hex(hex_result) = &token.fragment().token_type {
+                    hex_result.as_ref().ok().cloned()
                 } else {
                     panic!("Invalid hex parse")
                 }
@@ -82,18 +72,8 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
                 }
             }),
             map(int, |token| {
-                if let TokenType::Int(int_string) = &token.fragment().token_type {
-                    match int_string.parse() {
-                        Ok(value) => Some(value),
-                        Err(_) => {
-                            tokens.broker.report_error(SplError(
-                                token.to_range(),
-                                ParseErrorMessage::InvalidIntLit(int_string.to_string())
-                                    .to_string(),
-                            ));
-                            None
-                        }
-                    }
+                if let TokenType::Int(int_result) = &token.fragment().token_type {
+                    int_result.as_ref().ok().cloned()
                 } else {
                     panic!("Invalid int parse")
                 }
