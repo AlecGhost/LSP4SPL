@@ -154,12 +154,20 @@ struct Hex;
 impl<B: DiagnosticsBroker> Lexer<B> for Hex {
     fn lex(input: Span<B>) -> IResult<B> {
         let start = input.location_offset();
-        let (input, hex) = preceded(tag("0x"), hex_digit1)(input)?;
+        let (input, _) = tag("0x")(input)?;
+        let pos = input.location_offset();
+        let (input, hex) = expect(
+            hex_digit1,
+            ParseErrorMessage::ExpectedToken("hexadecimal number".to_string()),
+            pos..pos,
+        )(input)?;
         let end = input.location_offset();
-        Ok((
-            input,
-            Token::new(TokenType::Hex(hex.to_string()), start..end),
-        ))
+        let hex_string = if let Some(span) = hex {
+            span.to_string()
+        } else {
+            "".to_string()
+        };
+        Ok((input, Token::new(TokenType::Hex(hex_string), start..end)))
     }
 }
 
