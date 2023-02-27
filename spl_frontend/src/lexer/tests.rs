@@ -1,6 +1,9 @@
-use crate::lexer::{
-    lex,
-    token::{Token, TokenType},
+use crate::{
+    lexer::{
+        lex,
+        token::{Token, TokenType},
+    },
+    LocalBroker,
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
@@ -8,7 +11,8 @@ use pretty_assertions::assert_eq;
 #[test]
 fn tokens() {
     let input = "type a = int;";
-    let tokens = lex(input);
+    let broker = LocalBroker::default();
+    let tokens = lex(input, broker);
     assert_eq!(
         tokens,
         vec![
@@ -24,7 +28,8 @@ fn tokens() {
     );
 
     let input = "a(); ";
-    let tokens = lex(input);
+    let broker = LocalBroker::default();
+    let tokens = lex(input, broker);
     assert_eq!(
         tokens,
         vec![
@@ -39,15 +44,16 @@ fn tokens() {
     );
 
     let input = "if (1 = 2) {}";
-    let tokens = lex(input);
+    let broker = LocalBroker::default();
+    let tokens = lex(input, broker);
     assert_eq!(
         tokens,
         vec![
             Token::new(TokenType::If, 0..2),
             Token::new(TokenType::LParen, 3..4),
-            Token::new(TokenType::Int(1), 4..5),
+            Token::new(TokenType::Int("1".to_string()), 4..5),
             Token::new(TokenType::Eq, 6..7),
-            Token::new(TokenType::Int(2), 8..9),
+            Token::new(TokenType::Int("2".to_string()), 8..9),
             Token::new(TokenType::RParen, 9..10),
             Token::new(TokenType::LCurly, 11..12),
             Token::new(TokenType::RCurly, 12..13),
@@ -58,7 +64,8 @@ fn tokens() {
     );
 
     let input = "//";
-    let tokens = lex(input);
+    let broker = LocalBroker::default();
+    let tokens = lex(input, broker);
     assert_eq!(
         tokens,
         vec![

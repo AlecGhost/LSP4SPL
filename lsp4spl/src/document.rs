@@ -142,7 +142,7 @@ pub struct DocumentInfo {
 impl DocumentInfo {
     fn new(text: String) -> Self {
         let broker = LocalBroker::default();
-        let tokens = lexer::lex(&text);
+        let tokens = lexer::lex(&text, broker.clone());
         let program = parser::parse(&tokens, broker.clone());
         let table = table::build(&program, broker.clone());
         table::analyze(&program, &table, broker.clone());

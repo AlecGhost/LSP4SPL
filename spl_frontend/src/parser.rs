@@ -34,9 +34,9 @@ type IResult<'a, T, B> = nom::IResult<Tokens<'a, B>, T>;
 /// use spl_frontend::lexer::lex;
 /// # use spl_frontend::LocalBroker;
 ///
-/// let tokens = lex("");
 /// # let broker = LocalBroker::default();
-/// let program = parse(&tokens, broker);
+/// let tokens = lex("", broker.clone());
+/// let program = parse(&tokens, broker.clone());
 ///
 /// assert_eq!(program, Program {
 ///     global_declarations: Vec::new()
@@ -58,22 +58,42 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
         let tokens = input.clone();
         let (input, value) = alt((
             map(hex, |token| {
-                if let TokenType::Hex(value) = token.fragment().token_type {
-                    value
+                if let TokenType::Hex(hex_string) = &token.fragment().token_type {
+                    match u32::from_str_radix(hex_string, 16) {
+                        Ok(value) => Some(value),
+                        Err(_) => {
+                            tokens.broker.report_error(SplError(
+                                token.to_range(),
+                                ParseErrorMessage::InvalidIntLit("0x".to_string() + hex_string)
+                                    .to_string(),
+                            ));
+                            None
+                        }
+                    }
                 } else {
                     panic!("Invalid hex parse")
                 }
             }),
             map(char, |token| {
                 if let TokenType::Char(c) = token.fragment().token_type {
-                    (c as u8).into()
+                    Some((c as u8).into())
                 } else {
                     panic!("Invalid char parse")
                 }
             }),
             map(int, |token| {
-                if let TokenType::Int(value) = token.fragment().token_type {
-                    value
+                if let TokenType::Int(int_string) = &token.fragment().token_type {
+                    match int_string.parse() {
+                        Ok(value) => Some(value),
+                        Err(_) => {
+                            tokens.broker.report_error(SplError(
+                                token.to_range(),
+                                ParseErrorMessage::InvalidIntLit(int_string.to_string())
+                                    .to_string(),
+                            ));
+                            None
+                        }
+                    }
                 } else {
                     panic!("Invalid int parse")
                 }
@@ -83,7 +103,7 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
         Ok((
             input,
             Self {
-                value: Some(value),
+                value,
                 info: AstInfo::new(&tokens[..offset]),
             },
         ))
@@ -272,7 +292,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
                     ParseErrorMessage::ExpectedToken("[".to_string()),
                 ),
                 expect(
-                    map(IntLiteral::parse, |int_lit| int_lit.value),
+                    IntLiteral::parse,
                     ParseErrorMessage::ExpectedToken("int literal".to_string()),
                 ),
                 expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
@@ -289,7 +309,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
             Ok((
                 input,
                 TypeExpression::ArrayType {
-                    size: size.flatten(),
+                    size,
                     base_type: type_expr.map(Box::new),
                     info: AstInfo::new(&tokens[..offset]),
                 },

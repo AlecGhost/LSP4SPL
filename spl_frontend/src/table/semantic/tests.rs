@@ -7,7 +7,8 @@ use pretty_assertions::assert_eq;
 
 fn test(src: &str) -> Vec<SplError> {
     eprintln!("Testing: {}", src);
-    let tokens = lexer::lex(src);
+    let lex_broker = LocalBroker::default();
+    let tokens = lexer::lex(src, lex_broker);
     let parse_broker = LocalBroker::default();
     let program = parser::parse(&tokens, parse_broker.clone());
     assert_eq!(parse_broker.errors(), Vec::new(), "parsing failed");

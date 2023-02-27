@@ -76,16 +76,16 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
             };
             table.enter(
                 name.to_string(),
-                 GlobalEntry::Type(TypeEntry {
-                        name: name.clone(),
-                        data_type: get_data_type(
-                            &self.type_expr,
-                            &self.name,
-                            &lookup_table,
-                            broker.clone(),
-                        ),
-                        doc: documentation,
-                    }),
+                GlobalEntry::Type(TypeEntry {
+                    name: name.clone(),
+                    data_type: get_data_type(
+                        &self.type_expr,
+                        &self.name,
+                        &lookup_table,
+                        broker.clone(),
+                    ),
+                    doc: documentation,
+                }),
                 || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsType)),
             );
         }
@@ -111,13 +111,9 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
                 parameters,
                 doc: documentation,
             };
-            table.enter(
-                name.to_string(),
-                    GlobalEntry::Procedure(entry),
-                || {
-                    broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsProcedure));
-                },
-            );
+            table.enter(name.to_string(), GlobalEntry::Procedure(entry), || {
+                broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsProcedure));
+            });
         }
     }
 }
@@ -132,7 +128,7 @@ fn build_parameter<B: DiagnosticsBroker>(
         let documentation = get_documentation(&param.info.tokens);
         let lookup_table = LookupTable {
             global_table: Some(global_table),
-            local_table: None
+            local_table: None,
         };
         let param_entry = VariableEntry {
             name: name.clone(),
@@ -147,7 +143,7 @@ fn build_parameter<B: DiagnosticsBroker>(
         }
         local_table.enter(
             name.to_string(),
-                LocalEntry::Parameter(param_entry.clone()),
+            LocalEntry::Parameter(param_entry.clone()),
             || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter)),
         );
         Some(param_entry)
@@ -178,11 +174,9 @@ fn build_variable<B: DiagnosticsBroker>(
             ),
             doc: documentation,
         };
-        local_table.enter(
-            name.to_string(),
-                LocalEntry::Variable(entry),
-            || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable)),
-        );
+        local_table.enter(name.to_string(), LocalEntry::Variable(entry), || {
+            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable))
+        });
     }
 }
 
@@ -198,7 +192,12 @@ fn get_data_type<B: DiagnosticsBroker>(
             ArrayType {
                 size, base_type, ..
             } => {
-                if let (Some(size), Some(base_type)) = (
+                if let (
+                    Some(IntLiteral {
+                        value: Some(size), ..
+                    }),
+                    Some(base_type),
+                ) = (
                     size,
                     get_data_type(
                         &base_type.clone().map(|boxed| *boxed),

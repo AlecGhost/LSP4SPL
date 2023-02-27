@@ -180,7 +180,7 @@ pub struct TypeDeclaration {
 pub enum TypeExpression {
     NamedType(Identifier),
     ArrayType {
-        size: Option<u32>,
+        size: Option<IntLiteral>,
         base_type: Option<Box<TypeExpression>>,
         info: AstInfo,
     },

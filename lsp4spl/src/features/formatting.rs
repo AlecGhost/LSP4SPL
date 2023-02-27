@@ -3,8 +3,8 @@ use color_eyre::eyre::Result;
 use lsp_types::{DocumentFormattingParams, TextEdit};
 use spl_frontend::{
     ast::{
-        Expression, GlobalDeclaration, ProcedureDeclaration, Statement, TypeDeclaration,
-        TypeExpression, Variable,
+        Expression, GlobalDeclaration, IntLiteral, ProcedureDeclaration, Statement,
+        TypeDeclaration, TypeExpression, Variable,
     },
     lexer::token::{Token, TokenType},
     ToRange,
@@ -76,7 +76,6 @@ fn format_type_dec(td: &TypeDeclaration, indentation: &str) -> String {
         let splitting_symbol = if new_text.len() + expr_texts_len > MAX_LINE_LEN
             || expr_texts.iter().any(|text| text.starts_with('/'))
         {
-            log::debug!("Expr_texts: {:?}", expr_texts);
             String::new() + "\n" + indentation
         } else {
             " ".to_string()
@@ -432,10 +431,26 @@ fn split_type_expr(type_expr: &TypeExpression) -> Vec<String> {
             if let Some(mut comments) = get_leading_comments(&info.tokens) {
                 strings.append(&mut comments);
             }
-            let self_representation = format!(
-                "array [{}] of",
-                size.map(|int| int.to_string()).unwrap_or("".to_string())
-            );
+            let size = 'size: {
+                if let Some(IntLiteral { info, .. }) = &size {
+                    for token in info.tokens.iter() {
+                        match &token.token_type {
+                            TokenType::Int(int_string) => {
+                                break 'size int_string.clone();
+                            }
+                            TokenType::Hex(hex_string) => {
+                                break 'size "0x".to_string() + hex_string;
+                            }
+                            TokenType::Char(c) => {
+                                break 'size format!("'{}'", c);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                "".to_string()
+            };
+            let self_representation = format!("array [{}] of", size);
             strings.push(self_representation);
             if let Some(base_type) = base_type {
                 strings.append(&mut split_type_expr(base_type));

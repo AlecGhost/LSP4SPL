@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 fn test(src: &str) -> (GlobalTable, Vec<Token>, LocalBroker) {
     eprintln!("Testing: {}", src);
-    let tokens = crate::lexer::lex(src);
+    let tokens = crate::lexer::lex(src, LocalBroker::default());
     let program = crate::parser::parse(&tokens, LocalBroker::default());
     let broker = LocalBroker::default();
     let table = crate::table::build(&program, broker.clone());

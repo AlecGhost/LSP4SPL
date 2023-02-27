@@ -24,7 +24,8 @@ fn int_lit(value: u32, tokens: &[Token]) -> Box<Expression> {
 #[test]
 fn idents() {
     let i = "ab1";
-    let tokens = lex(i);
+    let broker = LocalBroker::default();
+    let tokens = lex(i, broker);
     assert_eq!(
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -35,7 +36,8 @@ fn idents() {
     );
 
     let i = "test_ident";
-    let tokens = lex(i);
+    let broker = LocalBroker::default();
+    let tokens = lex(i, broker);
     assert_eq!(
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -46,7 +48,8 @@ fn idents() {
     );
 
     let i = "_a";
-    let tokens = lex(i);
+    let broker = LocalBroker::default();
+    let tokens = lex(i, broker);
     assert_eq!(
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -57,7 +60,8 @@ fn idents() {
     );
 
     let i = "1a";
-    let tokens = lex(i);
+    let broker = LocalBroker::default();
+    let tokens = lex(i, broker);
     assert!(
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens()).is_err(),
         "Identifier: {}",
@@ -68,7 +72,8 @@ fn idents() {
 #[test]
 fn keywords() {
     let kw = "array";
-    let tokens = lex(kw);
+    let broker = LocalBroker::default();
+    let tokens = lex(kw, broker);
     assert!(
         all_consuming(terminated(keywords::array, eof))(tokens.to_tokens()).is_ok(),
         "Keyword: {}",
@@ -76,7 +81,8 @@ fn keywords() {
     );
 
     let kw = "array_";
-    let tokens = lex(kw);
+    let broker = LocalBroker::default();
+    let tokens = lex(kw, broker);
     assert!(
         all_consuming(terminated(keywords::array, eof))(tokens.to_tokens()).is_err(),
         "Keyword: {}",
@@ -84,7 +90,8 @@ fn keywords() {
     );
 
     let kw = "type a=int;";
-    let tokens = lex(kw);
+    let broker = LocalBroker::default();
+    let tokens = lex(kw, broker);
     assert!(
         all_consuming(terminated(TypeDeclaration::parse, eof))(tokens.to_tokens()).is_ok(),
         "Keyword: {}",
@@ -92,7 +99,8 @@ fn keywords() {
     );
 
     let kw = "typea=int;";
-    let tokens = lex(kw);
+    let broker = LocalBroker::default();
+    let tokens = lex(kw, broker);
     assert!(
         all_consuming(terminated(TypeDeclaration::parse, eof))(tokens.to_tokens()).is_err(),
         "Keyword: {}",
@@ -105,7 +113,8 @@ fn expressions() {
     type E = Expression;
 
     let expr = "1";
-    let tokens = lex(expr);
+    let broker = LocalBroker::default();
+    let tokens = lex(expr, broker);
     assert_eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -114,8 +123,10 @@ fn expressions() {
         "Expression: {}",
         expr
     );
+
     let expr = "1 + 2";
-    let tokens = lex(expr);
+    let broker = LocalBroker::default();
+    let tokens = lex(expr, broker);
     assert_eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -129,8 +140,10 @@ fn expressions() {
         "Expression: {}",
         expr
     );
+
     let expr = "1 + 2 * 3";
-    let tokens = lex(expr);
+    let broker = LocalBroker::default();
+    let tokens = lex(expr, broker);
     assert_eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -149,8 +162,10 @@ fn expressions() {
         "Expression: {}",
         expr
     );
+
     let expr = "1 / 2 + 3";
-    let tokens = lex(expr);
+    let broker = LocalBroker::default();
+    let tokens = lex(expr, broker);
     assert_eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -169,8 +184,10 @@ fn expressions() {
         "Expression: {}",
         expr
     );
+
     let expr = "1 * 2 / 3 * 4";
-    let tokens = lex(expr);
+    let broker = LocalBroker::default();
+    let tokens = lex(expr, broker);
     assert_eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -194,8 +211,10 @@ fn expressions() {
         "Expression: {}",
         expr
     );
+
     let expr = "1 - 2 + 3 - 4";
-    let tokens = lex(expr);
+    let broker = LocalBroker::default();
+    let tokens = lex(expr, broker);
     assert_eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -219,8 +238,10 @@ fn expressions() {
         "Expression: {}",
         expr
     );
+
     let expr = "(1 + 2) * 3 = 4 + 5 * 6 / 6";
-    let tokens = lex(expr);
+    let broker = LocalBroker::default();
+    let tokens = lex(expr, broker);
     assert_eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -260,7 +281,8 @@ fn expressions() {
         expr
     );
     let expr = "a < b > c";
-    let tokens = lex(expr);
+    let broker = LocalBroker::default();
+    let tokens = lex(expr, broker);
     assert!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens()).is_err(),
         "Expression: {}",
@@ -274,7 +296,8 @@ fn type_declarations() {
     type TE = TypeExpression;
 
     let dec = "type a = int;";
-    let tokens = lex(dec);
+    let broker = LocalBroker::default();
+    let tokens = lex(dec, broker);
     assert_eq!(
         all_consuming(terminated(TD::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -289,7 +312,8 @@ fn type_declarations() {
     );
 
     let dec = "type a = array [2] of array [3] of int;";
-    let tokens = lex(dec);
+    let broker = LocalBroker::default();
+    let tokens = lex(dec, broker);
     assert_eq!(
         all_consuming(terminated(TD::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -297,9 +321,15 @@ fn type_declarations() {
         TD {
             name: Some(Identifier::new("a", &tokens[1..2])),
             type_expr: Some(TE::ArrayType {
-                size: Some(2),
+                size: Some(IntLiteral {
+                    value: Some(2),
+                    info: AstInfo::new(&tokens[5..6])
+                }),
                 base_type: Some(Box::new(TE::ArrayType {
-                    size: Some(3),
+                    size: Some(IntLiteral {
+                        value: Some(3),
+                        info: AstInfo::new(&tokens[10..11]),
+                    }),
                     base_type: Some(Box::new(TE::NamedType(Identifier::new(
                         "int",
                         &tokens[13..14]
@@ -315,7 +345,8 @@ fn type_declarations() {
     );
 
     let dec = "type = array [] of array [] of;";
-    let tokens = lex(dec);
+    let broker = LocalBroker::default();
+    let tokens = lex(dec, broker);
     let (input, td) = all_consuming(terminated(TD::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
         td,
@@ -362,8 +393,9 @@ fn type_declarations() {
 
 #[test]
 fn assignments() {
+    let broker = LocalBroker::default();
     let asgn = "a := 1;";
-    let tokens = lex(asgn);
+    let tokens = lex(asgn, broker);
     let (input, assignment) =
         all_consuming(terminated(Assignment::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
@@ -379,7 +411,8 @@ fn assignments() {
     assert!(input.broker.errors().is_empty(), "Assignment: {}", asgn);
 
     let asgn = "a = 1;";
-    let tokens = lex(asgn);
+    let broker = LocalBroker::default();
+    let tokens = lex(asgn, broker);
     assert!(
         Assignment::parse(tokens.to_tokens()).is_err(),
         "Assignment: {}",
@@ -389,8 +422,9 @@ fn assignments() {
 
 #[test]
 fn call_statements() {
+    let broker = LocalBroker::default();
     let stmt = "a();";
-    let tokens = lex(stmt);
+    let tokens = lex(stmt, broker);
     let (input, cs) =
         all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
@@ -406,7 +440,8 @@ fn call_statements() {
     assert!(input.broker.errors().is_empty(), "CallStatement: {}", stmt);
 
     let stmt = "a(1, 2, 3);";
-    let tokens = lex(stmt);
+    let broker = LocalBroker::default();
+    let tokens = lex(stmt, broker);
     let (input, cs) =
         all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
@@ -426,7 +461,8 @@ fn call_statements() {
     assert!(input.broker.errors().is_empty(), "CallStatement: {}", stmt);
 
     let stmt = "a(1,)";
-    let tokens = lex(stmt);
+    let broker = LocalBroker::default();
+    let tokens = lex(stmt, broker);
     let (input, cs) =
         all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
@@ -456,7 +492,8 @@ fn call_statements() {
 #[test]
 fn if_statements() {
     let stmt = "if (1 = 2) {}";
-    let tokens = lex(stmt);
+    let broker = LocalBroker::default();
+    let tokens = lex(stmt, broker);
     let (input, is) =
         all_consuming(terminated(IfStatement::parse, eof))(tokens.to_tokens()).unwrap();
     assert_eq!(
@@ -484,7 +521,8 @@ fn if_statements() {
 #[test]
 fn acker() {
     let acker = std::fs::read_to_string("/Users/alex/dev/compiler/programs/acker.spl").unwrap();
-    let tokens = lex(&acker);
+    let broker = LocalBroker::default();
+    let tokens = lex(&acker, broker);
     let (input, program) = all_consuming(Program::parse)(tokens.to_tokens()).unwrap();
 
     // variables for use in assertion
