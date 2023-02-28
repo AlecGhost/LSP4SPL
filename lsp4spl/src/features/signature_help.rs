@@ -1,16 +1,18 @@
 use crate::document::DocumentRequest;
 use color_eyre::eyre::Result;
 use lsp_types::{
-    ParameterInformation, ParameterLabel, SignatureHelp, SignatureHelpParams, SignatureInformation, Documentation, MarkupContent, MarkupKind,
+    Documentation, MarkupContent, MarkupKind, ParameterInformation, ParameterLabel, SignatureHelp,
+    SignatureHelpParams, SignatureInformation,
 };
 use spl_frontend::{
     ast::{GlobalDeclaration, Statement},
-    table::{SymbolTable, GlobalEntry},
-    ToRange, lexer::token::TokenType,
+    lexer::token::TokenType,
+    table::{GlobalEntry, SymbolTable},
+    ToRange,
 };
 use tokio::sync::mpsc::Sender;
 
-pub(crate) async fn signature_help(
+pub async fn signature_help(
     doctx: Sender<DocumentRequest>,
     params: SignatureHelpParams,
 ) -> Result<Option<SignatureHelp>> {
@@ -41,7 +43,8 @@ pub(crate) async fn signature_help(
                     .find(|call_stmt| call_stmt.to_range().contains(&cursor.index))
             })
         {
-            if let Some(GlobalEntry::Procedure(proc_entry)) = &cursor.doc_info.table.lookup(&call_stmt.name.value)
+            if let Some(GlobalEntry::Procedure(proc_entry)) =
+                &cursor.doc_info.table.lookup(&call_stmt.name.value)
             {
                 let parameters: Vec<ParameterInformation> = proc_entry
                     .parameters
@@ -51,9 +54,11 @@ pub(crate) async fn signature_help(
                         documentation: None,
                     })
                     .collect();
-                let active_parameter = if !parameters.is_empty() {
+                let active_parameter = if parameters.is_empty() {
+                    None
+                } else {
                     let mut param_index = 0;
-                    for token in call_stmt.info.tokens.iter() {
+                    for token in &call_stmt.info.tokens {
                         if token.range.start >= cursor.index {
                             break;
                         }
@@ -62,13 +67,13 @@ pub(crate) async fn signature_help(
                         }
                     }
                     Some(param_index)
-                } else {
-                    None
                 };
-                let documentation = proc_entry.doc.as_ref().map(|doc| Documentation::MarkupContent(MarkupContent {
+                let documentation = proc_entry.doc.as_ref().map(|doc| {
+                    Documentation::MarkupContent(MarkupContent {
                         kind: MarkupKind::Markdown,
                         value: doc.clone(),
-                    }));
+                    })
+                });
                 let help = SignatureInformation {
                     label: proc_entry.name.to_string(),
                     documentation,

@@ -2,9 +2,9 @@ use crate::document::{get_position, DocumentInfo, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{Position, SemanticToken, SemanticTokens, SemanticTokensParams};
 use spl_frontend::{
-    ast::{GlobalDeclaration, Identifier, TypeExpression},
+    ast::{AstInfo, GlobalDeclaration, ProcedureDeclaration, TypeDeclaration},
     lexer::token::{Token, TokenType},
-    table::{Entry, LookupTable},
+    table::{Entry, GlobalTable, LookupTable},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -43,17 +43,17 @@ enum SemanticTokenModifier {
 
 impl From<SemanticTokenType> for u32 {
     fn from(value: SemanticTokenType) -> Self {
-        value as u32
+        value as Self
     }
 }
 
 impl From<SemanticTokenModifier> for u32 {
     fn from(value: SemanticTokenModifier) -> Self {
-        value as u32
+        value as Self
     }
 }
 
-pub(crate) async fn semantic_tokens(
+pub async fn semantic_tokens(
     doctx: Sender<DocumentRequest>,
     params: SemanticTokensParams,
 ) -> Result<Option<SemanticTokens>> {
@@ -76,123 +76,10 @@ pub(crate) async fn semantic_tokens(
                 use GlobalDeclaration::*;
                 match gd {
                     Procedure(pd) => {
-                        let lookup_table = LookupTable {
-                            local_table: super::get_local_table(pd, &global_table),
-                            global_table: Some(&global_table),
-                        };
-                        pd.info
-                            .tokens
-                            .iter()
-                            .filter_map(|token| {
-                                let semantic_token = if matches!(&pd.name, Some(name) if name.to_range() == token.range)
-                                {
-                                    Some(create_semantic_token(
-                                        token,
-                                        &previous_token_pos,
-                                        &text,
-                                        SemanticTokenType::Function.into(),
-                                        SemanticTokenModifier::Declaration.into(),
-                                    ))
-                                } else if let TokenType::Ident(name) = &token.token_type {
-                                    if let Some(entry) = lookup_table.lookup(name) {
-                                        match &entry {
-                                            Entry::Type(_) => Some(create_semantic_token(
-                                                token,
-                                                &previous_token_pos,
-                                                &text,
-                                                SemanticTokenType::Type.into(),
-                                                SemanticTokenModifier::None.into(),
-                                            )),
-                                            Entry::Procedure(_) => Some(create_semantic_token(
-                                                token,
-                                                &previous_token_pos,
-                                                &text,
-                                                SemanticTokenType::Function.into(),
-                                                SemanticTokenModifier::None.into(),
-                                            )),
-                                            Entry::Variable(variable) => {
-                                                let modifier = if variable.name.to_range() == token.range {
-                                                    SemanticTokenModifier::Declaration
-                                                } else {
-                                                    SemanticTokenModifier::None
-                                                };
-                                                Some(create_semantic_token(
-                                                    token,
-                                                    &previous_token_pos,
-                                                    &text,
-                                                    SemanticTokenType::Variable.into(),
-                                                    modifier.into(),
-                                                ))
-                                            },
-                                            Entry::Parameter(param) => {
-                                                let modifier = if param.name.to_range() == token.range {
-                                                    SemanticTokenModifier::Declaration
-                                                } else {
-                                                    SemanticTokenModifier::None
-                                                };
-                                                Some(create_semantic_token(
-                                                    token,
-                                                    &previous_token_pos,
-                                                    &text,
-                                                    SemanticTokenType::Parameter.into(),
-                                                    modifier.into(),
-                                                ))
-                                            }
-                                        }
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    map_token(token, &previous_token_pos, &text)
-                                };
-                                if semantic_token.is_some() {
-                                    previous_token_pos = get_position(token.range.start, &text);
-                                }
-                                semantic_token
-                            })
-                            .collect()
+                        collect_proc_dec(pd, &global_table, &text, &mut previous_token_pos)
                     }
-                    Type(td) => td
-                        .info
-                        .tokens
-                        .iter()
-                        .filter_map(|token| {
-                            let semantic_token = if matches!(&td.name, Some(name) if name.to_range() == token.range) {
-                                Some(create_semantic_token(
-                                    token,
-                                    &previous_token_pos,
-                                    &text,
-                                    SemanticTokenType::Type.into(),
-                                    SemanticTokenModifier::Declaration.into(),
-                                ))
-                            } else if matches!(token.token_type, TokenType::Ident(_)) {
-                                Some(create_semantic_token(
-                                    token,
-                                    &previous_token_pos,
-                                    &text,
-                                    SemanticTokenType::Type.into(),
-                                    SemanticTokenModifier::None.into(),
-                                ))
-                            } else {
-                                map_token(token, &previous_token_pos, &text)
-                            };
-                            if semantic_token.is_some() {
-                                previous_token_pos = get_position(token.range.start, &text);
-                            }
-                            semantic_token
-                        })
-                        .collect::<Vec<SemanticToken>>(),
-                    Error(info) => info
-                        .tokens
-                        .iter()
-                        .filter_map(|token| {
-                            let semantic_token = map_token(token,&previous_token_pos, &text);
-                            if semantic_token.is_some() {
-                                previous_token_pos = get_position(token.range.start, &text);
-                            }
-                            semantic_token
-                        })
-                        .collect::<Vec<SemanticToken>>(),
+                    Type(td) => collect_type_dec(td, &text, &mut previous_token_pos),
+                    Error(info) => collect_error(info, &text, &mut previous_token_pos),
                 }
             })
             .collect();
@@ -205,7 +92,140 @@ pub(crate) async fn semantic_tokens(
     }
 }
 
-fn map_token(token: &Token, previous_token_pos: &Position, text: &str) -> Option<SemanticToken> {
+fn collect_type_dec(
+    td: &TypeDeclaration,
+    text: &str,
+    previous_token_pos: &mut Position,
+) -> Vec<SemanticToken> {
+    td.info
+        .tokens
+        .iter()
+        .filter_map(|token| {
+            let semantic_token = if matches!(&td.name, Some(name) if name.to_range() == token.range)
+            {
+                Some(create_semantic_token(
+                    token,
+                    *previous_token_pos,
+                    text,
+                    SemanticTokenType::Type.into(),
+                    SemanticTokenModifier::Declaration.into(),
+                ))
+            } else if matches!(token.token_type, TokenType::Ident(_)) {
+                Some(create_semantic_token(
+                    token,
+                    *previous_token_pos,
+                    text,
+                    SemanticTokenType::Type.into(),
+                    SemanticTokenModifier::None.into(),
+                ))
+            } else {
+                map_token(token, *previous_token_pos, text)
+            };
+            if semantic_token.is_some() {
+                *previous_token_pos = get_position(token.range.start, text);
+            }
+            semantic_token
+        })
+        .collect::<Vec<SemanticToken>>()
+}
+
+fn collect_proc_dec(
+    pd: &ProcedureDeclaration,
+    global_table: &GlobalTable,
+    text: &str,
+    previous_token_pos: &mut Position,
+) -> Vec<SemanticToken> {
+    let lookup_table = LookupTable {
+        local_table: super::get_local_table(pd, global_table),
+        global_table: Some(global_table),
+    };
+    pd.info
+        .tokens
+        .iter()
+        .filter_map(|token| {
+            let semantic_token = if matches!(&pd.name, Some(name) if name.to_range() == token.range)
+            {
+                Some(create_semantic_token(
+                    token,
+                    *previous_token_pos,
+                    text,
+                    SemanticTokenType::Function.into(),
+                    SemanticTokenModifier::Declaration.into(),
+                ))
+            } else if let TokenType::Ident(name) = &token.token_type {
+                lookup_table.lookup(name).map(|entry| match &entry {
+                    Entry::Type(_) => create_semantic_token(
+                        token,
+                        *previous_token_pos,
+                        text,
+                        SemanticTokenType::Type.into(),
+                        SemanticTokenModifier::None.into(),
+                    ),
+                    Entry::Procedure(_) => create_semantic_token(
+                        token,
+                        *previous_token_pos,
+                        text,
+                        SemanticTokenType::Function.into(),
+                        SemanticTokenModifier::None.into(),
+                    ),
+                    Entry::Variable(variable) => {
+                        let modifier = if variable.name.to_range() == token.range {
+                            SemanticTokenModifier::Declaration
+                        } else {
+                            SemanticTokenModifier::None
+                        };
+                        create_semantic_token(
+                            token,
+                            *previous_token_pos,
+                            text,
+                            SemanticTokenType::Variable.into(),
+                            modifier.into(),
+                        )
+                    }
+                    Entry::Parameter(param) => {
+                        let modifier = if param.name.to_range() == token.range {
+                            SemanticTokenModifier::Declaration
+                        } else {
+                            SemanticTokenModifier::None
+                        };
+                        create_semantic_token(
+                            token,
+                            *previous_token_pos,
+                            text,
+                            SemanticTokenType::Parameter.into(),
+                            modifier.into(),
+                        )
+                    }
+                })
+            } else {
+                map_token(token, *previous_token_pos, text)
+            };
+            if semantic_token.is_some() {
+                *previous_token_pos = get_position(token.range.start, text);
+            }
+            semantic_token
+        })
+        .collect()
+}
+
+fn collect_error(
+    info: &AstInfo,
+    text: &str,
+    previous_token_pos: &mut Position,
+) -> Vec<SemanticToken> {
+    info.tokens
+        .iter()
+        .filter_map(|token| {
+            let semantic_token = map_token(token, *previous_token_pos, text);
+            if semantic_token.is_some() {
+                *previous_token_pos = get_position(token.range.start, text);
+            }
+            semantic_token
+        })
+        .collect::<Vec<SemanticToken>>()
+}
+
+fn map_token(token: &Token, previous_token_pos: Position, text: &str) -> Option<SemanticToken> {
     match &token.token_type {
         TokenType::Comment(_) => Some(create_semantic_token(
             token,
@@ -232,11 +252,11 @@ fn map_token(token: &Token, previous_token_pos: &Position, text: &str) -> Option
     }
 }
 
-/// Token type represents the index in TOKEN_TYPES.
-/// Token modifier represents the bitwise AND of the indexes in TOKEN_MODIFIERS.
+/// Token type represents the index in `TOKEN_TYPES`.
+/// Token modifier represents the bitwise AND of the indexes in `TOKEN_MODIFIERS`.
 fn create_semantic_token(
     token: &Token,
-    previous_token_pos: &Position,
+    previous_token_pos: Position,
     text: &str,
     token_type: u32,
     token_modifier: u32,
@@ -248,10 +268,10 @@ fn create_semantic_token(
         .try_into()
         .expect("Cannot convert range length to u32");
     let delta_line = line - previous_token_pos.line;
-    let delta_start = if line != previous_token_pos.line {
-        character
-    } else {
+    let delta_start = if line == previous_token_pos.line {
         character - previous_token_pos.character
+    } else {
+        character
     };
 
     SemanticToken {
@@ -260,15 +280,5 @@ fn create_semantic_token(
         length,
         token_type,
         token_modifiers_bitset: token_modifier,
-    }
-}
-
-fn get_type_ident(type_expr: &TypeExpression) -> Option<&Identifier> {
-    use TypeExpression::*;
-    match type_expr {
-        NamedType(ident) => Some(ident),
-        ArrayType { base_type, .. } => base_type
-            .as_ref()
-            .and_then(|type_expr| get_type_ident(type_expr)),
     }
 }

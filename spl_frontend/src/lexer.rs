@@ -177,7 +177,7 @@ impl<B: DiagnosticsBroker> Lexer<B> for Hex {
                 }
             }
         } else {
-            Err("".to_string())
+            Err(String::new())
         };
         let end = input.location_offset();
         Ok((input, Token::new(TokenType::Hex(result), start..end)))

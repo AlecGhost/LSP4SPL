@@ -3,7 +3,7 @@ use serde_json::Value;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use thiserror::Error;
 
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Eq)]
 #[repr(i64)]
 pub enum ErrorCode {
     ServerNotInitialized = -32002,
@@ -11,7 +11,7 @@ pub enum ErrorCode {
     MethodNotFound = -32601,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ResponseError {
     code: ErrorCode,
     message: String,
@@ -19,25 +19,17 @@ pub struct ResponseError {
 }
 
 impl ResponseError {
-    pub fn new(code: ErrorCode, message: String) -> Self {
+    pub const fn new(code: ErrorCode, message: String) -> Self {
         Self {
             code,
             message,
             data: None,
         }
     }
-
-    pub fn new_with_data(code: ErrorCode, message: String, data: Value) -> Self {
-        Self {
-            code,
-            message,
-            data: Some(data),
-        }
-    }
 }
 
 #[derive(Debug, Error)]
-pub(super) enum CodecError {
+pub enum CodecError {
     #[error("Invalid headers")]
     InvalidHeaders,
     #[error("IO error")]

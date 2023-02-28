@@ -15,7 +15,7 @@ use spl_frontend::{
 use std::collections::HashMap;
 use tokio::sync::mpsc::Sender;
 
-pub(crate) async fn rename(
+pub async fn rename(
     doctx: Sender<DocumentRequest>,
     params: RenameParams,
 ) -> Result<Option<WorkspaceEdit>> {
@@ -48,7 +48,7 @@ pub(crate) async fn rename(
     Ok(None)
 }
 
-pub(crate) async fn prepare_rename(
+pub async fn prepare_rename(
     doctx: Sender<DocumentRequest>,
     params: TextDocumentPositionParams,
 ) -> Result<Option<Range>> {
@@ -61,7 +61,7 @@ pub(crate) async fn prepare_rename(
     Ok(None)
 }
 
-pub(crate) async fn find(
+pub async fn find(
     doctx: Sender<DocumentRequest>,
     params: ReferenceParams,
 ) -> Result<Option<Vec<Location>>> {
@@ -104,17 +104,15 @@ fn find_referenced_idents(
                     global_table: Some(global_table),
                     local_table: Some(&p.local_table),
                 };
-                if let Some(entry) = lookup_table.lookup(&ident.value) {
-                    match &entry {
+                lookup_table
+                    .lookup(&ident.value)
+                    .map_or_else(Vec::new, |entry| match &entry {
                         Entry::Type(_) => find_types(&ident.value, program),
                         Entry::Procedure(_) => find_procs(&ident.value, program),
                         Entry::Variable(_) | Entry::Parameter(_) => {
                             find_vars(&ident.value, &p.name.value, program)
                         }
-                    }
-                } else {
-                    Vec::new()
-                }
+                    })
             }
         }
         GlobalEntry::Type(_) => find_types(&ident.value, program),
@@ -212,17 +210,17 @@ fn find_types(name: &str, program: &Program) -> Vec<Identifier> {
             pd.parameters
                 .iter()
                 .flat_map(|param| &param.type_expr)
-                .flat_map(get_ident_in_type_expr)
+                .filter_map(get_ident_in_type_expr)
                 .filter(|ident| ident.value == name)
                 .for_each(|ident| idents.push(ident));
             pd.variable_declarations
                 .iter()
                 .flat_map(|vd| &vd.type_expr)
-                .flat_map(get_ident_in_type_expr)
+                .filter_map(get_ident_in_type_expr)
                 .filter(|ident| ident.value == name)
                 .for_each(|ident| idents.push(ident));
         }
-        _ => {}
+        Error(_) => {}
     });
     idents
 }
@@ -314,7 +312,7 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
         }
     }
 
-    if let Some(pd) = program
+    program
         .global_declarations
         .iter()
         .filter_map(|gd| match gd {
@@ -322,38 +320,34 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
             _ => None,
         })
         .find(|pd| {
-            if let Some(ident) = &pd.name {
-                ident.value == proc_name
-            } else {
-                false
-            }
+            pd.name
+                .as_ref()
+                .map_or(false, |ident| ident.value == proc_name)
         })
-    {
-        let mut idents = Vec::new();
-        pd.parameters
-            .iter()
-            .filter_map(|param| param.name.as_ref())
-            .for_each(|ident| {
-                if ident.value == name {
-                    idents.push(ident.clone())
-                }
-            });
-        pd.variable_declarations
-            .iter()
-            .filter_map(|vd| vd.name.as_ref())
-            .for_each(|ident| {
-                if ident.value == name {
-                    idents.push(ident.clone())
-                }
-            });
-        let mut new_idents = pd
-            .statements
-            .iter()
-            .flat_map(|stmt| find_in_statement(stmt, name))
-            .collect();
-        idents.append(&mut new_idents);
-        idents
-    } else {
-        Vec::new()
-    }
+        .map_or_else(Vec::new, |pd| {
+            let mut idents = Vec::new();
+            pd.parameters
+                .iter()
+                .filter_map(|param| param.name.as_ref())
+                .for_each(|ident| {
+                    if ident.value == name {
+                        idents.push(ident.clone());
+                    }
+                });
+            pd.variable_declarations
+                .iter()
+                .filter_map(|vd| vd.name.as_ref())
+                .for_each(|ident| {
+                    if ident.value == name {
+                        idents.push(ident.clone());
+                    }
+                });
+            let mut new_idents = pd
+                .statements
+                .iter()
+                .flat_map(|stmt| find_in_statement(stmt, name))
+                .collect();
+            idents.append(&mut new_idents);
+            idents
+        })
 }

@@ -2,6 +2,7 @@
 use spl_frontend_macros::ToRange;
 
 use crate::{
+    error::OperatorConversionError,
     lexer::token::{Token, TokenType},
     ToRange,
 };
@@ -39,7 +40,7 @@ pub struct IntLiteral {
 }
 
 impl IntLiteral {
-    pub fn new(value: u32, info: AstInfo) -> Self {
+    pub const fn new(value: u32, info: AstInfo) -> Self {
         Self {
             value: Some(value),
             info,
@@ -112,43 +113,48 @@ impl Operator {
         }
     }
 
-    pub fn is_arithmetic(&self) -> bool {
+    pub const fn is_arithmetic(&self) -> bool {
         matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div)
     }
 }
- impl Display for Operator {
+impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Operator::*;
-        write!(f, "{}", match self {
-            Add => "+",
-            Sub => "-",
-            Mul => "*",
-            Div => "/",
-            Equ => "=",
-            Neq => "#",
-            Lst => "<",
-            Lse => "<=",
-            Grt => ">",
-            Gre => ">=",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Add => "+",
+                Sub => "-",
+                Mul => "*",
+                Div => "/",
+                Equ => "=",
+                Neq => "#",
+                Lst => "<",
+                Lse => "<=",
+                Grt => ">",
+                Gre => ">=",
+            }
+        )
     }
- }
+}
 
-impl From<TokenType> for Operator {
-    fn from(value: TokenType) -> Self {
+impl TryFrom<TokenType> for Operator {
+    type Error = OperatorConversionError<TokenType>;
+    fn try_from(value: TokenType) -> Result<Self, Self::Error> {
         use TokenType::*;
         match value {
-            Plus => Self::Add,
-            Minus => Self::Sub,
-            Times => Self::Mul,
-            Divide => Self::Div,
-            Eq => Self::Equ,
-            Neq => Self::Neq,
-            Lt => Self::Lst,
-            Le => Self::Lse,
-            Gt => Self::Grt,
-            Ge => Self::Gre,
-            token => panic!("Invalid token for operator conversion: {:?}", token),
+            Plus => Ok(Self::Add),
+            Minus => Ok(Self::Sub),
+            Times => Ok(Self::Mul),
+            Divide => Ok(Self::Div),
+            Eq => Ok(Self::Equ),
+            Neq => Ok(Self::Neq),
+            Lt => Ok(Self::Lst),
+            Le => Ok(Self::Lse),
+            Gt => Ok(Self::Grt),
+            Ge => Ok(Self::Gre),
+            token => Err(OperatorConversionError::new(token)),
         }
     }
 }

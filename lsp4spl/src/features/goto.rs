@@ -11,7 +11,7 @@ use spl_frontend::{
 };
 use tokio::sync::mpsc::Sender;
 
-pub(crate) async fn declaration(
+pub async fn declaration(
     doctx: Sender<DocumentRequest>,
     params: GotoDeclarationParams,
 ) -> Result<Option<Location>> {
@@ -53,14 +53,14 @@ pub(crate) async fn declaration(
 
 /// Calls `goto::declaration` because in SPL, there is no conceptual difference
 /// between declaration and definition
-pub(crate) async fn definition(
+pub async fn definition(
     doctx: Sender<DocumentRequest>,
     params: GotoDefinitionParams,
 ) -> Result<Option<Location>> {
     declaration(doctx, params).await
 }
 
-pub(crate) async fn type_definition(
+pub async fn type_definition(
     doctx: Sender<DocumentRequest>,
     params: GotoTypeDefinitionParams,
 ) -> Result<Option<Location>> {
@@ -123,7 +123,7 @@ pub(crate) async fn type_definition(
 }
 
 /// Essentially the same as `goto::declaration`, but only for procedures
-pub(crate) async fn implementation(
+pub async fn implementation(
     doctx: Sender<DocumentRequest>,
     params: GotoImplementationParams,
 ) -> Result<Option<Location>> {

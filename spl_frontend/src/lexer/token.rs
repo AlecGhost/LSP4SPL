@@ -42,7 +42,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, range: Range<usize>) -> Self {
+    pub const fn new(token_type: TokenType, range: Range<usize>) -> Self {
         Self { token_type, range }
     }
 }
@@ -72,9 +72,8 @@ impl TokenList for Vec<Token> {
             for token in self.iter() {
                 if token.range.start >= index {
                     break;
-                } else {
-                    current = token;
                 }
+                current = token;
             }
             Some(current)
         } else {
@@ -85,8 +84,8 @@ impl TokenList for Vec<Token> {
 
 impl ToRange for Vec<Token> {
     fn to_range(&self) -> Range<usize> {
-        let start = self.first().map(|token| token.range.start).unwrap_or(0);
-        let end = self.last().map(|token| token.range.end).unwrap_or(0);
+        let start = self.first().map_or(0, |token| token.range.start);
+        let end = self.last().map_or(0, |token| token.range.end);
         start..end
     }
 }
@@ -132,7 +131,7 @@ pub enum TokenType {
 }
 
 impl TokenType {
-    pub fn is_symbol(&self) -> bool {
+    pub const fn is_symbol(&self) -> bool {
         use TokenType::*;
         matches!(
             self,
@@ -158,7 +157,7 @@ impl TokenType {
         )
     }
 
-    pub fn is_keyword(&self) -> bool {
+    pub const fn is_keyword(&self) -> bool {
         use TokenType::*;
         matches!(
             self,
@@ -207,18 +206,12 @@ impl std::fmt::Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use TokenType::*;
         let string = match self {
-            Ident(s) => s.to_string(),
+            Ident(s) | Comment(s) | Unknown(s) => s.to_string(),
             Char(c) => c.to_string(),
-            Int(result) => match result {
+            Int(result) | Hex(result) => match result {
                 Ok(value) => value.to_string(),
                 Err(int_string) => int_string.to_string(),
             },
-            Hex(result) => match result {
-                Ok(value) => value.to_string(),
-                Err(hex_string) => hex_string.to_string(),
-            },
-            Comment(s) => s.to_string(),
-            Unknown(s) => s.to_string(),
             token_type => token_type.as_static_str().to_string(),
         };
         write!(f, "{}", string)
@@ -233,7 +226,7 @@ pub struct Tokens<'a, B> {
     pub error_pos: usize,
 }
 
-/// source: https://stackoverflow.com/a/57203324
+/// source: [Stackoverflow](https://stackoverflow.com/a/57203324)
 /// enables indexing and slicing
 impl<'a, B, Idx> std::ops::Index<Idx> for Tokens<'a, B>
 where
@@ -247,7 +240,7 @@ where
 }
 
 impl<'a, B: Clone> Tokens<'a, B> {
-    pub fn new(tokens: &'a [Token], broker: B) -> Self {
+    pub const fn new(tokens: &'a [Token], broker: B) -> Self {
         Self {
             tokens,
             broker,
@@ -255,6 +248,11 @@ impl<'a, B: Clone> Tokens<'a, B> {
         }
     }
 
+    /// Access to first token
+    ///
+    /// # Panics
+    ///
+    /// Panics if underlying token array is empty.
     pub fn fragment(&self) -> &Token {
         assert!(!self.tokens.is_empty(), "Token slice must not be empty");
         &self.tokens[0]
@@ -302,7 +300,7 @@ impl<'a, B: Clone> nom::InputTake for Tokens<'a, B> {
     }
 }
 
-/// source: https://docs.rs/nom/latest/src/nom/traits.rs.html#62-69
+/// source: [nom traits](https://docs.rs/nom/latest/src/nom/traits.rs.html#62-69)
 impl<'a, B> nom::Offset for Tokens<'a, B> {
     fn offset(&self, second: &Self) -> usize {
         let fst = self.tokens.as_ptr();
@@ -331,7 +329,7 @@ impl<'a, B: Clone> nom::Slice<RangeTo<usize>> for Tokens<'a, B> {
     }
 }
 
-/// source: https://github.com/Rydgel/monkey-rust/blob/master/lib/lexer/token.rs
+/// source: [Monkey Rust lexer](https://github.com/Rydgel/monkey-rust/blob/master/lib/lexer/token.rs)
 impl<'a, B: Clone> nom::InputIter for Tokens<'a, B> {
     type Item = &'a Token;
     type Iter = Enumerate<::std::slice::Iter<'a, Token>>;

@@ -13,10 +13,10 @@ fn test(src: &str) -> Vec<SplError> {
     let program = parser::parse(&tokens, parse_broker.clone());
     assert_eq!(parse_broker.errors(), Vec::new(), "parsing failed");
     let build_broker = LocalBroker::default();
-    let table = table::build(&program, build_broker.clone());
+    let table = table::build(&program, &build_broker);
     assert_eq!(build_broker.errors(), Vec::new(), "building failed");
     let semantic_broker = LocalBroker::default();
-    table::semantic::analyze(&program, &table, semantic_broker.clone());
+    table::semantic::analyze(&program, &table, &semantic_broker);
     semantic_broker.errors()
 }
 

@@ -13,7 +13,7 @@ use tokio::sync::mpsc::Sender;
 
 const MAX_LINE_LEN: usize = 100;
 
-pub(crate) async fn format(
+pub async fn format(
     doctx: Sender<DocumentRequest>,
     params: DocumentFormattingParams,
 ) -> Result<Option<Vec<TextEdit>>> {
@@ -30,7 +30,7 @@ pub(crate) async fn format(
             .global_declarations
             .iter()
             .filter_map(|gd| {
-                if let Some(new_text) = format_global_dec(gd, &indentation) {
+                format_global_dec(gd, &indentation).and_then(|new_text| {
                     let string_range = gd.to_range();
                     if new_text == text[string_range.clone()] {
                         None
@@ -38,9 +38,7 @@ pub(crate) async fn format(
                         let range = convert_range(&string_range, &text);
                         Some(TextEdit { range, new_text })
                     }
-                } else {
-                    None
-                }
+                })
             })
             .collect();
         if text_edits.is_empty() {
@@ -194,7 +192,7 @@ fn format_proc_dec(pd: &ProcedureDeclaration, indentation: &str) -> String {
                 var_dec_text
             })
             .collect();
-        for var_dec in var_decs.iter() {
+        for var_dec in &var_decs {
             new_text += "\n";
             new_text += indentation;
             new_text += var_dec;
@@ -212,7 +210,7 @@ fn format_proc_dec(pd: &ProcedureDeclaration, indentation: &str) -> String {
             })
             .collect();
 
-        for stmt in stmts.iter() {
+        for stmt in &stmts {
             new_text += stmt;
         }
         new_text += "\n";
@@ -248,7 +246,7 @@ fn format_stmt(stmt: &Statement, current_indentation: &str, indentation: &str) -
             let mut text = "{".to_string();
             if !b.statements.is_empty() {
                 let new_indentation = current_indentation.to_string() + indentation;
-                for stmt in b.statements.iter() {
+                for stmt in &b.statements {
                     text += format_stmt(stmt, &new_indentation, indentation).as_str();
                 }
                 text += "\n";
@@ -291,10 +289,7 @@ fn format_stmt(stmt: &Statement, current_indentation: &str, indentation: &str) -
             }
             text += format!(
                 "if ({})",
-                i.condition
-                    .as_ref()
-                    .map(format_expr)
-                    .unwrap_or("".to_string())
+                i.condition.as_ref().map_or_else(String::new, format_expr)
             )
             .as_str();
             if let Some(if_branch) = &i.if_branch {
@@ -305,7 +300,7 @@ fn format_stmt(stmt: &Statement, current_indentation: &str, indentation: &str) -
                     i.if_branch.as_ref().map(|boxed| boxed.as_ref()),
                     Some(Statement::Block(_))
                 ) {
-                    text += " "
+                    text += " ";
                 } else {
                     text += "\n";
                     text += current_indentation;
@@ -323,10 +318,7 @@ fn format_stmt(stmt: &Statement, current_indentation: &str, indentation: &str) -
             }
             text += format!(
                 "while ({})",
-                w.condition
-                    .as_ref()
-                    .map(format_expr)
-                    .unwrap_or("".to_string())
+                w.condition.as_ref().map_or_else(String::new, format_expr)
             )
             .as_str();
             if let Some(stmt) = &w.statement {
@@ -334,7 +326,7 @@ fn format_stmt(stmt: &Statement, current_indentation: &str, indentation: &str) -
             }
             text
         }
-        Error(_) => "".to_string(),
+        Error(_) => String::new(),
     }
     .as_str();
     text
@@ -347,7 +339,7 @@ fn format_branch(branch: &Statement, current_indentation: &str, indentation: &st
         Statement::Block(b) => {
             text += " {";
             if !b.statements.is_empty() {
-                for stmt in b.statements.iter() {
+                for stmt in &b.statements {
                     text += format_stmt(stmt, &new_indentation, indentation).as_str();
                 }
                 text += "\n";
@@ -387,10 +379,9 @@ fn format_expr(expr: &Expression) -> String {
         ),
         IntLiteral(int_lit) => int_lit
             .value
-            .map(|value| value.to_string())
-            .unwrap_or("".to_string()),
+            .map_or_else(String::new, |value| value.to_string()),
         Variable(var) => format_variable(var),
-        Error(_) => "".to_string(),
+        Error(_) => String::new(),
     }
 }
 
@@ -433,7 +424,7 @@ fn split_type_expr(type_expr: &TypeExpression) -> Vec<String> {
             }
             let size = 'size: {
                 if let Some(IntLiteral { info, .. }) = &size {
-                    for token in info.tokens.iter() {
+                    for token in &info.tokens {
                         match &token.token_type {
                             TokenType::Int(int_result) => {
                                 break 'size match int_result {
@@ -455,7 +446,7 @@ fn split_type_expr(type_expr: &TypeExpression) -> Vec<String> {
                         }
                     }
                 }
-                "".to_string()
+                String::new()
             };
             let self_representation = format!("array [{}] of", size);
             strings.push(self_representation);

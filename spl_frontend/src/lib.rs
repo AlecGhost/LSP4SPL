@@ -1,3 +1,4 @@
+#![warn(clippy::nursery)]
 use error::SplError;
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
@@ -22,7 +23,7 @@ pub struct LocalBroker(Rc<RefCell<Vec<SplError>>>);
 
 impl Clone for LocalBroker {
     fn clone(&self) -> Self {
-        LocalBroker(Rc::clone(&self.0))
+        Self(Rc::clone(&self.0))
     }
 }
 

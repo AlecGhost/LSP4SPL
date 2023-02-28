@@ -2,14 +2,16 @@ use crate::document::DocumentRequest;
 use color_eyre::eyre::Result;
 use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentation, MarkupKind};
 use spl_frontend::{
-    ast::{GlobalDeclaration, Statement, TypeDeclaration},
+    ast::{GlobalDeclaration, ProcedureDeclaration, Statement, TypeDeclaration},
     lexer::token::{Token, TokenList, TokenType},
-    table::{GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, SymbolTable, TableEntry},
+    table::{
+        GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, SymbolTable, TableEntry,
+    },
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
 
-pub(crate) async fn propose(
+pub async fn propose(
     doctx: Sender<DocumentRequest>,
     params: CompletionParams,
 ) -> Result<Option<Vec<CompletionItem>>> {
@@ -27,70 +29,8 @@ pub(crate) async fn propose(
             use GlobalDeclaration::*;
             match gd {
                 Type(td) => Ok(complete_type(td, position, table)),
-                Procedure(pd) => {
-                    if let Some(last_token) = pd.info.tokens.token_before(position) {
-                        let in_signature = if let Some(procedure_end_token) =
-                            pd.info.tokens.iter().find(|token| {
-                                matches!(token.token_type, TokenType::RParen | TokenType::LCurly)
-                            }) {
-                            position < procedure_end_token.range.start
-                        } else {
-                            true
-                        };
-
-                        if in_signature {
-                            let completions = match last_token.token_type {
-                                TokenType::LParen | TokenType::Comma => Some(vec![items::r#ref()]),
-                                TokenType::Colon => Some(search_types(table)),
-                                _ => None,
-                            };
-                            Ok(completions)
-                        } else {
-                            // handle procedure body
-                            let lookup_table = LookupTable {
-                                local_table: super::get_local_table(pd, table),
-                                global_table: Some(table),
-                            };
-                            let in_statements = if let Some(first_stmt) =
-                                &pd.statements.iter().find(|stmt| {
-                                    // prevent that error or empty statements disturb the calculation of
-                                    // the first real statement
-                                    !matches!(stmt, Statement::Error(_) | Statement::Empty(_))
-                                }) {
-                                position >= first_stmt.to_range().start
-                            } else {
-                                false
-                            };
-
-                            if in_statements {
-                                Ok(complete_statements(
-                                    &pd.statements,
-                                    position,
-                                    last_token,
-                                    &lookup_table,
-                                ))
-                            } else {
-                                // in variable declarations
-                                let completions = match last_token.token_type {
-                                    TokenType::Colon => Some(search_types(table)),
-                                    TokenType::Semic | TokenType::LCurly => {
-                                        let completions = vec![
-                                            vec![snippets::var(), items::var()],
-                                            new_stmt(&lookup_table),
-                                        ]
-                                        .concat();
-                                        Some(completions)
-                                    }
-                                    _ => None,
-                                };
-                                Ok(completions)
-                            }
-                        }
-                    } else {
-                        Ok(None)
-                    }
-                }
-                _ => Ok(None),
+                Procedure(pd) => Ok(complete_procedure(pd, position, table)),
+                Error(_) => Ok(None),
             }
         } else {
             // fixes, that a cursor at the end of an unfinished type declaration at the end of the
@@ -128,21 +68,81 @@ fn complete_type(
     position: usize,
     table: &GlobalTable,
 ) -> Option<Vec<CompletionItem>> {
-    if let Some(last_token) = td.info.tokens.token_before(position) {
-        use TokenType::*;
-        match last_token.token_type {
-            Eq => Some(vec![snippets::array(), items::array(), items::int()]),
-            RBracket => Some(vec![items::of()]),
-            Of => {
-                let completions =
-                    vec![vec![snippets::array(), items::array()], search_types(table)].concat();
-                Some(completions)
+    td.info
+        .tokens
+        .token_before(position)
+        .and_then(|last_token| {
+            use TokenType::*;
+            match last_token.token_type {
+                Eq => Some(vec![snippets::array(), items::array(), items::int()]),
+                RBracket => Some(vec![items::of()]),
+                Of => {
+                    let completions =
+                        vec![vec![snippets::array(), items::array()], search_types(table)].concat();
+                    Some(completions)
+                }
+                _ => None,
             }
-            _ => None,
-        }
-    } else {
-        None
-    }
+        })
+}
+
+fn complete_procedure(
+    pd: &ProcedureDeclaration,
+    position: usize,
+    table: &GlobalTable,
+) -> Option<Vec<CompletionItem>> {
+    pd.info
+        .tokens
+        .token_before(position)
+        .and_then(|last_token| {
+            let in_signature = pd
+                .info
+                .tokens
+                .iter()
+                .find(|token| matches!(token.token_type, TokenType::RParen | TokenType::LCurly))
+                .map_or(true, |procedure_end_token| {
+                    position < procedure_end_token.range.start
+                });
+
+            if in_signature {
+                match last_token.token_type {
+                    TokenType::LParen | TokenType::Comma => Some(vec![items::r#ref()]),
+                    TokenType::Colon => Some(search_types(table)),
+                    _ => None,
+                }
+            } else {
+                // handle procedure body
+                let lookup_table = LookupTable {
+                    local_table: super::get_local_table(pd, table),
+                    global_table: Some(table),
+                };
+                let in_statements = pd
+                    .statements
+                    .iter()
+                    .find(|stmt| {
+                        // prevent that error or empty statements disturb the calculation of
+                        // the first real statement
+                        !matches!(stmt, Statement::Error(_) | Statement::Empty(_))
+                    })
+                    .map_or(false, |first_stmt| position >= first_stmt.to_range().start);
+
+                if in_statements {
+                    complete_statements(&pd.statements, position, last_token, &lookup_table)
+                } else {
+                    // in variable declarations
+                    match last_token.token_type {
+                        TokenType::Colon => Some(search_types(table)),
+                        TokenType::Semic | TokenType::LCurly => {
+                            let completions =
+                                vec![vec![snippets::var(), items::var()], new_stmt(&lookup_table)]
+                                    .concat();
+                            Some(completions)
+                        }
+                        _ => None,
+                    }
+                }
+            }
+        })
 }
 
 fn complete_statements(
@@ -152,18 +152,20 @@ fn complete_statements(
     lookup_table: &LookupTable,
 ) -> Option<Vec<CompletionItem>> {
     let mut last_stmt_is_if = false;
-    if let Some(stmt) = stmts.iter().find(|stmt| {
-        if stmt.to_range().contains(&position) {
-            true
-        } else {
-            last_stmt_is_if = matches!(stmt, Statement::If(_));
-            false
-        }
-    }) {
-        complete_statement(stmt, position, last_token, last_stmt_is_if, lookup_table)
-    } else {
-        Some(new_stmt(lookup_table))
-    }
+    stmts
+        .iter()
+        .find(|stmt| {
+            if stmt.to_range().contains(&position) {
+                true
+            } else {
+                last_stmt_is_if = matches!(stmt, Statement::If(_));
+                false
+            }
+        })
+        .map_or_else(
+            || Some(new_stmt(lookup_table)),
+            |stmt| complete_statement(stmt, position, last_token, last_stmt_is_if, lookup_table),
+        )
 }
 
 fn complete_statement(
@@ -277,15 +279,13 @@ fn complete_statement(
                 }
             }
         }
-        Statement::Error(_) | Statement::Empty(_) => {
-            return Some(new_stmt(lookup_table))
-        }
+        Statement::Error(_) | Statement::Empty(_) => return Some(new_stmt(lookup_table)),
     }
     None
 }
 
 /// If the cursor is after a token, it should count as if it was on it.
-fn correct_index(index: usize) -> usize {
+const fn correct_index(index: usize) -> usize {
     if index > 0 {
         index - 1
     } else {
@@ -361,16 +361,12 @@ fn new_stmt(lookup_table: &LookupTable) -> Vec<CompletionItem> {
             items::r#if(),
             items::r#while(),
         ],
-        if let Some(local_table) = lookup_table.local_table {
-            search_variables(local_table)
-        } else {
-            Vec::new()
-        },
-        if let Some(global_table) = lookup_table.global_table {
-            search_procedures(global_table)
-        } else {
-            Vec::new()
-        },
+        lookup_table
+            .local_table
+            .map_or_else(Vec::new, search_variables),
+        lookup_table
+            .global_table
+            .map_or_else(Vec::new, search_procedures),
     ]
     .concat()
 }

@@ -20,14 +20,14 @@ use tokio::sync::{
 use crate::io::{self, Message, ToValue};
 
 #[derive(Debug)]
-pub(super) enum DocumentRequest {
+pub enum DocumentRequest {
     Open(Url, String),
     Change(Url, Vec<TextDocumentContentChangeEvent>),
     Close(Url),
     GetInfo(Url, oneshot::Sender<Option<DocumentInfo>>),
 }
 
-pub(super) async fn open(
+pub async fn open(
     broker: Sender<DocumentRequest>,
     params: DidOpenTextDocumentParams,
 ) -> Result<()> {
@@ -41,7 +41,7 @@ pub(super) async fn open(
     Ok(())
 }
 
-pub(super) async fn change(
+pub async fn change(
     broker: Sender<DocumentRequest>,
     params: DidChangeTextDocumentParams,
 ) -> Result<()> {
@@ -55,7 +55,7 @@ pub(super) async fn change(
     Ok(())
 }
 
-pub(super) async fn close(
+pub async fn close(
     broker: Sender<DocumentRequest>,
     params: DidCloseTextDocumentParams,
 ) -> Result<()> {
@@ -66,7 +66,7 @@ pub(super) async fn close(
     Ok(())
 }
 
-pub(super) async fn broker(
+pub async fn broker(
     mut rx: Receiver<DocumentRequest>,
     iotx: Sender<Message>,
     send_diagnostics: bool,
@@ -96,26 +96,24 @@ pub(super) async fn broker(
             Change(uri, changes) => {
                 // currently no incremental changes, so there should only be one change
                 if let Some(change) = changes.into_iter().next() {
-                    match change.range {
-                        Some(_) => { /*TODO: Incremental editing*/ }
-                        None => {
-                            let doc_info = DocumentInfo::new(change.text);
-                            if send_diagnostics {
-                                let notification = io::Notification::new(
-                                    PublishDiagnostics::METHOD.to_string(),
-                                    PublishDiagnosticsParams {
-                                        uri: uri.clone(),
-                                        diagnostics: doc_info.diagnostics.clone(),
-                                        version: None,
-                                    }
-                                    .to_value(),
-                                );
-                                iotx.send(Message::Notification(notification))
-                                    .await
-                                    .expect("Cannot send messages");
-                            }
-                            docs.insert(uri.path().to_string(), doc_info);
+                    // currently no incremental changes, so range should be None
+                    if change.range.is_none() {
+                        let doc_info = DocumentInfo::new(change.text);
+                        if send_diagnostics {
+                            let notification = io::Notification::new(
+                                PublishDiagnostics::METHOD.to_string(),
+                                PublishDiagnosticsParams {
+                                    uri: uri.clone(),
+                                    diagnostics: doc_info.diagnostics.clone(),
+                                    version: None,
+                                }
+                                .to_value(),
+                            );
+                            iotx.send(Message::Notification(notification))
+                                .await
+                                .expect("Cannot send messages");
                         }
+                        docs.insert(uri.path().to_string(), doc_info);
                     }
                 }
             }
@@ -144,8 +142,8 @@ impl DocumentInfo {
         let broker = LocalBroker::default();
         let tokens = lexer::lex(&text, broker.clone());
         let program = parser::parse(&tokens, broker.clone());
-        let table = table::build(&program, broker.clone());
-        table::analyze(&program, &table, broker.clone());
+        let table = table::build(&program, &broker);
+        table::analyze(&program, &table, &broker);
         let diagnostics = broker
             .errors()
             .into_iter()

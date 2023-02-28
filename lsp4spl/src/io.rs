@@ -10,7 +10,7 @@ const RPC_VERSION: &str = "2.0";
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub(super) enum Message {
+pub enum Message {
     Request(Request),
     Response(Response),
     Notification(Notification),
@@ -27,8 +27,8 @@ pub trait ToValue {
 
 impl<T> ToValue for T where T: Sized + serde::Serialize {}
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub(super) struct Request {
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Request {
     jsonrpc: String,
     id: i32,
     pub method: String,
@@ -37,17 +37,18 @@ pub(super) struct Request {
 }
 
 impl Request {
-    pub(super) fn split(self) -> (Value, PreparedResponse) {
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn split(self) -> (Value, PreparedResponse) {
         (self.params, PreparedResponse::new(self.id))
     }
 }
 
-pub(super) struct PreparedResponse {
+pub struct PreparedResponse {
     id: i32,
 }
 
 impl PreparedResponse {
-    fn new(id: i32) -> Self {
+    const fn new(id: i32) -> Self {
         Self { id }
     }
 
@@ -70,8 +71,8 @@ impl PreparedResponse {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub(super) struct Notification {
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Notification {
     jsonrpc: String,
     pub method: String,
     #[serde(default)]
@@ -89,7 +90,7 @@ impl Notification {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub(super) struct Response {
+pub struct Response {
     jsonrpc: String,
     id: i32,
     #[serde(flatten)]
@@ -103,7 +104,7 @@ enum ResponseAnswer {
     Error { error: ResponseError },
 }
 
-pub(super) struct LSCodec;
+pub struct LSCodec;
 
 impl Decoder for LSCodec {
     type Item = Message;
@@ -152,7 +153,7 @@ impl Encoder<Message> for LSCodec {
     }
 }
 
-pub(super) async fn responder(stdout: tokio::io::Stdout, mut rx: Receiver<Message>) {
+pub async fn responder(stdout: tokio::io::Stdout, mut rx: Receiver<Message>) {
     let mut framed_write = FramedWrite::new(stdout, LSCodec);
     while let Some(response) = rx.recv().await {
         if let Err(err) = framed_write.send(response).await {

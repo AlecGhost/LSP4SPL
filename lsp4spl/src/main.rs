@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![warn(clippy::nursery)]
 use clap::Parser;
 use color_eyre::eyre::{Context, Result};
 use lsp_types::{

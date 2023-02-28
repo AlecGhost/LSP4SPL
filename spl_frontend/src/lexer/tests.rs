@@ -69,7 +69,7 @@ fn tokens() {
     assert_eq!(
         tokens,
         vec![
-            Token::new(TokenType::Comment("".to_string()), 0..2),
+            Token::new(TokenType::Comment(String::new()), 0..2),
             Token::new(TokenType::Eof, 2..2),
         ],
         "{}",

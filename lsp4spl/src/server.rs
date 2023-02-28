@@ -92,10 +92,10 @@ mod phases {
     use tokio_util::codec::FramedRead;
 
     macro_rules! respond {
-        ($request:ident, $func:path, $doctx:expr) => {{
+        ($request:ident, $method:path, $doctx:expr) => {{
             let (params, response) = $request.split();
-            let params = serde_json::from_value(params)?;
-            let result = $func($doctx, params)
+            let args = serde_json::from_value(params)?;
+            let result = $method($doctx, args)
                 .await
                 .wrap_err("Cannot process request")?;
             response.into_result_response(result)
@@ -103,9 +103,9 @@ mod phases {
     }
 
     macro_rules! note {
-        ($notification:ident, $func:path, $doctx:expr) => {{
-            let params = serde_json::from_value($notification.params)?;
-            $func($doctx, params)
+        ($notification:ident, $method:path, $doctx:expr) => {{
+            let args = serde_json::from_value($notification.params)?;
+            $method($doctx, args)
                 .await
                 .wrap_err("Cannot process notification")?;
         }};
@@ -248,13 +248,13 @@ mod phases {
                 Message::Notification(notification) => {
                     match notification.method.as_str() {
                         DidOpenTextDocument::METHOD => {
-                            note!(notification, document::open, doctx.clone())
+                            note!(notification, document::open, doctx.clone());
                         }
                         DidChangeTextDocument::METHOD => {
-                            note!(notification, document::change, doctx.clone())
+                            note!(notification, document::change, doctx.clone());
                         }
                         DidCloseTextDocument::METHOD => {
-                            note!(notification, document::close, doctx.clone())
+                            note!(notification, document::close, doctx.clone());
                         }
                         Exit::METHOD => std::process::exit(1), // ungraceful exit
                         _ => { /* drop all other notifications */ }

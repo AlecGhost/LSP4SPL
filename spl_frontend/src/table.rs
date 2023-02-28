@@ -84,7 +84,7 @@ pub enum DataType {
 }
 
 impl DataType {
-    fn is_primitive(&self) -> bool {
+    const fn is_primitive(&self) -> bool {
         matches!(self, Self::Int | Self::Bool)
     }
 }
@@ -138,8 +138,8 @@ impl TableEntry for Entry<'_> {
 impl TableEntry for GlobalEntry {
     fn doc(&self) -> Option<String> {
         match self {
-            GlobalEntry::Procedure(p) => p.doc.clone(),
-            GlobalEntry::Type(t) => t.doc.clone(),
+            Self::Procedure(p) => p.doc.clone(),
+            Self::Type(t) => t.doc.clone(),
         }
     }
 }
@@ -147,24 +147,24 @@ impl TableEntry for GlobalEntry {
 impl TableEntry for LocalEntry {
     fn doc(&self) -> Option<String> {
         match self {
-            LocalEntry::Variable(v) | LocalEntry::Parameter(v) => v.doc.clone(),
+            Self::Variable(v) | Self::Parameter(v) => v.doc.clone(),
         }
     }
 }
 
 impl<'a> LookupTable<'a> {
     pub fn lookup(&self, key: &str) -> Option<Entry<'a>> {
-        if let Some(entry) = self
-            .local_table
+        self.local_table
             .and_then(|table| table.lookup(key))
             .map(Entry::from)
-        {
-            Some(entry)
-        } else {
-            self.global_table
-                .and_then(|table| table.lookup(key))
-                .map(Entry::from)
-        }
+            .map_or_else(
+                || {
+                    self.global_table
+                        .and_then(|table| table.lookup(key))
+                        .map(Entry::from)
+                },
+                Some,
+            )
     }
 }
 
@@ -231,8 +231,7 @@ impl Display for VariableEntry {
             self.name,
             self.data_type
                 .as_ref()
-                .map(|dt| dt.to_string())
-                .unwrap_or_else(|| "_".to_string())
+                .map_or_else(|| "_".to_string(), |dt| dt.to_string())
         )
     }
 }
@@ -259,8 +258,7 @@ impl Display for TypeEntry {
             "{}",
             self.data_type
                 .as_ref()
-                .map(|dt| dt.to_string())
-                .unwrap_or_else(|| "_".to_string())
+                .map_or_else(|| "_".to_string(), |dt| dt.to_string())
         )
     }
 }
@@ -268,9 +266,9 @@ impl Display for TypeEntry {
 impl Display for Entry<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let display = match self {
-            Entry::Procedure(p) => p.to_string(),
-            Entry::Type(t) => t.to_string(),
-            Entry::Variable(v) | Entry::Parameter(v) => v.to_string(),
+            Self::Procedure(p) => p.to_string(),
+            Self::Type(t) => t.to_string(),
+            Self::Variable(v) | Self::Parameter(v) => v.to_string(),
         };
         write!(f, "{}", display)
     }
@@ -279,8 +277,8 @@ impl Display for Entry<'_> {
 impl Display for GlobalEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let display = match self {
-            GlobalEntry::Type(t) => t.to_string(),
-            GlobalEntry::Procedure(p) => p.to_string(),
+            Self::Type(t) => t.to_string(),
+            Self::Procedure(p) => p.to_string(),
         };
         write!(f, "{}", display)
     }
@@ -289,8 +287,8 @@ impl Display for GlobalEntry {
 impl Display for LocalEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let display = match self {
-            LocalEntry::Variable(v) => v.to_string(),
-            LocalEntry::Parameter(p) => p.to_string(),
+            Self::Variable(v) => v.to_string(),
+            Self::Parameter(p) => p.to_string(),
         };
         write!(f, "{}", display)
     }

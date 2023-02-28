@@ -59,7 +59,7 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
         let (input, value) = alt((
             map(hex, |token| {
                 if let TokenType::Hex(hex_result) = &token.fragment().token_type {
-                    hex_result.as_ref().ok().cloned()
+                    hex_result.as_ref().ok().copied()
                 } else {
                     panic!("Invalid hex parse")
                 }
@@ -73,7 +73,7 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
             }),
             map(int, |token| {
                 if let TokenType::Int(int_result) = &token.fragment().token_type {
-                    int_result.as_ref().ok().cloned()
+                    int_result.as_ref().ok().copied()
                 } else {
                     panic!("Invalid int parse")
                 }
@@ -176,7 +176,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 
         fn parse_rhs<'a, P, B: DiagnosticsBroker>(
             input: Tokens<'a, B>,
-            tokens: Tokens<B>,
+            tokens: &Tokens<B>,
             lhs: Expression,
             operator: Operator,
             parser: P,
@@ -207,9 +207,13 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             while let Ok((i, op)) = alt((symbols::times, symbols::divide))(input.clone()) {
                 (input, exp) = parse_rhs(
                     i,
-                    tokens.clone(),
+                    &tokens,
                     exp,
-                    op.fragment().token_type.clone().into(),
+                    op.fragment()
+                        .token_type
+                        .clone()
+                        .try_into()
+                        .expect("Operator conversion failed"),
                     parse_unary,
                 )?;
             }
@@ -223,9 +227,13 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             while let Ok((i, op)) = alt((symbols::plus, symbols::minus))(input.clone()) {
                 (input, exp) = parse_rhs(
                     i,
-                    tokens.clone(),
+                    &tokens,
                     exp,
-                    op.fragment().token_type.clone().into(),
+                    op.fragment()
+                        .token_type
+                        .clone()
+                        .try_into()
+                        .expect("Operator conversion failed"),
                     parse_mul,
                 )?;
             }
@@ -247,9 +255,13 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             {
                 (input, exp) = parse_rhs(
                     i,
-                    tokens,
+                    &tokens,
                     exp,
-                    op.fragment().token_type.clone().into(),
+                    op.fragment()
+                        .token_type
+                        .clone()
+                        .try_into()
+                        .expect("Operator conversion failed"),
                     parse_add,
                 )?;
             }
@@ -564,7 +576,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
                                 let (end, token_string) = if tokens.input_len() > 0 {
                                     (tokens.to_range().end, tokens.fragment().to_string())
                                 } else {
-                                    (tokens.error_pos, "".to_string())
+                                    (tokens.error_pos, String::new())
                                 };
                                 let range = ident.to_range().start..end;
                                 let err = SplError(

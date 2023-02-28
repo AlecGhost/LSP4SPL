@@ -15,7 +15,7 @@ fn test(src: &str) -> (GlobalTable, Vec<Token>, LocalBroker) {
     let tokens = crate::lexer::lex(src, LocalBroker::default());
     let program = crate::parser::parse(&tokens, LocalBroker::default());
     let broker = LocalBroker::default();
-    let table = crate::table::build(&program, broker.clone());
+    let table = crate::table::build(&program, &broker);
     (table, tokens, broker)
 }
 

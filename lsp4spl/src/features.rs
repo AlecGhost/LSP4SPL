@@ -9,20 +9,20 @@ use spl_frontend::{
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
-pub(crate) mod completion;
+pub mod completion;
 mod fold;
 mod formatting;
-pub(crate) mod goto;
+pub mod goto;
 mod hover;
-pub(crate) mod references;
-pub(crate) mod semantic_tokens;
+pub mod references;
+pub mod semantic_tokens;
 mod signature_help;
 
-pub(crate) use fold::fold;
-pub(crate) use formatting::format;
-pub(crate) use hover::hover;
-pub(crate) use semantic_tokens::semantic_tokens;
-pub(crate) use signature_help::signature_help;
+pub use fold::fold;
+pub use formatting::format;
+pub use hover::hover;
+pub use semantic_tokens::semantic_tokens;
+pub use signature_help::signature_help;
 
 struct DocumentCursor {
     doc_info: DocumentInfo,
@@ -87,14 +87,14 @@ async fn doc_cursor(
     Ok(None)
 }
 
-pub(super) trait ToSpl {
+pub trait ToSpl {
     /// Turns input into a SPL markdown code block
     fn to_spl(&self) -> String;
 }
 
 impl ToSpl for String {
-    fn to_spl(&self) -> String {
-        String::new() + "```spl\n" + self + "\n```"
+    fn to_spl(&self) -> Self {
+        Self::new() + "```spl\n" + self + "\n```"
     }
 }
 
@@ -104,7 +104,7 @@ fn get_local_table<'a>(
 ) -> Option<&'a LocalTable> {
     if let Some(name) = &pd.name {
         if let Some(GlobalEntry::Procedure(p)) = global_table.lookup(&name.value) {
-                return Some(&p.local_table);
+            return Some(&p.local_table);
         }
     }
     None

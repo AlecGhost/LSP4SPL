@@ -4,7 +4,7 @@ use lsp_types::{FoldingRange, FoldingRangeKind, FoldingRangeParams};
 use spl_frontend::{ast::GlobalDeclaration, ToRange};
 use tokio::sync::mpsc::Sender;
 
-pub(crate) async fn fold(
+pub async fn fold(
     doctx: Sender<DocumentRequest>,
     params: FoldingRangeParams,
 ) -> Result<Vec<FoldingRange>> {

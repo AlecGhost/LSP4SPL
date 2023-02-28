@@ -9,9 +9,9 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// Builds a SymbolTable for the given program.
+/// Builds a `GlobalTable` for the given program.
 /// Errors are reported by the specified broker.
-pub fn build<B>(program: &Program, broker: B) -> GlobalTable
+pub fn build<B>(program: &Program, broker: &B) -> GlobalTable
 where
     B: Clone + std::fmt::Debug + DiagnosticsBroker,
 {
@@ -21,16 +21,17 @@ where
 }
 
 trait TableBuilder<B> {
-    fn build(&self, table: &mut GlobalTable, broker: B);
+    fn build(&self, table: &mut GlobalTable, broker: &B);
 }
 
 impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
-    fn build(&self, table: &mut GlobalTable, broker: B) {
+    fn build(&self, table: &mut GlobalTable, broker: &B) {
         self.global_declarations
             .iter()
-            .for_each(|dec| dec.build(table, broker.clone()));
-        match &table.lookup("main") {
-            Some(entry) => {
+            .for_each(|dec| dec.build(table, broker));
+        table.lookup("main").as_ref().map_or_else(
+            || broker.report_error(SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())),
+            |entry| {
                 if let GlobalEntry::Procedure(main) = &entry {
                     if !main.parameters.is_empty() {
                         broker.report_error(SplError(
@@ -41,16 +42,13 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
                 } else {
                     panic!("'main' must be a procedure");
                 }
-            }
-            None => {
-                broker.report_error(SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()));
-            }
-        };
+            },
+        );
     }
 }
 
 impl<B: DiagnosticsBroker> TableBuilder<B> for GlobalDeclaration {
-    fn build(&self, table: &mut GlobalTable, broker: B) {
+    fn build(&self, table: &mut GlobalTable, broker: &B) {
         match self {
             Self::Type(t) => t.build(table, broker),
             Self::Procedure(p) => p.build(table, broker),
@@ -60,7 +58,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for GlobalDeclaration {
 }
 
 impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
-    fn build(&self, table: &mut GlobalTable, broker: B) {
+    fn build(&self, table: &mut GlobalTable, broker: &B) {
         if let Some(name) = &self.name {
             if name.value == "main" {
                 broker.report_error(SplError(
@@ -82,7 +80,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
                         &self.type_expr,
                         &self.name,
                         &lookup_table,
-                        broker.clone(),
+                        broker,
                     ),
                     doc: documentation,
                 }),
@@ -93,18 +91,18 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
 }
 
 impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
-    fn build(&self, table: &mut GlobalTable, broker: B) {
+    fn build(&self, table: &mut GlobalTable, broker: &B) {
         if let Some(name) = &self.name {
             let documentation = get_documentation(&self.info.tokens);
             let mut local_table = LocalTable::default();
             let parameters = self
                 .parameters
                 .iter()
-                .filter_map(|param| build_parameter(param, table, &mut local_table, broker.clone()))
+                .filter_map(|param| build_parameter(param, table, &mut local_table, broker))
                 .collect();
             self.variable_declarations
                 .iter()
-                .for_each(|dec| build_variable(dec, table, &mut local_table, broker.clone()));
+                .for_each(|dec| build_variable(dec, table, &mut local_table, broker));
             let entry = ProcedureEntry {
                 name: name.clone(),
                 local_table,
@@ -122,9 +120,9 @@ fn build_parameter<B: DiagnosticsBroker>(
     param: &ParameterDeclaration,
     global_table: &GlobalTable,
     local_table: &mut LocalTable,
-    broker: B,
+    broker: &B,
 ) -> Option<VariableEntry> {
-    if let Some(name) = &param.name {
+    param.name.as_ref().map(|name| {
         let documentation = get_documentation(&param.info.tokens);
         let lookup_table = LookupTable {
             global_table: Some(global_table),
@@ -133,7 +131,7 @@ fn build_parameter<B: DiagnosticsBroker>(
         let param_entry = VariableEntry {
             name: name.clone(),
             is_ref: param.is_ref,
-            data_type: get_data_type(&param.type_expr, &param.name, &lookup_table, broker.clone()),
+            data_type: get_data_type(&param.type_expr, &param.name, &lookup_table, broker),
             doc: documentation,
         };
         if let Some(data_type) = &param_entry.data_type {
@@ -146,17 +144,15 @@ fn build_parameter<B: DiagnosticsBroker>(
             LocalEntry::Parameter(param_entry.clone()),
             || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter)),
         );
-        Some(param_entry)
-    } else {
-        None
-    }
+        param_entry
+    })
 }
 
 fn build_variable<B: DiagnosticsBroker>(
     var: &VariableDeclaration,
     global_table: &GlobalTable,
     local_table: &mut LocalTable,
-    broker: B,
+    broker: &B,
 ) {
     if let Some(name) = &var.name {
         let documentation = get_documentation(&var.info.tokens);
@@ -170,12 +166,12 @@ fn build_variable<B: DiagnosticsBroker>(
                     global_table: Some(global_table),
                     local_table: Some(local_table),
                 },
-                broker.clone(),
+                broker,
             ),
             doc: documentation,
         };
         local_table.enter(name.to_string(), LocalEntry::Variable(entry), || {
-            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable))
+            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable));
         });
     }
 }
@@ -184,9 +180,9 @@ fn get_data_type<B: DiagnosticsBroker>(
     type_expr: &Option<TypeExpression>,
     caller: &Option<Identifier>,
     table: &LookupTable,
-    broker: B,
+    broker: &B,
 ) -> Option<DataType> {
-    if let Some(type_expr) = type_expr {
+    type_expr.as_ref().and_then(|type_expr| {
         use TypeExpression::*;
         match type_expr {
             ArrayType {
@@ -231,9 +227,7 @@ fn get_data_type<B: DiagnosticsBroker>(
                 }
             }
         }
-    } else {
-        None
-    }
+    })
 }
 
 fn get_documentation(tokens: &[Token]) -> Option<String> {

@@ -26,16 +26,16 @@ pub enum LexErrorMessage {
     ExpectedHexNumber,
     InvalidIntLit(String),
 }
- impl Display for LexErrorMessage {
-     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-         let display = match self {
+impl Display for LexErrorMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
             Self::MissingClosingTick => "missing closing `'`".to_string(),
             Self::ExpectedHexNumber => "expected `hexadecimal number`".to_string(),
             Self::InvalidIntLit(i) => format!("invalid integer literal: `{}`", i),
-         };
+        };
         writeln!(f, "{}", display)
-     }
- }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ParseErrorMessage {
@@ -141,7 +141,10 @@ impl Display for SemanticErrorMessage {
                 format!("procedure `{}` argument `{}` type mismatch", name, index)
             }
             Self::ArgumentMustBeAVariable(name, index) => {
-                format!("procedure `{}` argument `{}` must be a variable", name, index)
+                format!(
+                    "procedure `{}` argument `{}` must be a variable",
+                    name, index
+                )
             }
             Self::TooFewArguments(name) => {
                 format!("procedure `{}` called with too few arguments", name)
@@ -160,5 +163,22 @@ impl Display for SemanticErrorMessage {
             Self::IndexingWithNonInteger => "illegal indexing with a non-integer".to_string(),
         };
         writeln!(f, "{}", display)
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct OperatorConversionError<T: Display> {
+    item: T,
+}
+
+impl<T: Display> OperatorConversionError<T> {
+    pub const fn new(item: T) -> Self {
+        Self { item }
+    }
+}
+
+impl<T: Display> Display for OperatorConversionError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Cannot convert {} to an operator", self.item)
     }
 }
