@@ -30,7 +30,7 @@ fn idents() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("ab1", &tokens[0..1]),
+        Identifier::new("ab1".to_string(), &tokens[0..1]),
         "Identifier: {}",
         i
     );
@@ -42,7 +42,7 @@ fn idents() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("test_ident", &tokens[0..1]),
+        Identifier::new("test_ident".to_string(), &tokens[0..1]),
         "Identifier: {}",
         i
     );
@@ -54,7 +54,7 @@ fn idents() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("_a", &tokens[0..1]),
+        Identifier::new("_a".to_string(), &tokens[0..1]),
         "Identifier: {}",
         i
     );
@@ -303,8 +303,11 @@ fn type_declarations() {
             .unwrap()
             .1,
         TD {
-            name: Some(Identifier::new("a", &tokens[1..2])),
-            type_expr: Some(TE::NamedType(Identifier::new("int", &tokens[3..4]))),
+            name: Some(Identifier::new("a".to_string(), &tokens[1..2])),
+            type_expr: Some(TE::NamedType(Identifier::new(
+                "int".to_string(),
+                &tokens[3..4]
+            ))),
             info: AstInfo::new(&tokens[..5]),
         },
         "Declaration: {}",
@@ -319,7 +322,7 @@ fn type_declarations() {
             .unwrap()
             .1,
         TD {
-            name: Some(Identifier::new("a", &tokens[1..2])),
+            name: Some(Identifier::new("a".to_string(), &tokens[1..2])),
             type_expr: Some(TE::ArrayType {
                 size: Some(IntLiteral {
                     value: Some(2),
@@ -331,7 +334,7 @@ fn type_declarations() {
                         info: AstInfo::new(&tokens[10..11]),
                     }),
                     base_type: Some(Box::new(TE::NamedType(Identifier::new(
-                        "int",
+                        "int".to_string(),
                         &tokens[13..14]
                     )))),
                     info: AstInfo::new(&tokens[8..14]),
@@ -401,7 +404,7 @@ fn assignments() {
     assert_eq!(
         assignment,
         Assignment {
-            variable: Variable::NamedVariable(Identifier::new("a", &tokens[0..1])),
+            variable: Variable::NamedVariable(Identifier::new("a".to_string(), &tokens[0..1])),
             expr: Some(*int_lit(1, &tokens[2..3])),
             info: AstInfo::new(&tokens[..4]),
         },
@@ -430,7 +433,7 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a", &tokens[0..1]),
+            name: Identifier::new("a".to_string(), &tokens[0..1]),
             arguments: Vec::new(),
             info: AstInfo::new(&tokens[0..4]),
         },
@@ -447,7 +450,7 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a", &tokens[0..1]),
+            name: Identifier::new("a".to_string(), &tokens[0..1]),
             arguments: vec![
                 *int_lit(1, &tokens[2..3]),
                 *int_lit(2, &tokens[4..5]),
@@ -468,7 +471,7 @@ fn call_statements() {
     assert_eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a", &tokens[0..1]),
+            name: Identifier::new("a".to_string(), &tokens[0..1]),
             arguments: vec![*int_lit(1, &tokens[2..3])],
             info: AstInfo::new(&tokens[..5]),
         },
@@ -526,29 +529,34 @@ fn acker() {
     let (input, program) = all_consuming(Program::parse)(tokens.to_tokens()).unwrap();
 
     // variables for use in assertion
-    let int_type = |tokens| Some(TypeExpression::NamedType(Identifier::new("int", tokens)));
-    let a = |tokens| Some(Identifier::new("a", tokens));
-    let i = |tokens| Some(Identifier::new("i", tokens));
-    let j = |tokens| Some(Identifier::new("j", tokens));
-    let k = |tokens| Some(Identifier::new("k", tokens));
+    let int_type = |tokens| {
+        Some(TypeExpression::NamedType(Identifier::new(
+            "int".to_string(),
+            tokens,
+        )))
+    };
+    let a = |tokens| Some(Identifier::new("a".to_string(), tokens));
+    let i = |tokens| Some(Identifier::new("i".to_string(), tokens));
+    let j = |tokens| Some(Identifier::new("j".to_string(), tokens));
+    let k = |tokens| Some(Identifier::new("k".to_string(), tokens));
     let var_i = |tokens| {
         Box::new(Expression::Variable(Variable::NamedVariable(
-            Identifier::new("i", tokens),
+            Identifier::new("i".to_string(), tokens),
         )))
     };
     let var_a = |tokens| {
         Box::new(Expression::Variable(Variable::NamedVariable(
-            Identifier::new("a", tokens),
+            Identifier::new("a".to_string(), tokens),
         )))
     };
     let var_j = |tokens| {
         Box::new(Expression::Variable(Variable::NamedVariable(
-            Identifier::new("j", tokens),
+            Identifier::new("j".to_string(), tokens),
         )))
     };
     let var_k = |tokens| {
         Box::new(Expression::Variable(Variable::NamedVariable(
-            Identifier::new("k", tokens),
+            Identifier::new("k".to_string(), tokens),
         )))
     };
     fn call_ackermann(
@@ -559,7 +567,7 @@ fn acker() {
         arg2: Expression,
     ) -> Statement {
         Statement::Call(CallStatement {
-            name: Identifier::new("ackermann", ident_tokens),
+            name: Identifier::new("ackermann".to_string(), ident_tokens),
             arguments: vec![arg0, arg1, arg2],
             info: AstInfo::new(tokens),
         })
@@ -570,7 +578,7 @@ fn acker() {
         Program {
             global_declarations: vec![
                 GlobalDeclaration::Procedure(ProcedureDeclaration {
-                    name: Some(Identifier::new("ackermann", &tokens[4..5])),
+                    name: Some(Identifier::new("ackermann".to_string(), &tokens[4..5])),
                     parameters: vec![
                         ParameterDeclaration {
                             is_ref: false,
@@ -606,7 +614,7 @@ fn acker() {
                         if_branch: Some(Box::new(Statement::Block(BlockStatement {
                             statements: vec![Statement::Assignment(Assignment {
                                 variable: Variable::NamedVariable(Identifier::new(
-                                    "k",
+                                    "k".to_string(),
                                     &tokens[32..33]
                                 )),
                                 expr: Some(Expression::Binary(BinaryExpression {
@@ -684,7 +692,7 @@ fn acker() {
                     info: AstInfo::new(&tokens[0..87]),
                 }),
                 GlobalDeclaration::Procedure(ProcedureDeclaration {
-                    name: Some(Identifier::new("main", &tokens[88..89])),
+                    name: Some(Identifier::new("main".to_string(), &tokens[88..89])),
                     parameters: Vec::new(),
                     variable_declarations: vec![
                         VariableDeclaration {
@@ -706,7 +714,7 @@ fn acker() {
                     statements: vec![
                         Statement::Assignment(Assignment {
                             variable: Variable::NamedVariable(Identifier::new(
-                                "i",
+                                "i".to_string(),
                                 &tokens[107..108]
                             )),
                             expr: Some(*int_lit(0, &tokens[109..110]).clone()),
@@ -723,7 +731,7 @@ fn acker() {
                                 statements: vec![
                                     Statement::Assignment(Assignment {
                                         variable: Variable::NamedVariable(Identifier::new(
-                                            "j",
+                                            "j".to_string(),
                                             &tokens[118..119],
                                         )),
                                         expr: Some(*int_lit(0, &tokens[120..121])),
@@ -748,7 +756,7 @@ fn acker() {
                                                     ),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new(
-                                                            "printi",
+                                                            "printi".to_string(),
                                                             &tokens[138..139]
                                                         ),
                                                         arguments: vec![*var_i(&tokens[140..141])],
@@ -756,7 +764,7 @@ fn acker() {
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new(
-                                                            "printc",
+                                                            "printc".to_string(),
                                                             &tokens[143..144]
                                                         ),
                                                         arguments: vec![*int_lit(
@@ -767,7 +775,7 @@ fn acker() {
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new(
-                                                            "printi",
+                                                            "printi".to_string(),
                                                             &tokens[148..149]
                                                         ),
                                                         arguments: vec![*var_j(&tokens[150..151])],
@@ -775,7 +783,7 @@ fn acker() {
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new(
-                                                            "printc",
+                                                            "printc".to_string(),
                                                             &tokens[153..154]
                                                         ),
                                                         arguments: vec![*int_lit(
@@ -786,7 +794,7 @@ fn acker() {
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new(
-                                                            "printi",
+                                                            "printi".to_string(),
                                                             &tokens[158..159]
                                                         ),
                                                         arguments: vec![*var_k(&tokens[160..161])],
@@ -794,7 +802,7 @@ fn acker() {
                                                     }),
                                                     Statement::Call(CallStatement {
                                                         name: Identifier::new(
-                                                            "printc",
+                                                            "printc".to_string(),
                                                             &tokens[163..164]
                                                         ),
                                                         arguments: vec![*int_lit(
@@ -805,7 +813,10 @@ fn acker() {
                                                     }),
                                                     Statement::Assignment(Assignment {
                                                         variable: Variable::NamedVariable(
-                                                            Identifier::new("j", &tokens[168..169])
+                                                            Identifier::new(
+                                                                "j".to_string(),
+                                                                &tokens[168..169]
+                                                            )
                                                         ),
                                                         expr: Some(Expression::Binary(
                                                             BinaryExpression {
@@ -827,7 +838,7 @@ fn acker() {
                                     }),
                                     Statement::Assignment(Assignment {
                                         variable: Variable::NamedVariable(Identifier::new(
-                                            "i",
+                                            "i".to_string(),
                                             &tokens[175..176],
                                         )),
                                         expr: Some(Expression::Binary(BinaryExpression {

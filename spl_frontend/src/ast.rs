@@ -55,9 +55,9 @@ pub struct Identifier {
 }
 
 impl Identifier {
-    pub fn new<T: ToString>(value: T, tokens: &[Token]) -> Self {
+    pub fn new(value: String, tokens: &[Token]) -> Self {
         Self {
-            value: value.to_string(),
+            value,
             info: AstInfo::new(tokens),
         }
     }

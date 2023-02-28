@@ -27,7 +27,7 @@ fn type_decs() {
         GlobalTable::initialize(vec![(
             "a".to_string(),
             GlobalEntry::Type(TypeEntry {
-                name: Identifier::new("a", &tokens[1..2]),
+                name: Identifier::new("a".to_string(), &tokens[1..2]),
                 data_type: Some(DataType::Int),
                 doc: None
             })
@@ -44,11 +44,11 @@ fn type_decs() {
         GlobalTable::initialize(vec![(
             "a".to_string(),
             GlobalEntry::Type(TypeEntry {
-                name: Identifier::new("a", &tokens[1..2]),
+                name: Identifier::new("a".to_string(), &tokens[1..2]),
                 data_type: Some(DataType::Array {
                     size: 5,
                     base_type: Box::new(DataType::Int),
-                    creator: Identifier::new("a", &tokens[1..2]),
+                    creator: Identifier::new("a".to_string(), &tokens[1..2]),
                 }),
                 doc: None
             })
@@ -65,7 +65,7 @@ fn type_decs() {
         GlobalTable::initialize(vec![(
             "a".to_string(),
             GlobalEntry::Type(TypeEntry {
-                name: Identifier::new("a", &tokens[1..2]),
+                name: Identifier::new("a".to_string(), &tokens[1..2]),
                 data_type: None,
                 doc: None
             }),
@@ -91,7 +91,7 @@ fn test_main() {
         GlobalTable::initialize(vec![(
             "main".to_string(),
             GlobalEntry::Procedure(ProcedureEntry {
-                name: Identifier::new("main", &tokens[1..2]),
+                name: Identifier::new("main".to_string(), &tokens[1..2]),
                 local_table: LocalTable::default(),
                 parameters: Vec::new(),
                 doc: None,
@@ -123,7 +123,7 @@ fn test_main() {
         GlobalTable::initialize(vec![(
             "main".to_string(),
             GlobalEntry::Procedure(ProcedureEntry {
-                name: Identifier::new("main", &tokens[6..7]),
+                name: Identifier::new("main".to_string(), &tokens[6..7]),
                 local_table: LocalTable::default(),
                 parameters: Vec::new(),
                 doc: None,
@@ -144,12 +144,12 @@ fn test_main() {
         GlobalTable::initialize(vec![(
             "main".to_string(),
             GlobalEntry::Procedure(ProcedureEntry {
-                name: Identifier::new("main", &tokens[1..2]),
+                name: Identifier::new("main".to_string(), &tokens[1..2]),
                 local_table: LocalTable {
                     entries: HashMap::from([(
                         "a".to_string(),
                         LocalEntry::Parameter(VariableEntry {
-                            name: Identifier::new("a", &tokens[3..4]),
+                            name: Identifier::new("a".to_string(), &tokens[3..4]),
                             is_ref: false,
                             data_type: Some(DataType::Int),
                             doc: None,
@@ -157,7 +157,7 @@ fn test_main() {
                     )])
                 },
                 parameters: vec![VariableEntry {
-                    name: Identifier::new("a", &tokens[3..4]),
+                    name: Identifier::new("a".to_string(), &tokens[3..4]),
                     is_ref: false,
                     data_type: Some(DataType::Int),
                     doc: None,
