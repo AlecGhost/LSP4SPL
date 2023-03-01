@@ -5,7 +5,7 @@ use lsp_types::{
     SignatureHelpParams, SignatureInformation,
 };
 use spl_frontend::{
-    ast::{GlobalDeclaration, Statement},
+    ast::{CallStatement, GlobalDeclaration, ProcedureDeclaration, Statement},
     lexer::token::TokenType,
     table::{GlobalEntry, SymbolTable},
     ToRange,
@@ -30,18 +30,7 @@ pub async fn signature_help(
                     None
                 }
             })
-            .find_map(|pd| {
-                pd.statements
-                    .iter()
-                    .filter_map(|stmt| {
-                        if let Statement::Call(call_stmt) = stmt {
-                            Some(call_stmt)
-                        } else {
-                            None
-                        }
-                    })
-                    .find(|call_stmt| call_stmt.to_range().contains(&cursor.index))
-            })
+            .find_map(|pd| find_call_stmt(pd, &cursor.index))
         {
             if let Some(GlobalEntry::Procedure(proc_entry)) =
                 &cursor.doc_info.table.lookup(&call_stmt.name.value)
@@ -54,26 +43,13 @@ pub async fn signature_help(
                         documentation: None,
                     })
                     .collect();
-                let active_parameter = if parameters.is_empty() {
-                    None
-                } else {
-                    let mut param_index = 0;
-                    for token in &call_stmt.info.tokens {
-                        if token.range.start >= cursor.index {
-                            break;
-                        }
-                        if matches!(token.token_type, TokenType::Comma) {
-                            param_index += 1;
-                        }
-                    }
-                    Some(param_index)
-                };
                 let documentation = proc_entry.doc.as_ref().map(|doc| {
                     Documentation::MarkupContent(MarkupContent {
                         kind: MarkupKind::Markdown,
                         value: doc.clone(),
                     })
                 });
+                let active_parameter = get_active_param(&call_stmt, &parameters, &cursor.index);
                 let help = SignatureInformation {
                     label: proc_entry.name.to_string(),
                     documentation,
@@ -89,4 +65,51 @@ pub async fn signature_help(
         }
     };
     Ok(None)
+}
+
+fn find_call_stmt(pd: &ProcedureDeclaration, index: &usize) -> Option<CallStatement> {
+    pd.statements
+        .iter()
+        .flat_map(get_call_stmts)
+        .find(|call_stmt| call_stmt.to_range().contains(index))
+        .cloned()
+}
+
+fn get_call_stmts(stmt: &Statement) -> Vec<&CallStatement> {
+    fn get_in_option(opt: &Option<Box<Statement>>) -> Vec<&CallStatement> {
+        opt.iter()
+            .map(|boxed| boxed.as_ref())
+            .flat_map(get_call_stmts)
+            .collect()
+    }
+
+    use Statement::*;
+    match stmt {
+        Block(b) => b.statements.iter().flat_map(get_call_stmts).collect(),
+        Call(c) => vec![c],
+        If(i) => vec![get_in_option(&i.if_branch), get_in_option(&i.else_branch)].concat(),
+        While(w) => get_in_option(&w.statement),
+        _ => Vec::new(),
+    }
+}
+
+fn get_active_param(
+    call_stmt: &CallStatement,
+    params: &[ParameterInformation],
+    index: &usize,
+) -> Option<u32> {
+    if params.is_empty() {
+        None
+    } else {
+        let mut param_index = 0;
+        for token in &call_stmt.info.tokens {
+            if token.range.start >= *index {
+                break;
+            }
+            if matches!(token.token_type, TokenType::Comma) {
+                param_index += 1;
+            }
+        }
+        Some(param_index)
+    }
 }
