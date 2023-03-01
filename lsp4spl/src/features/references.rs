@@ -48,6 +48,7 @@ pub async fn rename(
     Ok(None)
 }
 
+/// Just checks whether the current cursor position is on an identifier
 pub async fn prepare_rename(
     doctx: Sender<DocumentRequest>,
     params: TextDocumentPositionParams,

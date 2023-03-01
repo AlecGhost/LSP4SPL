@@ -168,6 +168,16 @@ fn complete_statements(
         )
 }
 
+macro_rules! complete_branch {
+    ($branch:expr, $position:expr, $last_token:expr, $lookup_table:expr) => {
+        if let Some(stmt) = $branch {
+            if stmt.to_range().contains(&$position) {
+                return complete_statement(stmt, $position, $last_token, false, $lookup_table);
+            }
+        }
+    };
+}
+
 fn complete_statement(
     stmt: &Statement,
     position: usize,
@@ -187,99 +197,45 @@ fn complete_statement(
 
     match stmt {
         Statement::Assignment(a) => {
-            let assign_token = a
-                .info
-                .tokens
-                .iter()
-                .find(|token| matches!(token.token_type, TokenType::Assign))
-                .expect("Cannot be recognized as an assignment without assign token.");
             // before assign is only an arbitrary identifier
-            if position >= assign_token.range.end {
-                if let Some(local_table) = lookup_table.local_table {
-                    return Some(search_variables(local_table));
-                }
-            }
+            complete_vars(&a.info.tokens, position, lookup_table, TokenType::Assign)
         }
         Statement::Block(b) => {
-            return complete_statements(&b.statements, position, last_token, lookup_table);
+            complete_statements(&b.statements, position, last_token, lookup_table)
         }
         Statement::Call(c) => {
-            let lparen_token = c
-                .info
-                .tokens
-                .iter()
-                .find(|token| matches!(token.token_type, TokenType::LParen))
-                .expect("Cannot be recognized as a call statement without lparen token.");
             // procedure name completion is already provided by the
             // context based completions
-            if position >= lparen_token.range.end {
-                if let Some(local_table) = lookup_table.local_table {
-                    return Some(search_variables(local_table));
-                }
-            }
+            complete_vars(&c.info.tokens, position, lookup_table, TokenType::LParen)
         }
         Statement::If(i) => {
-            if let Some(if_branch) = &i.if_branch {
-                if if_branch.to_range().contains(&position) {
-                    return complete_statement(
-                        if_branch,
-                        position,
-                        last_token,
-                        false,
-                        lookup_table,
-                    );
-                }
-            }
-            if let Some(else_branch) = &i.else_branch {
-                if else_branch.to_range().contains(&position) {
-                    return complete_statement(
-                        else_branch,
-                        position,
-                        last_token,
-                        false,
-                        lookup_table,
-                    );
-                }
-            }
-            if let Some(lparen_token) = &i
-                .info
-                .tokens
-                .iter()
-                .find(|token| matches!(token.token_type, TokenType::LParen))
-            {
-                if position >= lparen_token.range.end {
-                    if let Some(local_table) = lookup_table.local_table {
-                        return Some(search_variables(local_table));
-                    }
-                }
-            }
+            complete_branch!(&i.if_branch, position, last_token, lookup_table);
+            complete_branch!(&i.else_branch, position, last_token, lookup_table);
+            complete_vars(&i.info.tokens, position, lookup_table, TokenType::LParen)
         }
         Statement::While(w) => {
-            if let Some(if_branch) = &w.statement {
-                if if_branch.to_range().contains(&position) {
-                    return complete_statement(
-                        if_branch,
-                        position,
-                        last_token,
-                        false,
-                        lookup_table,
-                    );
-                }
-            }
-            if let Some(lparen_token) = &w
-                .info
-                .tokens
-                .iter()
-                .find(|token| matches!(token.token_type, TokenType::LParen))
-            {
-                if position >= lparen_token.range.end {
-                    if let Some(local_table) = lookup_table.local_table {
-                        return Some(search_variables(local_table));
-                    }
-                }
+            complete_branch!(&w.statement, position, last_token, lookup_table);
+            complete_vars(&w.info.tokens, position, lookup_table, TokenType::LParen)
+        }
+        Statement::Error(_) | Statement::Empty(_) => Some(new_stmt(lookup_table)),
+    }
+}
+
+fn complete_vars(
+    tokens: &[Token],
+    position: usize,
+    lookup_table: &LookupTable,
+    start_token_type: TokenType,
+) -> Option<Vec<CompletionItem>> {
+    if let Some(lparen_token) = tokens
+        .iter()
+        .find(|token| token.token_type == start_token_type)
+    {
+        if position >= lparen_token.range.end {
+            if let Some(local_table) = lookup_table.local_table {
+                return Some(search_variables(local_table));
             }
         }
-        Statement::Error(_) | Statement::Empty(_) => return Some(new_stmt(lookup_table)),
     }
     None
 }
@@ -293,64 +249,42 @@ const fn correct_index(index: usize) -> usize {
     }
 }
 
+macro_rules! search_and_create_items {
+    ($table:expr, $t:pat, $kind:expr) => {
+        $table
+            .entries
+            .iter()
+            .filter(|(_, entry)| matches!(entry, $t))
+            .map(|(ident, entry)| CompletionItem {
+                label: ident.clone(),
+                kind: Some($kind),
+                detail: Some(entry.to_string()),
+                documentation: entry.doc().map(|docu| {
+                    Documentation::MarkupContent(lsp_types::MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: docu.trim_start().to_string(),
+                    })
+                }),
+                ..Default::default()
+            })
+            .collect()
+    };
+}
+
 fn search_types(table: &GlobalTable) -> Vec<CompletionItem> {
-    table
-        .entries
-        .iter()
-        .filter(|(_, entry)| matches!(entry, GlobalEntry::Type(_)))
-        .map(|(ident, entry)| CompletionItem {
-            label: ident.clone(),
-            kind: Some(CompletionItemKind::STRUCT),
-            detail: Some(entry.to_string()),
-            documentation: entry.doc().map(|docu| {
-                Documentation::MarkupContent(lsp_types::MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: docu.trim_start().to_string(),
-                })
-            }),
-            ..Default::default()
-        })
-        .collect()
+    search_and_create_items!(table, GlobalEntry::Type(_), CompletionItemKind::STRUCT)
 }
 
 fn search_variables(table: &LocalTable) -> Vec<CompletionItem> {
-    table
-        .entries
-        .iter()
-        .filter(|(_, entry)| matches!(entry, LocalEntry::Variable(_)))
-        .map(|(ident, entry)| CompletionItem {
-            label: ident.clone(),
-            kind: Some(CompletionItemKind::VARIABLE),
-            detail: Some(entry.to_string()),
-            documentation: entry.doc().map(|docu| {
-                Documentation::MarkupContent(lsp_types::MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: docu.trim_start().to_string(),
-                })
-            }),
-            ..Default::default()
-        })
-        .collect()
+    search_and_create_items!(table, LocalEntry::Variable(_), CompletionItemKind::VARIABLE)
 }
 
 fn search_procedures(table: &GlobalTable) -> Vec<CompletionItem> {
-    table
-        .entries
-        .iter()
-        .filter(|(_, entry)| matches!(entry, GlobalEntry::Procedure(_)))
-        .map(|(ident, entry)| CompletionItem {
-            label: ident.clone(),
-            kind: Some(CompletionItemKind::FUNCTION),
-            detail: Some(entry.to_string()),
-            documentation: entry.doc().map(|docu| {
-                Documentation::MarkupContent(lsp_types::MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: docu.trim_start().to_string(),
-                })
-            }),
-            ..Default::default()
-        })
-        .collect()
+    search_and_create_items!(
+        table,
+        GlobalEntry::Procedure(_),
+        CompletionItemKind::FUNCTION
+    )
 }
 
 fn new_stmt(lookup_table: &LookupTable) -> Vec<CompletionItem> {
