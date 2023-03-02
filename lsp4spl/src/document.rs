@@ -198,7 +198,12 @@ pub fn convert_range(range: &std::ops::Range<usize>, text: &str) -> Range {
     }
 }
 
-pub fn get_index(position: Position, text: &str) -> Option<usize> {
+/// Tries to convert a text `Position` to an index.
+///
+/// Note: This is the insertion index,
+/// so it can be after the last character.
+/// Therefore the text slice should not be indexed with this index
+pub fn get_insertion_index(position: Position, text: &str) -> Option<usize> {
     let mut line = 0;
     let mut character = 0;
     let pos = (position.line, position.character);
@@ -213,5 +218,9 @@ pub fn get_index(position: Position, text: &str) -> Option<usize> {
             character += 1;
         }
     }
-    None
+    if (line, character) == pos {
+        Some(text.len())
+    } else {
+        None
+    }
 }

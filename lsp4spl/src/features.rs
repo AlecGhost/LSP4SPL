@@ -58,7 +58,7 @@ async fn doc_cursor(
     let pos = doc_params.position;
     let uri = doc_params.text_document.uri;
     if let Some(doc_info) = get_doc_info(uri, doctx).await? {
-        if let Some(index) = document::get_index(pos, &doc_info.text) {
+        if let Some(index) = document::get_insertion_index(pos, &doc_info.text) {
             let context = doc_info
                 .ast
                 .global_declarations
