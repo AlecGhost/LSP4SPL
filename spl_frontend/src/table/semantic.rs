@@ -254,6 +254,8 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Expression {
             Self::IntLiteral(_) => Some(DataType::Int),
             Self::Variable(v) => v.analyze(table, broker),
             Self::Binary(b) => b.analyze(table, broker),
+            Self::Unary(u) => u.expr.analyze(table, broker),
+            Self::Bracketed(b) => b.expr.analyze(table, broker),
             Self::Error(_) => None,
         }
     }

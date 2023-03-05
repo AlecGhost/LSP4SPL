@@ -141,10 +141,24 @@ pub struct BinaryExpression {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+pub struct BracketedExpression {
+    pub expr: Box<Expression>,
+    pub info: AstInfo,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+pub struct UnaryExpression {
+    pub operator: Operator,
+    pub expr: Box<Expression>,
+    pub info: AstInfo,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
 pub enum Expression {
-    // TODO: Add unary
     Binary(BinaryExpression),
+    Bracketed(BracketedExpression),
     IntLiteral(IntLiteral),
+    Unary(UnaryExpression),
     Variable(Variable),
     Error(Range<usize>),
 }
@@ -316,11 +330,25 @@ impl Display for BinaryExpression {
     }
 }
 
+impl Display for BracketedExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({})", self.expr)
+    }
+}
+
+impl Display for UnaryExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.operator, self.expr)
+    }
+}
+
 impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let display = match self {
-            Self::Binary(binary_expr) => binary_expr.to_string(),
+            Self::Binary(binary) => binary.to_string(),
+            Self::Bracketed(bracketed) => bracketed.to_string(),
             Self::IntLiteral(int_lit) => int_lit.to_string(),
+            Self::Unary(unary) => unary.to_string(),
             Self::Variable(var) => var.to_string(),
             Self::Error(_) => String::new(),
         };

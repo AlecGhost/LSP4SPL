@@ -137,6 +137,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Variable {
 impl<B: DiagnosticsBroker> Parser<B> for Expression {
     fn parse(input: Tokens<B>) -> IResult<Self, B> {
         fn parse_bracketed<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+            // Bracketed := "(" Expr ")"
+            let tokens = input.clone();
             let (input, (lparen, expr, _)) = tuple((
                 symbols::lparen,
                 expect(
@@ -145,13 +147,18 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                 ),
                 expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
             ))(input)?;
+            let offset = tokens.offset(&input);
             let after_paren = lparen.to_range().end;
             let expr = expr.unwrap_or_else(|| Expression::Error(after_paren..after_paren));
-            Ok((input, expr))
+            let bracketed = Expression::Bracketed(BracketedExpression {
+                expr: Box::new(expr),
+                info: AstInfo::new(&tokens[..offset]),
+            });
+            Ok((input, bracketed))
         }
 
         fn parse_primary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
-            // Primary := IntLit | Variable | "(" Expr ")"
+            // Primary := IntLit | Variable | Bracketed
             alt((
                 map(IntLiteral::parse, Expression::IntLiteral),
                 map(Variable::parse, Expression::Variable),
@@ -159,25 +166,22 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             ))(input)
         }
 
-        fn parse_negated<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+        fn parse_unary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+            // Unary := "-" Primary
             let tokens = input.clone();
-            let (input, primary) = preceded(symbols::minus, parse_unary)(input)?;
+            let (input, primary) = preceded(symbols::minus, parse_factor)(input)?;
             let offset = tokens.offset(&input);
-            let expr = Expression::Binary(BinaryExpression {
+            let expr = Expression::Unary(UnaryExpression {
                 operator: Operator::Sub,
-                lhs: Box::new(Expression::IntLiteral(IntLiteral::new(
-                    0,
-                    AstInfo::new(&Vec::new()),
-                ))),
-                rhs: Box::new(primary),
+                expr: Box::new(primary),
                 info: AstInfo::new(&tokens[..offset]),
             });
             Ok((input, expr))
         }
 
-        fn parse_unary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
-            // Unary := Primary | "-" Primary
-            alt((parse_primary, parse_negated))(input)
+        fn parse_factor<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+            // Factor := Primary | Unary
+            alt((parse_primary, parse_unary))(input)
         }
 
         fn parse_rhs<'a, P, B: DiagnosticsBroker>(
@@ -207,9 +211,9 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
         }
 
         fn parse_mul<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
-            // Mul := Unary (("*" | "/") Unary)*
+            // Mul := Factor (("*" | "/") Factor)*
             let tokens = input.clone();
-            let (mut input, mut exp) = parse_unary(input)?;
+            let (mut input, mut exp) = parse_factor(input)?;
             while let Ok((i, op)) = alt((symbols::times, symbols::divide))(input.clone()) {
                 (input, exp) = parse_rhs(
                     i,
@@ -220,7 +224,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                         .clone()
                         .try_into()
                         .expect("Operator conversion failed"),
-                    parse_unary,
+                    parse_factor,
                 )?;
             }
             Ok((input, exp))

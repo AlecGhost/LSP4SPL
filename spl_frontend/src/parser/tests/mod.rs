@@ -248,18 +248,21 @@ fn expressions() {
             .1,
         E::Binary(BinaryExpression {
             operator: Operator::Equ,
-            lhs: Box::new(Expression::Binary(BinaryExpression {
+            lhs: Box::new(E::Binary(BinaryExpression {
                 operator: Operator::Mul,
-                lhs: Box::new(E::Binary(BinaryExpression {
-                    operator: Operator::Add,
-                    lhs: int_lit(1, &tokens[1..2]),
-                    rhs: int_lit(2, &tokens[3..4]),
-                    info: AstInfo::new(&tokens[1..4]),
+                lhs: Box::new(E::Bracketed(BracketedExpression {
+                    expr: Box::new(E::Binary(BinaryExpression {
+                        operator: Operator::Add,
+                        lhs: int_lit(1, &tokens[1..2]),
+                        rhs: int_lit(2, &tokens[3..4]),
+                        info: AstInfo::new(&tokens[1..4]),
+                    })),
+                    info: AstInfo::new(&tokens[0..5])
                 })),
                 rhs: int_lit(3, &tokens[6..7]),
                 info: AstInfo::new(&tokens[0..7]),
             })),
-            rhs: Box::new(Expression::Binary(BinaryExpression {
+            rhs: Box::new(E::Binary(BinaryExpression {
                 operator: Operator::Add,
                 lhs: int_lit(4, &tokens[8..9]),
                 rhs: Box::new(E::Binary(BinaryExpression {
