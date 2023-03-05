@@ -11,12 +11,12 @@ pub async fn format(
     let uri = params.text_document.uri;
     let options = params.options;
     if let Some(DocumentInfo { ast, text, .. }) = super::get_doc_info(uri, doctx).await? {
-        let formatter = if options.insert_spaces {
-            fmt::Formatter::new(' ', options.tab_size as usize)
+        let formatting_options = if options.insert_spaces {
+            fmt::FormattingOptions::new(' ', options.tab_size as usize)
         } else {
-            fmt::Formatter::new('\t', 1)
+            fmt::FormattingOptions::new('\t', 1)
         };
-        let new_text = ast.fmt(&formatter);
+        let new_text = ast.fmt(&formatting_options);
         if new_text == text {
             Ok(None)
         } else {
@@ -38,12 +38,12 @@ mod fmt {
     };
 
     #[derive(Clone, Debug)]
-    pub struct Formatter {
+    pub struct FormattingOptions {
         indent_symbol: char,
         indent_depth: usize,
     }
 
-    impl Formatter {
+    impl FormattingOptions {
         pub const fn new(indent_symbol: char, indent_depth: usize) -> Self {
             Self {
                 indent_symbol,
@@ -57,7 +57,7 @@ mod fmt {
         }
     }
 
-    fn indent(text: String, f: &Formatter) -> String {
+    fn indent(text: String, f: &FormattingOptions) -> String {
         text.lines()
             .map(|line| f.indentation() + line + "\n")
             .collect()
@@ -86,11 +86,11 @@ mod fmt {
     }
 
     pub trait Format {
-        fn fmt(&self, f: &Formatter) -> String;
+        fn fmt(&self, f: &FormattingOptions) -> String;
     }
 
     impl Format for Program {
-        fn fmt(&self, f: &Formatter) -> String {
+        fn fmt(&self, f: &FormattingOptions) -> String {
             self.global_declarations
                 .iter()
                 .map(|gd| gd.fmt(f))
@@ -100,7 +100,7 @@ mod fmt {
     }
 
     impl Format for GlobalDeclaration {
-        fn fmt(&self, f: &Formatter) -> String {
+        fn fmt(&self, f: &FormattingOptions) -> String {
             match self {
                 Self::Type(td) => td.fmt(f),
                 Self::Procedure(pd) => pd.fmt(f),
@@ -121,7 +121,7 @@ mod fmt {
     }
 
     impl Format for ProcedureDeclaration {
-        fn fmt(&self, f: &Formatter) -> String {
+        fn fmt(&self, f: &FormattingOptions) -> String {
             let name = fmt_or_empty(&self.name);
             let param_vec: Vec<String> = self
                 .parameters
@@ -170,7 +170,7 @@ mod fmt {
     }
 
     impl Format for TypeDeclaration {
-        fn fmt(&self, _f: &Formatter) -> String {
+        fn fmt(&self, _f: &FormattingOptions) -> String {
             let type_expr = fmt_or_empty(&self.type_expr);
             let td = self.name.as_ref().map_or_else(
                 || format!("type = {};\n", type_expr),
@@ -181,7 +181,7 @@ mod fmt {
     }
 
     impl Format for Statement {
-        fn fmt(&self, f: &Formatter) -> String {
+        fn fmt(&self, f: &FormattingOptions) -> String {
             match self {
                 Self::Assignment(a) => add_all_comments(a.to_string(), &a.info.tokens),
                 Self::Block(b) => b.fmt(f),
@@ -195,7 +195,7 @@ mod fmt {
     }
 
     impl Format for BlockStatement {
-        fn fmt(&self, f: &Formatter) -> String {
+        fn fmt(&self, f: &FormattingOptions) -> String {
             let stmt = if self.statements.is_empty() {
                 "{}\n".to_string()
             } else {
@@ -208,7 +208,7 @@ mod fmt {
     }
 
     impl Format for IfStatement {
-        fn fmt(&self, f: &Formatter) -> String {
+        fn fmt(&self, f: &FormattingOptions) -> String {
             let condition = fmt_or_empty(&self.condition);
             let stmt = if self.else_branch.is_some() {
                 format!(
@@ -225,7 +225,7 @@ mod fmt {
     }
 
     impl Format for WhileStatement {
-        fn fmt(&self, f: &Formatter) -> String {
+        fn fmt(&self, f: &FormattingOptions) -> String {
             let condition = fmt_or_empty(&self.condition);
             let stmt = format!(
                 "while ({}){}",
@@ -236,7 +236,7 @@ mod fmt {
         }
     }
 
-    fn fmt_branch(f: &Formatter, branch: &Option<Box<Statement>>, ending: char) -> String {
+    fn fmt_branch(f: &FormattingOptions, branch: &Option<Box<Statement>>, ending: char) -> String {
         branch.as_ref().map_or_else(
             || format!("{}", ending),
             |stmt| {
