@@ -14,6 +14,8 @@ use std::ops::Range;
 use token::{Token, TokenType};
 use utility::{alpha_numeric0, expect, is_alpha_numeric, verify};
 
+use self::token::IntResult;
+
 #[cfg(test)]
 mod tests;
 pub mod token;
@@ -142,13 +144,13 @@ impl<B: DiagnosticsBroker> Lexer<B> for Int {
     fn lex(input: Span<B>) -> IResult<B> {
         let (input, int_span) = digit1(input)?;
         let result = match int_span.parse() {
-            Ok(value) => Ok(value),
+            Ok(value) => IntResult::Int(value),
             Err(_) => {
                 input.extra.report_error(SplError(
                     int_span.to_range(),
                     LexErrorMessage::InvalidIntLit(int_span.to_string()).to_string(),
                 ));
-                Err(int_span.to_string())
+                IntResult::Err(int_span.to_string())
             }
         };
         Ok((
@@ -167,17 +169,17 @@ impl<B: DiagnosticsBroker> Lexer<B> for Hex {
         let (input, opt_hex) = expect(hex_digit1, LexErrorMessage::ExpectedHexNumber, pos)(input)?;
         let result = if let Some(hex_span) = opt_hex {
             match u32::from_str_radix(&hex_span, 16) {
-                Ok(value) => Ok(value),
+                Ok(value) => IntResult::Int(value),
                 Err(_) => {
                     input.extra.report_error(SplError(
                         hex_span.to_range(),
                         LexErrorMessage::InvalidIntLit("0x".to_string() + &hex_span).to_string(),
                     ));
-                    Err(hex_span.to_string())
+                    IntResult::Err(hex_span.to_string())
                 }
             }
         } else {
-            Err(String::new())
+            IntResult::Err(String::new())
         };
         let end = input.location_offset();
         Ok((input, Token::new(TokenType::Hex(result), start..end)))

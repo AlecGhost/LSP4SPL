@@ -1,17 +1,8 @@
 use crate::document::{convert_range, DocumentInfo, DocumentRequest};
 use color_eyre::eyre::Result;
+use fmt::Format;
 use lsp_types::{DocumentFormattingParams, TextEdit};
-use spl_frontend::{
-    ast::{
-        Expression, GlobalDeclaration, IntLiteral, ProcedureDeclaration, Statement,
-        TypeDeclaration, TypeExpression, Variable,
-    },
-    lexer::token::{Token, TokenType},
-    ToRange,
-};
 use tokio::sync::mpsc::Sender;
-
-const MAX_LINE_LEN: usize = 100;
 
 pub async fn format(
     doctx: Sender<DocumentRequest>,
@@ -20,440 +11,251 @@ pub async fn format(
     let uri = params.text_document.uri;
     let options = params.options;
     if let Some(DocumentInfo { ast, text, .. }) = super::get_doc_info(uri, doctx).await? {
-        let indentation = if options.insert_spaces {
-            let spaces = vec![' '; options.tab_size as usize];
-            String::from_iter(spaces)
+        let formatter = if options.insert_spaces {
+            fmt::Formatter::new(' ', options.tab_size as usize)
         } else {
-            "\t".to_string()
+            fmt::Formatter::new('\t', 1)
         };
-        let text_edits: Vec<TextEdit> = ast
-            .global_declarations
-            .iter()
-            .filter_map(|gd| {
-                format_global_dec(gd, &indentation).and_then(|new_text| {
-                    let string_range = gd.to_range();
-                    if new_text == text[string_range.clone()] {
-                        None
-                    } else {
-                        let range = convert_range(&string_range, &text);
-                        Some(TextEdit { range, new_text })
-                    }
-                })
-            })
-            .collect();
-        if text_edits.is_empty() {
+        let new_text = ast.fmt(&formatter);
+        if new_text == text {
             Ok(None)
         } else {
-            Ok(Some(text_edits))
+            let range = convert_range(&(0..text.len()), &text);
+            Ok(Some(vec![TextEdit { range, new_text }]))
         }
     } else {
         Ok(None)
     }
 }
 
-fn format_global_dec(gd: &GlobalDeclaration, indentation: &str) -> Option<String> {
-    use GlobalDeclaration::*;
-    match gd {
-        Type(td) => Some(format_type_dec(td, indentation)),
-        Procedure(pd) => Some(format_proc_dec(pd, indentation)),
-        Error(_) => None,
-    }
-}
+mod fmt {
+    use spl_frontend::{
+        ast::{
+            BlockStatement, GlobalDeclaration, IfStatement, ProcedureDeclaration, Program,
+            Statement, TypeDeclaration, WhileStatement,
+        },
+        lexer::token::{Token, TokenType},
+    };
 
-fn format_type_dec(td: &TypeDeclaration, indentation: &str) -> String {
-    let mut new_text = "type ".to_string();
-    if let Some(name) = &td.name {
-        new_text += name.value.as_str();
-        new_text += " ";
+    #[derive(Clone, Debug)]
+    pub struct Formatter {
+        indent_symbol: char,
+        indent_depth: usize,
     }
-    new_text += "=";
-    if let Some(type_expr) = &td.type_expr {
-        let expr_texts = split_type_expr(type_expr);
-        // plus 1 because every string needs an additional space in front of it
-        let expr_texts_len = expr_texts.iter().fold(0, |acc, text| acc + text.len() + 1);
-        let splitting_symbol = if new_text.len() + expr_texts_len > MAX_LINE_LEN
-            || expr_texts.iter().any(|text| text.starts_with('/'))
-        {
-            String::new() + "\n" + indentation
-        } else {
-            " ".to_string()
-        };
-        for text in expr_texts {
-            new_text += splitting_symbol.as_str();
-            new_text += text.as_str();
+
+    impl Formatter {
+        pub const fn new(indent_symbol: char, indent_depth: usize) -> Self {
+            Self {
+                indent_symbol,
+                indent_depth,
+            }
+        }
+
+        pub fn indentation(&self) -> String {
+            let indentation_characters = vec![self.indent_symbol; self.indent_depth];
+            String::from_iter(indentation_characters)
         }
     }
-    new_text += ";";
-    // collect afterwards, so comments do not count in the calculation of new_text length
-    let mut comments = String::new();
-    if let Some(comments_vec) = get_leading_comments(&td.info.tokens) {
-        add_comments(&mut comments, comments_vec);
-    }
-    comments + new_text.as_str()
-}
 
-fn format_proc_dec(pd: &ProcedureDeclaration, indentation: &str) -> String {
-    let mut new_text = "proc ".to_string();
-    if let Some(name) = &pd.name {
-        new_text += name.value.as_str();
+    fn indent(text: String, f: &Formatter) -> String {
+        text.lines()
+            .map(|line| f.indentation() + line + "\n")
+            .collect()
     }
-    new_text += "(";
-    if !pd.parameters.is_empty() {
-        let mut multi_line = false;
-        let params: Vec<String> = pd
-            .parameters
+
+    fn add_leading_comments(text: String, tokens: &[Token]) -> String {
+        tokens
             .iter()
-            .map(|param_dec| {
-                let mut param_text = String::new();
-                if let Some(comments) = get_leading_comments(&param_dec.info.tokens) {
-                    multi_line = true;
-                    add_comments(&mut param_text, comments);
-                    param_text += indentation;
-                }
-                if param_dec.is_ref {
-                    param_text += "ref ";
-                }
-                if let Some(name) = &param_dec.name {
-                    param_text += name.value.as_str();
-                }
-                param_text += ":";
-                if let Some(type_expr) = &param_dec.type_expr {
-                    let expr_texts = split_type_expr(type_expr);
-                    let splitting_symbol = if expr_texts.iter().any(|text| text.starts_with('/')) {
-                        multi_line = true;
-                        String::new() + "\n" + indentation
-                    } else {
-                        " ".to_string()
-                    };
-                    for text in expr_texts {
-                        param_text += splitting_symbol.as_str();
-                        param_text += text.as_str();
-                    }
-                }
-                param_text
+            .map_while(|token| match &token.token_type {
+                TokenType::Comment(comment) => Some(String::new() + "// " + comment.trim() + "\n"),
+                _ => None,
             })
-            .collect();
-        // + 2 for each ", " after each param and ") " at the end
-        let params_text_len = params.iter().fold(0, |acc, text| acc + text.len() + 2);
-        if !multi_line {
-            // + 1 for the opening "{"
-            multi_line = new_text.len() + params_text_len + 1 > MAX_LINE_LEN;
-        }
-        let splitting_symbol = if multi_line {
-            String::new() + ",\n" + indentation
-        } else {
-            ", ".to_string()
-        };
-        if multi_line {
-            new_text += "\n";
-            new_text += indentation;
-        }
-        if let Some(first_param) = params.first() {
-            new_text += first_param;
-        }
-        for param in params.iter().skip(1) {
-            new_text += splitting_symbol.as_str();
-            new_text += param;
-        }
-        if multi_line {
-            new_text += "\n";
-        }
+            .collect::<String>()
+            + &text
     }
-    new_text += ") {";
-    if !pd.variable_declarations.is_empty() {
-        let var_decs: Vec<String> = pd
-            .variable_declarations
+
+    fn add_all_comments(text: String, tokens: &[Token]) -> String {
+        tokens
             .iter()
-            .map(|var_dec| {
-                let mut var_dec_text = String::new();
-                if let Some(comments) = get_leading_comments(&var_dec.info.tokens) {
-                    add_comments(&mut var_dec_text, comments);
-                    var_dec_text += indentation;
-                }
-                var_dec_text += "var ";
-                if let Some(name) = &var_dec.name {
-                    var_dec_text += name.value.as_str();
-                }
-                var_dec_text += ":";
-                if let Some(type_expr) = &var_dec.type_expr {
-                    let expr_texts = split_type_expr(type_expr);
-                    let splitting_symbol = if expr_texts.iter().any(|text| text.starts_with('/')) {
-                        // add indentation twice, because we are already inside a proc body
-                        String::new() + "\n" + indentation + indentation
-                    } else {
-                        " ".to_string()
-                    };
-                    for text in expr_texts {
-                        var_dec_text += splitting_symbol.as_str();
-                        var_dec_text += text.as_str();
-                    }
-                }
-                var_dec_text += ";";
-                var_dec_text
+            .filter_map(|token| match &token.token_type {
+                TokenType::Comment(comment) => Some(String::new() + "// " + comment.trim() + "\n"),
+                _ => None,
             })
-            .collect();
-        for var_dec in &var_decs {
-            new_text += "\n";
-            new_text += indentation;
-            new_text += var_dec;
-        }
-        new_text += "\n";
+            .collect::<String>()
+            + &text
     }
-    if !pd.statements.is_empty() {
-        let stmts: Vec<String> = pd
-            .statements
-            .iter()
-            .map(|stmt| {
-                let mut stmt_text = String::new();
-                stmt_text += format_stmt(stmt, indentation, indentation).as_str();
-                stmt_text
-            })
-            .collect();
 
-        for stmt in &stmts {
-            new_text += stmt;
-        }
-        new_text += "\n";
+    pub trait Format {
+        fn fmt(&self, f: &Formatter) -> String;
     }
-    new_text += "}";
-    // collect afterwards, so comments do not count in the calculation of new_text length
-    let mut comments = String::new();
-    if let Some(comments_vec) = get_leading_comments(&pd.info.tokens) {
-        add_comments(&mut comments, comments_vec);
-    }
-    comments + new_text.as_str()
-}
 
-fn format_stmt(stmt: &Statement, current_indentation: &str, indentation: &str) -> String {
-    let mut text = format!("\n{}", current_indentation);
-    use Statement::*;
-    text += match stmt {
-        Assignment(a) => {
-            let mut text = String::new();
-            if let Some(comments) = get_leading_comments(&a.info.tokens) {
-                add_comments(&mut text, comments);
-                text += current_indentation;
-            }
-            text += format!("{} :=", format_variable(&a.variable)).as_str();
-            if let Some(expr) = &a.expr {
-                text += " ";
-                text += format_expr(expr).as_str();
-            }
-            text += ";";
-            text
-        }
-        Block(b) => {
-            let mut text = "{".to_string();
-            if !b.statements.is_empty() {
-                let new_indentation = current_indentation.to_string() + indentation;
-                for stmt in &b.statements {
-                    text += format_stmt(stmt, &new_indentation, indentation).as_str();
-                }
-                text += "\n";
-                text += current_indentation;
-            }
-            text += "}";
-            text
-        }
-        Call(c) => {
-            let mut text = String::new();
-            if let Some(comments) = get_leading_comments(&c.info.tokens) {
-                add_comments(&mut text, comments);
-                text += current_indentation;
-            }
-            text += format!("{}(", c.name.value).as_str();
-            if let Some(first_arg) = &c.arguments.first() {
-                text += format_expr(first_arg).as_str();
-                for arg in c.arguments.iter().skip(1) {
-                    text += ", ";
-                    text += format_expr(arg).as_str();
-                }
-            }
-            text += ");";
-            text
-        }
-        Empty(info) => {
-            let mut text = String::new();
-            if let Some(comments) = get_leading_comments(&info.tokens) {
-                add_comments(&mut text, comments);
-                text += current_indentation;
-            }
-            text += ";";
-            text
-        }
-        If(i) => {
-            let mut text = String::new();
-            if let Some(comments) = get_leading_comments(&i.info.tokens) {
-                add_comments(&mut text, comments);
-                text += current_indentation;
-            }
-            text += format!(
-                "if ({})",
-                i.condition.as_ref().map_or_else(String::new, format_expr)
-            )
-            .as_str();
-            if let Some(if_branch) = &i.if_branch {
-                text += format_branch(if_branch, current_indentation, indentation).as_str();
-            }
-            if let Some(else_branch) = &i.else_branch {
-                if matches!(
-                    i.if_branch.as_ref().map(|boxed| boxed.as_ref()),
-                    Some(Statement::Block(_))
-                ) {
-                    text += " ";
-                } else {
-                    text += "\n";
-                    text += current_indentation;
-                }
-                text += "else";
-                text += format_branch(else_branch, current_indentation, indentation).as_str();
-            }
-            text
-        }
-        While(w) => {
-            let mut text = String::new();
-            if let Some(comments) = get_leading_comments(&w.info.tokens) {
-                add_comments(&mut text, comments);
-                text += current_indentation;
-            }
-            text += format!(
-                "while ({})",
-                w.condition.as_ref().map_or_else(String::new, format_expr)
-            )
-            .as_str();
-            if let Some(stmt) = &w.statement {
-                text += format_branch(stmt, current_indentation, indentation).as_str();
-            }
-            text
-        }
-        Error(_) => String::new(),
-    }
-    .as_str();
-    text
-}
-
-fn format_branch(branch: &Statement, current_indentation: &str, indentation: &str) -> String {
-    let mut text = String::new();
-    let new_indentation = current_indentation.to_string() + indentation;
-    match branch {
-        Statement::Block(b) => {
-            text += " {";
-            if !b.statements.is_empty() {
-                for stmt in &b.statements {
-                    text += format_stmt(stmt, &new_indentation, indentation).as_str();
-                }
-                text += "\n";
-                text += current_indentation;
-            }
-            text += "}";
-        }
-        stmt => {
-            text += format_stmt(stmt, &new_indentation, indentation).as_str();
+    impl Format for Program {
+        fn fmt(&self, f: &Formatter) -> String {
+            self.global_declarations
+                .iter()
+                .map(|gd| gd.fmt(f))
+                .reduce(|acc, gd| acc + "\n" + &gd)
+                .unwrap_or_default()
         }
     }
-    text
-}
 
-fn format_variable(variable: &Variable) -> String {
-    use Variable::*;
-    match variable {
-        NamedVariable(ident) => ident.value.to_string(),
-        ArrayAccess(access) => {
-            format!(
-                "{}[{}]",
-                format_variable(&access.array),
-                format_expr(&access.index)
-            )
-        }
-    }
-}
-
-fn format_expr(expr: &Expression) -> String {
-    use Expression::*;
-    match expr {
-        Binary(binary_expr) => format!(
-            "{} {} {}",
-            format_expr(&binary_expr.lhs),
-            binary_expr.operator,
-            format_expr(&binary_expr.rhs)
-        ),
-        IntLiteral(int_lit) => int_lit
-            .value
-            .map_or_else(String::new, |value| value.to_string()),
-        Variable(var) => format_variable(var),
-        Error(_) => String::new(),
-    }
-}
-
-fn get_leading_comments(tokens: &[Token]) -> Option<Vec<String>> {
-    let comments: Vec<String> = tokens
-        .iter()
-        .map_while(|token| match &token.token_type {
-            TokenType::Comment(comment) => Some(String::new() + "// " + comment.trim()),
-            _ => None,
-        })
-        .collect();
-
-    if comments.is_empty() {
-        None
-    } else {
-        Some(comments)
-    }
-}
-
-fn add_comments(new_text: &mut String, comments: Vec<String>) {
-    *new_text += comments
-        .into_iter()
-        .map(|comment| comment + "\n")
-        .collect::<String>()
-        .as_str();
-}
-
-fn split_type_expr(type_expr: &TypeExpression) -> Vec<String> {
-    let mut strings = Vec::new();
-    use TypeExpression::*;
-    match type_expr {
-        NamedType(ident) => strings.push(ident.value.clone()),
-        ArrayType {
-            base_type,
-            size,
-            info,
-        } => {
-            if let Some(mut comments) = get_leading_comments(&info.tokens) {
-                strings.append(&mut comments);
-            }
-            let size = 'size: {
-                if let Some(IntLiteral { info, .. }) = &size {
-                    for token in &info.tokens {
-                        match &token.token_type {
-                            TokenType::Int(int_result) => {
-                                break 'size match int_result {
-                                    Ok(value) => value.to_string(),
-                                    Err(string) => string.to_string(),
-                                };
-                            }
-                            TokenType::Hex(hex_result) => {
-                                let hex = match hex_result {
-                                    Ok(value) => value.to_string(),
-                                    Err(hex_string) => hex_string.to_string(),
-                                };
-                                break 'size format!("0x{}", hex);
-                            }
-                            TokenType::Char(c) => {
-                                break 'size format!("'{}'", c);
-                            }
-                            _ => {}
+    impl Format for GlobalDeclaration {
+        fn fmt(&self, f: &Formatter) -> String {
+            match self {
+                Self::Type(td) => td.fmt(f),
+                Self::Procedure(pd) => pd.fmt(f),
+                Self::Error(info) => info
+                    .tokens
+                    .iter()
+                    .map(|token| token.to_string())
+                    .reduce(|acc, token| {
+                        if acc.ends_with('\n') {
+                            acc + &token
+                        } else {
+                            acc + " " + &token
                         }
-                    }
-                }
-                String::new()
-            };
-            let self_representation = format!("array [{}] of", size);
-            strings.push(self_representation);
-            if let Some(base_type) = base_type {
-                strings.append(&mut split_type_expr(base_type));
+                    })
+                    .unwrap_or_default(),
             }
         }
     }
-    strings
+
+    impl Format for ProcedureDeclaration {
+        fn fmt(&self, f: &Formatter) -> String {
+            let name = fmt_or_empty(&self.name);
+            let param_vec: Vec<String> = self
+                .parameters
+                .iter()
+                .map(|param| add_all_comments(param.to_string(), &param.info.tokens))
+                .collect();
+            let params = if param_vec.is_empty() {
+                String::new()
+            } else {
+                let len = param_vec.len();
+                let has_comments = param_vec.iter().any(|param| param.contains("//"));
+                // if there are more than three parameters,
+                // or any of them is commented,
+                // parameters should be in separate lines and indented
+                if len > 3 || has_comments {
+                    let params = param_vec
+                        .into_iter()
+                        .reduce(|acc, param| acc + ",\n" + param.as_str())
+                        .expect("Params not empty was checked before");
+                    "\n".to_string() + &indent(params, f)
+                } else {
+                    param_vec
+                        .into_iter()
+                        .reduce(|acc, param| acc + ", " + param.as_str())
+                        .expect("Params not empty was checked before")
+                }
+            };
+            let var_decs: String = self
+                .variable_declarations
+                .iter()
+                .map(|var_dec| add_all_comments(var_dec.to_string(), &var_dec.info.tokens))
+                .collect();
+            let var_decs = indent(var_decs, f);
+            let stmts: String = self.statements.iter().map(|stmt| stmt.fmt(f)).collect();
+            let stmts = indent(stmts, f);
+            let pd = match (var_decs.is_empty(), stmts.is_empty()) {
+                (true, true) => format!("proc {}({}) {{}}\n", name, params),
+                (true, false) => format!("proc {}({}) {{\n{}}}\n", name, params, stmts),
+                (false, true) => format!("proc {}({}) {{\n{}}}\n", name, params, var_decs),
+                (false, false) => {
+                    format!("proc {}({}) {{\n{}\n{}}}\n", name, params, var_decs, stmts)
+                }
+            };
+            add_leading_comments(pd, &self.info.tokens)
+        }
+    }
+
+    impl Format for TypeDeclaration {
+        fn fmt(&self, _f: &Formatter) -> String {
+            let type_expr = fmt_or_empty(&self.type_expr);
+            let td = self.name.as_ref().map_or_else(
+                || format!("type = {};\n", type_expr),
+                |name| format!("type {} = {};\n", name, type_expr),
+            );
+            add_leading_comments(td, &self.info.tokens)
+        }
+    }
+
+    impl Format for Statement {
+        fn fmt(&self, f: &Formatter) -> String {
+            match self {
+                Self::Assignment(a) => add_all_comments(a.to_string(), &a.info.tokens),
+                Self::Block(b) => b.fmt(f),
+                Self::Call(c) => add_all_comments(c.to_string(), &c.info.tokens),
+                Self::If(i) => i.fmt(f),
+                Self::While(w) => w.fmt(f),
+                Self::Empty(info) => add_all_comments(";\n".to_string(), &info.tokens),
+                Self::Error(_) => String::new(),
+            }
+        }
+    }
+
+    impl Format for BlockStatement {
+        fn fmt(&self, f: &Formatter) -> String {
+            let stmt = if self.statements.is_empty() {
+                "{}\n".to_string()
+            } else {
+                let stmts: String = self.statements.iter().map(|stmt| stmt.fmt(f)).collect();
+                let stmts = indent(stmts, f);
+                format!("{{\n{}}}", stmts)
+            };
+            add_leading_comments(stmt, &self.info.tokens)
+        }
+    }
+
+    impl Format for IfStatement {
+        fn fmt(&self, f: &Formatter) -> String {
+            let condition = fmt_or_empty(&self.condition);
+            let stmt = if self.else_branch.is_some() {
+                format!(
+                    "if ({}){}else{}",
+                    condition,
+                    fmt_branch(f, &self.if_branch, ' '),
+                    fmt_branch(f, &self.else_branch, '\n'),
+                )
+            } else {
+                format!("if ({}){}", condition, fmt_branch(f, &self.if_branch, '\n'))
+            };
+            add_leading_comments(stmt, &self.info.tokens)
+        }
+    }
+
+    impl Format for WhileStatement {
+        fn fmt(&self, f: &Formatter) -> String {
+            let condition = fmt_or_empty(&self.condition);
+            let stmt = format!(
+                "while ({}){}",
+                condition,
+                fmt_branch(f, &self.statement, '\n')
+            );
+            add_leading_comments(stmt, &self.info.tokens)
+        }
+    }
+
+    fn fmt_branch(f: &Formatter, branch: &Option<Box<Statement>>, ending: char) -> String {
+        branch.as_ref().map_or_else(
+            || format!("{}", ending),
+            |stmt| {
+                if let Statement::Block(b) = stmt.as_ref() {
+                    if b.statements.is_empty() {
+                        " {}\n".to_string()
+                    } else {
+                        format!(" {}{}", stmt.fmt(f), ending)
+                    }
+                } else {
+                    let stmt = indent(stmt.fmt(f), f);
+                    format!("\n{}", stmt)
+                }
+            },
+        )
+    }
+
+    fn fmt_or_empty<T: std::fmt::Display>(opt: &Option<T>) -> String {
+        opt.as_ref()
+            .map_or_else(String::new, |inner| inner.to_string())
+    }
 }

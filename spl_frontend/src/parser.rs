@@ -1,7 +1,7 @@
 use crate::{
     ast::*,
     error::{ParseErrorMessage, SplError},
-    lexer::token::{Token, TokenType, Tokens},
+    lexer::token::{IntResult, Token, TokenType, Tokens},
     DiagnosticsBroker, ToRange,
 };
 use nom::{
@@ -59,7 +59,10 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
         let (input, value) = alt((
             map(hex, |token| {
                 if let TokenType::Hex(hex_result) = &token.fragment().token_type {
-                    hex_result.as_ref().ok().copied()
+                    match hex_result {
+                        IntResult::Int(i) => Some(*i),
+                        IntResult::Err(_) => None,
+                    }
                 } else {
                     panic!("Invalid hex parse")
                 }
@@ -73,7 +76,10 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
             }),
             map(int, |token| {
                 if let TokenType::Int(int_result) = &token.fragment().token_type {
-                    int_result.as_ref().ok().copied()
+                    match int_result {
+                        IntResult::Int(i) => Some(*i),
+                        IntResult::Err(_) => None,
+                    }
                 } else {
                     panic!("Invalid int parse")
                 }

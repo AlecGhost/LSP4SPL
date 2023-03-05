@@ -91,6 +91,12 @@ impl ToRange for Vec<Token> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum IntResult {
+    Int(u32),
+    Err(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum TokenType {
     LParen,
     RParen,
@@ -123,8 +129,8 @@ pub enum TokenType {
     Var,
     Ident(String),
     Char(char),
-    Int(Result<u32, String>),
-    Hex(Result<u32, String>),
+    Int(IntResult),
+    Hex(IntResult),
     Comment(String),
     Unknown(String),
     Eof,
@@ -206,11 +212,22 @@ impl std::fmt::Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use TokenType::*;
         let string = match self {
-            Ident(s) | Comment(s) | Unknown(s) => s.to_string(),
-            Char(c) => c.to_string(),
-            Int(result) | Hex(result) => match result {
-                Ok(value) => value.to_string(),
-                Err(int_string) => int_string.to_string(),
+            Ident(s) | Unknown(s) => s.to_string(),
+            Comment(s) => format!("// {}\n", s),
+            Char(c) => {
+                if c == &'\n' {
+                    "'\\n'".to_string()
+                } else {
+                    format!("'{}'", c)
+                }
+            }
+            Int(int_result) => match int_result {
+                IntResult::Int(i) => i.to_string(),
+                IntResult::Err(err) => err.to_string(),
+            },
+            Hex(int_result) => match int_result {
+                IntResult::Int(i) => format!("{:#04X}", i), // prints in the format 0x0A
+                IntResult::Err(err) => format!("0x{}", err),
             },
             token_type => token_type.as_static_str().to_string(),
         };

@@ -63,12 +63,6 @@ impl Identifier {
     }
 }
 
-impl Display for Identifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
 pub struct ArrayAccess {
     pub array: Box<Variable>,
@@ -117,27 +111,6 @@ impl Operator {
         matches!(self, Self::Add | Self::Sub | Self::Mul | Self::Div)
     }
 }
-impl Display for Operator {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Operator::*;
-        write!(
-            f,
-            "{}",
-            match self {
-                Add => "+",
-                Sub => "-",
-                Mul => "*",
-                Div => "/",
-                Equ => "=",
-                Neq => "#",
-                Lst => "<",
-                Lse => "<=",
-                Grt => ">",
-                Gre => ">=",
-            }
-        )
-    }
-}
 
 impl TryFrom<TokenType> for Operator {
     type Error = OperatorConversionError<TokenType>;
@@ -169,6 +142,7 @@ pub struct BinaryExpression {
 
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
 pub enum Expression {
+    // TODO: Add unary
     Binary(BinaryExpression),
     IntLiteral(IntLiteral),
     Variable(Variable),
@@ -273,4 +247,142 @@ pub enum GlobalDeclaration {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Program {
     pub global_declarations: Vec<GlobalDeclaration>,
+}
+
+impl Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl Display for IntLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = self
+            .info
+            .tokens
+            .iter()
+            .find_map(|token| match &token.token_type {
+                TokenType::Int(_) | TokenType::Hex(_) | TokenType::Char(_) => {
+                    Some(token.to_string())
+                }
+                _ => None,
+            })
+            .expect("IntLiteral must contain a `Int`, `Hex` or `Char` token");
+        write!(f, "{}", display)
+    }
+}
+
+impl Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Operator::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Add => "+",
+                Sub => "-",
+                Mul => "*",
+                Div => "/",
+                Equ => "=",
+                Neq => "#",
+                Lst => "<",
+                Lse => "<=",
+                Grt => ">",
+                Gre => ">=",
+            }
+        )
+    }
+}
+
+impl Display for ArrayAccess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}[{}]", self.array, self.index)
+    }
+}
+
+impl Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
+            Self::NamedVariable(ident) => ident.to_string(),
+            Self::ArrayAccess(access) => access.to_string(),
+        };
+        write!(f, "{}", display)
+    }
+}
+
+impl Display for BinaryExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {} {}", self.lhs, self.operator, self.rhs)
+    }
+}
+
+impl Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
+            Self::Binary(binary_expr) => binary_expr.to_string(),
+            Self::IntLiteral(int_lit) => int_lit.to_string(),
+            Self::Variable(var) => var.to_string(),
+            Self::Error(_) => String::new(),
+        };
+        write!(f, "{}", display)
+    }
+}
+
+impl Display for TypeExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = match self {
+            Self::NamedType(ident) => ident.to_string(),
+            Self::ArrayType {
+                size, base_type, ..
+            } => {
+                let size = fmt_or_empty(size);
+                base_type.as_ref().map_or_else(
+                    || format!("array [{}] of", size),
+                    |type_expr| format!("array [{}] of {}", size, type_expr),
+                )
+            }
+        };
+        write!(f, "{}", display)
+    }
+}
+
+impl Display for VariableDeclaration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = fmt_or_empty(&self.name);
+        let type_expr = fmt_or_empty(&self.type_expr);
+        writeln!(f, "var {}: {};", name, type_expr)
+    }
+}
+
+impl Display for ParameterDeclaration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let r#ref = if self.is_ref { "ref " } else { "" };
+        let name = fmt_or_empty(&self.name);
+        let type_expr = fmt_or_empty(&self.type_expr);
+        write!(f, "{}{}: {}", r#ref, name, type_expr)
+    }
+}
+
+impl Display for Assignment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let expr = fmt_or_empty(&self.expr);
+        writeln!(f, "{} := {};", self.variable, expr)
+    }
+}
+
+impl Display for CallStatement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let args = self
+            .arguments
+            .iter()
+            .map(|arg| arg.to_string())
+            .reduce(|acc, arg| acc + ", " + arg.as_str())
+            .unwrap_or_default();
+        writeln!(f, "{}({});", self.name, args)
+    }
+}
+
+fn fmt_or_empty<T: Display>(opt: &Option<T>) -> String {
+    opt.as_ref()
+        .map_or_else(String::new, |inner| inner.to_string())
 }
