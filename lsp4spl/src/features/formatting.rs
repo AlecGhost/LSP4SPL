@@ -201,7 +201,7 @@ mod fmt {
             } else {
                 let stmts: String = self.statements.iter().map(|stmt| stmt.fmt(f)).collect();
                 let stmts = indent(stmts, f);
-                format!("{{\n{}}}", stmts)
+                format!("{{\n{}}}\n", stmts)
             };
             add_leading_comments(stmt, &self.info.tokens)
         }
@@ -241,10 +241,16 @@ mod fmt {
             || format!("{}", ending),
             |stmt| {
                 if let Statement::Block(b) = stmt.as_ref() {
+                    // similar to `BlockStatement::fmt`,
+                    // except that a space is inserted before the brackets
+                    // and if there are statements inside the block,
+                    // `ending` is appended instead of a newline
                     if b.statements.is_empty() {
                         " {}\n".to_string()
                     } else {
-                        format!(" {}{}", stmt.fmt(f), ending)
+                        let stmts: String = b.statements.iter().map(|stmt| stmt.fmt(f)).collect();
+                        let stmts = indent(stmts, f);
+                        format!(" {{\n{}}}{}", stmts, ending)
                     }
                 } else {
                     let stmt = indent(stmt.fmt(f), f);
