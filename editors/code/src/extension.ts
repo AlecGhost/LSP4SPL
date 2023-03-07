@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { ExtensionContext } from 'vscode';
+import * as vscode from 'vscode';
 
 import {
   LanguageClient,
@@ -10,7 +10,15 @@ import {
 
 let client: LanguageClient;
 
-export function activate(context: ExtensionContext) {
+export function activate(context: vscode.ExtensionContext) {
+  let config = vscode.workspace.getConfiguration();
+  let serverFileName = config.get("lsp4spl.executable");
+  if (typeof serverFileName !== "string") {
+    vscode.window.showErrorMessage("LSP4SPL: Server executable is not configured");
+    return;
+  }
+  let runExecutable: string = serverFileName;
+  
   let debugExecutable = context.asAbsolutePath(
     path.join('..', '..', 'target', 'debug', 'lsp4spl')
   );
@@ -20,9 +28,15 @@ export function activate(context: ExtensionContext) {
   // If the extension is launched in debug mode then the debug server options are used
   // Otherwise the run options are used
   let serverOptions: ServerOptions = {
-    command: debugExecutable,
-    transport: TransportKind.stdio,
-    args: ['--log', logFile],
+    run: {
+      command: runExecutable,
+      transport: TransportKind.stdio,
+    },
+    debug: {
+      command: debugExecutable,
+      transport: TransportKind.stdio,
+      args: ['--log', logFile],
+    },
   };
 
   // Options to control the language client
