@@ -17,7 +17,7 @@ const DRAWLINE: &str = "drawLine";
 const DRAWCIRCLE: &str = "drawCircle";
 const INT: &str = "int";
 
-const DEFAULT_ENTRIES: [&str; 11] = [
+pub const DEFAULT_ENTRIES: [&str; 11] = [
     PRINTI, PRINTC, READI, READC, EXIT, TIME, CLEARALL, SETPIXEL, DRAWLINE, DRAWCIRCLE, INT,
 ];
 

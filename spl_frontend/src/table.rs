@@ -64,6 +64,12 @@ pub struct ProcedureEntry {
     pub doc: Option<String>,
 }
 
+impl ProcedureEntry {
+    pub fn is_default(&self) -> bool {
+        initialization::DEFAULT_ENTRIES.contains(&self.name.value.as_str())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariableEntry {
     pub name: Identifier,

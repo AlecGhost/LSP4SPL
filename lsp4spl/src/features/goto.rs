@@ -38,6 +38,11 @@ pub async fn declaration(
                             local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
+                            if let Entry::Procedure(proc_entry) = entry {
+                                if proc_entry.is_default() {
+                                    return Ok(None);
+                                }
+                            }
                             return Ok(Some(Location {
                                 uri,
                                 range: convert_range(&entry.to_range(), &doc_info.text),
