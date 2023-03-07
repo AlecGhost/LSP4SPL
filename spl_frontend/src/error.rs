@@ -1,4 +1,5 @@
-use crate::{ast::Identifier, ToRange};
+use crate::ast::Identifier;
+use crate::lexer::token::TokenType;
 use std::fmt::Display;
 use std::ops::Range;
 use thiserror::Error;
@@ -14,7 +15,12 @@ impl Identifier {
         T: ToString,
     {
         SplError(
-            self.info.tokens.to_range(),
+            self.info
+                .tokens
+                .iter()
+                .find(|token| matches!(token.token_type, TokenType::Ident(_)))
+                .expect("Identifier must contain ident token")
+                .range.clone(),
             msg(self.value.clone()).to_string(),
         )
     }
