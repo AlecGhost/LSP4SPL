@@ -4,3 +4,4 @@
 node_modules
 out
 lsp4spl.log
+*.vsix
