@@ -276,7 +276,11 @@ fn search_types(table: &GlobalTable) -> Vec<CompletionItem> {
 }
 
 fn search_variables(table: &LocalTable) -> Vec<CompletionItem> {
-    search_and_create_items!(table, LocalEntry::Variable(_), CompletionItemKind::VARIABLE)
+    search_and_create_items!(
+        table,
+        LocalEntry::Variable(_) | LocalEntry::Parameter(_),
+        CompletionItemKind::VARIABLE
+    )
 }
 
 fn search_procedures(table: &GlobalTable) -> Vec<CompletionItem> {
