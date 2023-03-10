@@ -9,7 +9,7 @@ use crate::{
 use pretty_assertions::assert_eq;
 
 #[test]
-fn tokens() {
+fn type_declaration() {
     let input = "type a = int;";
     let broker = LocalBroker::default();
     let tokens = lex(input, broker);
@@ -26,7 +26,10 @@ fn tokens() {
         "{}",
         input
     );
+}
 
+#[test]
+fn call_statement() {
     let input = "a(); ";
     let broker = LocalBroker::default();
     let tokens = lex(input, broker);
@@ -42,7 +45,10 @@ fn tokens() {
         "{}",
         input
     );
+}
 
+#[test]
+fn if_statement() {
     let input = "if (1 = 2) {}";
     let broker = LocalBroker::default();
     let tokens = lex(input, broker);
@@ -62,7 +68,10 @@ fn tokens() {
         "{}",
         input
     );
+}
 
+#[test]
+fn comment() {
     let input = "//";
     let broker = LocalBroker::default();
     let tokens = lex(input, broker);
