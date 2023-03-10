@@ -6,8 +6,8 @@ use lsp_types::{
 };
 use spl_frontend::{
     ast::{CallStatement, GlobalDeclaration, ProcedureDeclaration, Statement},
-    lexer::token::TokenType,
     table::{GlobalEntry, SymbolTable},
+    token::TokenType,
     ToRange,
 };
 use tokio::sync::mpsc::Sender;

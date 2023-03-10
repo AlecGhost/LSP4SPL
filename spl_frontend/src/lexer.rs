@@ -21,6 +21,9 @@ mod tests;
 pub mod token;
 mod utility;
 
+/// Type alias for nom_locate::LocatedSpan.
+/// Tracks range inside source code during lexical analysis.
+/// Holds DiagnosticsBroker to report errors during lexing.
 pub(crate) type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
 
 impl<B: DiagnosticsBroker> ToRange for Span<'_, B> {
@@ -33,7 +36,13 @@ impl<B: DiagnosticsBroker> ToRange for Span<'_, B> {
 
 type IResult<'a, B> = nom::IResult<Span<'a, B>, Token>;
 
-pub fn lex<B: DiagnosticsBroker>(src: &str, broker: B) -> Vec<Token> {
+/// Tokenizes the given source code.
+/// Errors are reported by the specified broker.
+///
+/// # Panics
+///
+/// Panics if lexing fails.
+pub(crate) fn lex<B: DiagnosticsBroker>(src: &str, broker: B) -> Vec<Token> {
     let input = Span::new_extra(src, broker);
     let (_, (mut tokens, eof_token)) = pair(
         many0(preceded(multispace0, Token::lex)),
@@ -44,24 +53,34 @@ pub fn lex<B: DiagnosticsBroker>(src: &str, broker: B) -> Vec<Token> {
     tokens
 }
 
+/// Try to parse `Span` into `Token`
 trait Lexer<B>: Sized {
     fn lex(input: Span<B>) -> IResult<B>;
 }
 
+/// Recognize symbol and map to `Token`
 macro_rules! lex_symbol {
     ($token_type:expr) => {{
-        map(tag($token_type.as_static_str()), |span: Span<B>| -> Token {
-            Token::new($token_type, span.to_range())
-        })
+        map(
+            tag($token_type
+                .as_static_str()
+                .expect("No static representation available")),
+            |span: Span<B>| -> Token { Token::new($token_type, span.to_range()) },
+        )
     }};
 }
 
+/// Recognize keyword and map to `Token`
+/// Same as `lex_symbol`, except that the next character must not be alpha_numeric
 macro_rules! lex_keyword {
     ($token_type:expr) => {{
         terminated(
-            map(tag($token_type.as_static_str()), |span: Span<B>| -> Token {
-                Token::new($token_type, span.to_range())
-            }),
+            map(
+                tag($token_type
+                    .as_static_str()
+                    .expect("No static representation available")),
+                |span: Span<B>| -> Token { Token::new($token_type, span.to_range()) },
+            ),
             peek(alt((
                 eof,
                 verify(take(1u8), |span| !span.starts_with(is_alpha_numeric)),

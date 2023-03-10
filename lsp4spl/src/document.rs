@@ -3,14 +3,7 @@ use lsp_types::{
     notification::{Notification, PublishDiagnostics},
     *,
 };
-use spl_frontend::{
-    ast::Program,
-    error::SplError,
-    lexer::{self, token::Token},
-    parser,
-    table::{self, GlobalTable},
-    LocalBroker,
-};
+use spl_frontend::{error::SplError, AnalyzedSource};
 use std::collections::HashMap;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
@@ -24,7 +17,7 @@ pub enum DocumentRequest {
     Open(Url, String),
     Change(Url, Vec<TextDocumentContentChangeEvent>),
     Close(Url),
-    GetInfo(Url, oneshot::Sender<Option<DocumentInfo>>),
+    GetInfo(Url, oneshot::Sender<Option<AnalyzedSource>>),
 }
 
 pub async fn open(
@@ -76,13 +69,17 @@ pub async fn broker(
     while let Some(request) = rx.recv().await {
         match request {
             Open(uri, text) => {
-                let doc_info = DocumentInfo::new(text);
+                let doc_info = AnalyzedSource::new(text);
                 if send_diagnostics {
                     let notification = io::Notification::new(
                         PublishDiagnostics::METHOD.to_string(),
                         PublishDiagnosticsParams {
                             uri: uri.clone(),
-                            diagnostics: doc_info.diagnostics.clone(),
+                            diagnostics: doc_info
+                                .errors
+                                .iter()
+                                .map(|err| create_diagnostic(err, &doc_info.text))
+                                .collect(),
                             version: None,
                         }
                         .to_value(),
@@ -98,13 +95,17 @@ pub async fn broker(
                 if let Some(change) = changes.into_iter().next() {
                     // currently no incremental changes, so range should be None
                     if change.range.is_none() {
-                        let doc_info = DocumentInfo::new(change.text);
+                        let doc_info = AnalyzedSource::new(change.text);
                         if send_diagnostics {
                             let notification = io::Notification::new(
                                 PublishDiagnostics::METHOD.to_string(),
                                 PublishDiagnosticsParams {
                                     uri: uri.clone(),
-                                    diagnostics: doc_info.diagnostics.clone(),
+                                    diagnostics: doc_info
+                                        .errors
+                                        .iter()
+                                        .map(|err| create_diagnostic(err, &doc_info.text))
+                                        .collect(),
                                     version: None,
                                 }
                                 .to_value(),
@@ -128,46 +129,15 @@ pub async fn broker(
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct DocumentInfo {
-    pub text: String,
-    pub tokens: Vec<Token>,
-    pub ast: Program,
-    pub table: GlobalTable,
-    pub diagnostics: Vec<Diagnostic>,
-}
-
-impl DocumentInfo {
-    fn new(text: String) -> Self {
-        let broker = LocalBroker::default();
-        let tokens = lexer::lex(&text, broker.clone());
-        let program = parser::parse(&tokens, broker.clone());
-        let table = table::build(&program, &broker);
-        table::analyze(&program, &table, &broker);
-        let diagnostics = broker
-            .errors()
-            .into_iter()
-            .map(|err| create_diagnostic(err, &text))
-            .collect();
-        Self {
-            text,
-            tokens,
-            ast: program,
-            table,
-            diagnostics,
-        }
-    }
-}
-
-fn create_diagnostic(err: SplError, text: &str) -> Diagnostic {
+fn create_diagnostic(err: &SplError, text: &str) -> Diagnostic {
     let SplError(range, message) = err;
     Diagnostic {
-        range: convert_range(&range, text),
+        range: convert_range(range, text),
         severity: Some(DiagnosticSeverity::ERROR),
         code: None,
         code_description: None,
         source: None,
-        message,
+        message: message.clone(),
         related_information: None,
         tags: None,
         data: None,

@@ -14,7 +14,7 @@ mod tests;
 
 /// Analyzes the given program for semantic errors.
 /// Errors are reported by the specified broker.
-pub fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker>(
+pub(crate) fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker>(
     program: &Program,
     table: &GlobalTable,
     broker: &B,

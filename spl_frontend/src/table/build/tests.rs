@@ -1,9 +1,11 @@
-use crate::lexer::token::Token;
-use crate::table::{GlobalEntry, LocalEntry, LocalTable};
 use crate::{
     ast::Identifier,
-    error::SplError,
-    table::{BuildErrorMessage, DataType, GlobalTable, ProcedureEntry, TypeEntry, VariableEntry},
+    error::{BuildErrorMessage, SplError},
+    lexer::token::Token,
+    table::{
+        DataType, GlobalEntry, GlobalTable, LocalEntry, LocalTable, ProcedureEntry, TypeEntry,
+        VariableEntry,
+    },
     LocalBroker,
 };
 #[cfg(test)]

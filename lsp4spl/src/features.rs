@@ -1,11 +1,11 @@
-use crate::document::{self, DocumentInfo, DocumentRequest};
+use crate::document::{self, DocumentRequest};
 use color_eyre::eyre::{Context, Result};
 use lsp_types::{TextDocumentPositionParams, Url};
 use spl_frontend::{
     ast::{GlobalDeclaration, Identifier, ProcedureDeclaration},
-    lexer::token::{TokenList, TokenType},
+    token::{TokenList, TokenType},
     table::{GlobalEntry, GlobalTable, LocalTable, SymbolTable},
-    ToRange,
+    AnalyzedSource, ToRange,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
 
@@ -25,7 +25,7 @@ pub use semantic_tokens::semantic_tokens;
 pub use signature_help::signature_help;
 
 struct DocumentCursor {
-    doc_info: DocumentInfo,
+    doc_info: AnalyzedSource,
     index: usize,
     context: Option<GlobalEntry>,
 }
@@ -41,7 +41,7 @@ impl DocumentCursor {
     }
 }
 
-async fn get_doc_info(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option<DocumentInfo>> {
+async fn get_doc_info(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option<AnalyzedSource>> {
     let (tx, rx) = oneshot::channel();
     doctx
         .send(DocumentRequest::GetInfo(uri, tx))

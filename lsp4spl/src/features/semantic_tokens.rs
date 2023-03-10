@@ -1,11 +1,11 @@
-use crate::document::{get_position, DocumentInfo, DocumentRequest};
+use crate::document::{get_position, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{Position, SemanticToken, SemanticTokens, SemanticTokensParams};
 use spl_frontend::{
     ast::{AstInfo, GlobalDeclaration, ProcedureDeclaration, TypeDeclaration},
-    lexer::token::{Token, TokenType},
     table::{Entry, GlobalTable, LookupTable},
-    ToRange,
+    token::{Token, TokenType},
+    AnalyzedSource, ToRange,
 };
 use tokio::sync::mpsc::Sender;
 
@@ -58,7 +58,7 @@ pub async fn semantic_tokens(
     params: SemanticTokensParams,
 ) -> Result<Option<SemanticTokens>> {
     let uri = params.text_document.uri;
-    if let Some(DocumentInfo {
+    if let Some(AnalyzedSource {
         ast,
         text,
         table: global_table,

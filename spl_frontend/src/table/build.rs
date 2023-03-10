@@ -1,17 +1,18 @@
-use super::*;
 use crate::{
     ast::*,
-    error::SplError,
+    error::{SplError, BuildErrorMessage},
     lexer::token::{Token, TokenType},
-    ToRange,
+    ToRange, DiagnosticsBroker, table::Entry,
 };
+
+use super::{GlobalTable, SymbolTable, GlobalEntry, LookupTable, TypeEntry, LocalTable, ProcedureEntry, VariableEntry, LocalEntry, DataType};
 
 #[cfg(test)]
 mod tests;
 
 /// Builds a `GlobalTable` for the given program.
 /// Errors are reported by the specified broker.
-pub fn build<B>(program: &Program, broker: &B) -> GlobalTable
+pub(crate) fn build<B>(program: &Program, broker: &B) -> GlobalTable
 where
     B: Clone + std::fmt::Debug + DiagnosticsBroker,
 {

@@ -3,7 +3,7 @@ use color_eyre::eyre::Result;
 use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentation, MarkupKind};
 use spl_frontend::{
     ast::{GlobalDeclaration, ProcedureDeclaration, Statement, TypeDeclaration},
-    lexer::token::{Token, TokenList, TokenType},
+    token::{Token, TokenList, TokenType},
     table::{
         GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, SymbolTable, TableEntry,
     },
@@ -311,7 +311,7 @@ fn new_stmt(lookup_table: &LookupTable) -> Vec<CompletionItem> {
 
 mod items {
     use lsp_types::{CompletionItem, CompletionItemKind};
-    use spl_frontend::lexer::token;
+    use spl_frontend::token;
 
     macro_rules! item {
         ($name:ident, $label:expr) => {

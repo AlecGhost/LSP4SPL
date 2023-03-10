@@ -24,30 +24,17 @@ type IResult<'a, T, B> = nom::IResult<Tokens<'a, B>, T>;
 
 /// Parses the given tokens and returns an AST.
 /// Errors are reported by the specified broker.
+///
+/// # Panics
+///
 /// Panics if parsing fails.
-///
-/// # Examples
-///
-/// ```
-/// use spl_frontend::parser::parse;
-/// use spl_frontend::ast::Program;
-/// use spl_frontend::lexer::lex;
-/// # use spl_frontend::LocalBroker;
-///
-/// # let broker = LocalBroker::default();
-/// let tokens = lex("", broker.clone());
-/// let program = parse(&tokens, broker.clone());
-///
-/// assert_eq!(program, Program {
-///     global_declarations: Vec::new()
-/// });
-/// ```
-pub fn parse<B: DiagnosticsBroker>(input: &[Token], broker: B) -> Program {
+pub(crate) fn parse<B: DiagnosticsBroker>(input: &[Token], broker: B) -> Program {
     let input = Tokens::new(input, broker);
     let (_, program) = all_consuming(Program::parse)(input).expect("Parser cannot fail");
     program
 }
 
+/// Try to parse token stream.
 /// Implemented by all AST nodes.
 trait Parser<B>: Sized {
     fn parse(input: Tokens<B>) -> IResult<Self, B>;

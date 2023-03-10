@@ -1,6 +1,6 @@
-use crate::{ast::Identifier, error::BuildErrorMessage, DiagnosticsBroker, ToRange};
-pub use build::build;
-pub use semantic::analyze;
+use crate::{ast::Identifier, ToRange};
+pub(crate) use build::build;
+pub(crate) use semantic::analyze;
 use std::{collections::HashMap, fmt::Display, ops::Range};
 
 mod build;

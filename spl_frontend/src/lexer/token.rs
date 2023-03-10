@@ -171,39 +171,39 @@ impl TokenType {
         )
     }
 
-    pub(super) fn as_static_str(&self) -> &'static str {
+    pub(super) fn as_static_str(&self) -> Option<&'static str> {
         use TokenType::*;
         match self {
-            LParen => LPAREN,
-            RParen => RPAREN,
-            LBracket => LBRACKET,
-            RBracket => RBRACKET,
-            LCurly => LCURLY,
-            RCurly => RCURLY,
-            Eq => EQ,
-            Neq => NEQ,
-            Lt => LT,
-            Le => LE,
-            Gt => GT,
-            Ge => GE,
-            Assign => ASSIGN,
-            Colon => COLON,
-            Comma => COMMA,
-            Semic => SEMIC,
-            Plus => PLUS,
-            Minus => MINUS,
-            Times => TIMES,
-            Divide => DIVIDE,
-            If => IF,
-            Else => ELSE,
-            While => WHILE,
-            Array => ARRAY,
-            Of => OF,
-            Proc => PROC,
-            Ref => REF,
-            Type => TYPE,
-            Var => VAR,
-            _ => panic!("No static representation available"),
+            LParen => Some(LPAREN),
+            RParen => Some(RPAREN),
+            LBracket => Some(LBRACKET),
+            RBracket => Some(RBRACKET),
+            LCurly => Some(LCURLY),
+            RCurly => Some(RCURLY),
+            Eq => Some(EQ),
+            Neq => Some(NEQ),
+            Lt => Some(LT),
+            Le => Some(LE),
+            Gt => Some(GT),
+            Ge => Some(GE),
+            Assign => Some(ASSIGN),
+            Colon => Some(COLON),
+            Comma => Some(COMMA),
+            Semic => Some(SEMIC),
+            Plus => Some(PLUS),
+            Minus => Some(MINUS),
+            Times => Some(TIMES),
+            Divide => Some(DIVIDE),
+            If => Some(IF),
+            Else => Some(ELSE),
+            While => Some(WHILE),
+            Array => Some(ARRAY),
+            Of => Some(OF),
+            Proc => Some(PROC),
+            Ref => Some(REF),
+            Type => Some(TYPE),
+            Var => Some(VAR),
+            _ => None,
         }
     }
 }
@@ -229,7 +229,10 @@ impl std::fmt::Display for TokenType {
                 IntResult::Int(i) => format!("{:#04X}", i), // prints in the format 0x0A
                 IntResult::Err(err) => format!("0x{}", err),
             },
-            token_type => token_type.as_static_str().to_string(),
+            token_type => token_type
+                .as_static_str()
+                .expect("No static representation available")
+                .to_string(),
         };
         write!(f, "{}", string)
     }

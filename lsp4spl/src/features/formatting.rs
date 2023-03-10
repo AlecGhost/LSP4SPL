@@ -1,7 +1,8 @@
-use crate::document::{convert_range, DocumentInfo, DocumentRequest};
+use crate::document::{convert_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use fmt::Format;
 use lsp_types::{DocumentFormattingParams, TextEdit};
+use spl_frontend::AnalyzedSource;
 use tokio::sync::mpsc::Sender;
 
 pub async fn format(
@@ -10,7 +11,7 @@ pub async fn format(
 ) -> Result<Option<Vec<TextEdit>>> {
     let uri = params.text_document.uri;
     let options = params.options;
-    if let Some(DocumentInfo { ast, text, .. }) = super::get_doc_info(uri, doctx).await? {
+    if let Some(AnalyzedSource { ast, text, .. }) = super::get_doc_info(uri, doctx).await? {
         let formatting_options = if options.insert_spaces {
             fmt::FormattingOptions::new(' ', options.tab_size as usize)
         } else {
@@ -34,7 +35,7 @@ mod fmt {
             BlockStatement, GlobalDeclaration, IfStatement, ProcedureDeclaration, Program,
             Statement, TypeDeclaration, WhileStatement,
         },
-        lexer::token::{Token, TokenType},
+        token::{Token, TokenType},
     };
 
     #[derive(Clone, Debug)]
