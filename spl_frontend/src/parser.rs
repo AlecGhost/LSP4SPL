@@ -2,6 +2,7 @@ use crate::{
     ast::*,
     error::{ParseErrorMessage, SplError},
     lexer::token::{IntResult, Token, TokenStream, TokenType},
+    parser::utility::{expect, ignore_until, parse_list},
     DiagnosticsBroker, ToRange,
 };
 use nom::{
@@ -12,7 +13,6 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Offset,
 };
-use utility::{expect, ignore_until1, parse_list};
 
 #[cfg(test)]
 mod tests;
@@ -544,7 +544,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
             let tokens = input.clone();
             let (input, (_, ignored)) = tuple((
                 many0(comment),
-                ignore_until1::<B, _>(peek(alt((
+                ignore_until(peek(alt((
                     recognize(symbols::lcurly),
                     recognize(symbols::rcurly),
                     recognize(symbols::semic),
@@ -620,7 +620,7 @@ impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
             input: TokenStream<B>,
         ) -> IResult<GlobalDeclaration, B> {
             let tokens = input.clone();
-            let (input, ignored) = ignore_until1(peek(alt((
+            let (input, ignored) = ignore_until(peek(alt((
                 recognize(keywords::r#type),
                 recognize(keywords::proc),
                 recognize(eof),

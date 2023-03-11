@@ -25,7 +25,7 @@ where
 /// Consumes tokens until the given pattern matches,
 /// but fails if the pattern does not match at least once.
 /// Returns all consumed tokens as `TokenStream`.
-pub(super) fn ignore_until1<'a, B: Clone, F>(
+pub(super) fn ignore_until<'a, B: Clone, F>(
     mut pattern: F,
 ) -> impl FnMut(TokenStream<'a, B>) -> IResult<TokenStream<'a, B>, B>
 where
