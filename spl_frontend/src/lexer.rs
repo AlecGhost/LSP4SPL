@@ -24,7 +24,7 @@ mod utility;
 /// Type alias for nom_locate::LocatedSpan.
 /// Tracks range inside source code during lexical analysis.
 /// Holds DiagnosticsBroker to report errors during lexing.
-pub(crate) type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
+pub type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
 
 impl<B: DiagnosticsBroker> ToRange for Span<'_, B> {
     fn to_range(&self) -> Range<usize> {

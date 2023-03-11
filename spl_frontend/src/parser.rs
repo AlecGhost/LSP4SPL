@@ -10,9 +10,9 @@ use nom::{
     combinator::{all_consuming, map, opt, peek, recognize},
     multi::many0,
     sequence::{delimited, pair, preceded, terminated, tuple},
-    InputLength, Offset,
+    Offset,
 };
-use utility::{expect, ignore_until, ignore_until1, parse_list};
+use utility::{expect, ignore_until1, parse_list};
 
 #[cfg(test)]
 mod tests;
@@ -43,9 +43,9 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
         let tokens = input.clone();
         let (input, value) = alt((
             map(hex, |token| {
-                if let TokenType::Hex(hex_result) = &token.fragment().token_type {
+                if let TokenType::Hex(hex_result) = token.token_type {
                     match hex_result {
-                        IntResult::Int(i) => Some(*i),
+                        IntResult::Int(i) => Some(i),
                         IntResult::Err(_) => None,
                     }
                 } else {
@@ -53,16 +53,16 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
                 }
             }),
             map(char, |token| {
-                if let TokenType::Char(c) = token.fragment().token_type {
+                if let TokenType::Char(c) = token.token_type {
                     Some((c as u8).into())
                 } else {
                     panic!("Invalid char parse")
                 }
             }),
             map(int, |token| {
-                if let TokenType::Int(int_result) = &token.fragment().token_type {
+                if let TokenType::Int(int_result) = token.token_type {
                     match int_result {
-                        IntResult::Int(i) => Some(*i),
+                        IntResult::Int(i) => Some(i),
                         IntResult::Err(_) => None,
                     }
                 } else {
@@ -89,7 +89,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Identifier {
         Ok((
             input,
             Self {
-                value: ident.fragment().to_string(),
+                value: ident.to_string(),
                 info: AstInfo::new(&tokens[..offset]),
             },
         ))
@@ -207,9 +207,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                     i,
                     &tokens,
                     exp,
-                    op.fragment()
-                        .token_type
-                        .clone()
+                    op.token_type
                         .try_into()
                         .expect("Operator conversion failed"),
                     parse_factor,
@@ -227,9 +225,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                     i,
                     &tokens,
                     exp,
-                    op.fragment()
-                        .token_type
-                        .clone()
+                    op.token_type
                         .try_into()
                         .expect("Operator conversion failed"),
                     parse_mul,
@@ -255,9 +251,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                     i,
                     &tokens,
                     exp,
-                    op.fragment()
-                        .token_type
-                        .clone()
+                    op.token_type
                         .try_into()
                         .expect("Operator conversion failed"),
                     parse_add,
@@ -546,54 +540,41 @@ impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
 
 impl<B: DiagnosticsBroker> Parser<B> for Statement {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+        fn parse_error<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Statement, B> {
+            let tokens = input.clone();
+            let (input, (_, ignored)) = tuple((
+                many0(comment),
+                ignore_until1::<B, _>(peek(alt((
+                    recognize(symbols::lcurly),
+                    recognize(symbols::rcurly),
+                    recognize(symbols::semic),
+                    recognize(keywords::r#if),
+                    recognize(keywords::r#while),
+                    recognize(Assignment::parse),
+                    recognize(CallStatement::parse),
+                    recognize(eof),
+                )))),
+            ))(input)?;
+            // convert into AstInfo, so that `to_range()` and `to_string()` are available
+            let ignored_info = AstInfo::new(&ignored[..]);
+            let err = SplError(
+                ignored_info.to_range(),
+                ParseErrorMessage::UnexpectedCharacters(ignored_info.to_string()).to_string(),
+            );
+            input.broker.report_error(err);
+            let offset = tokens.offset(&input);
+            let stmt = Statement::Error(AstInfo::new(&tokens[..offset]));
+            Ok((input, stmt))
+        }
+
         alt((
-            map(symbols::semic, |semic| {
-                Self::Empty(AstInfo::new(&semic[0..0]))
-            }),
+            map(symbols::semic, |semic| Self::Empty(AstInfo::new(&[semic]))),
             map(IfStatement::parse, Self::If),
             map(WhileStatement::parse, Self::While),
             map(BlockStatement::parse, Self::Block),
             map(Assignment::parse, Self::Assignment),
             map(CallStatement::parse, Self::Call),
-            map(
-                pair(
-                    Variable::parse,
-                    ignore_until::<B, _>(peek(alt((
-                        recognize(symbols::lcurly),
-                        recognize(symbols::rcurly),
-                        recognize(symbols::semic),
-                        eof,
-                    )))),
-                ),
-                |pair| {
-                    let mut var = pair.0;
-                    loop {
-                        match var {
-                            Variable::NamedVariable(ident) => {
-                                let tokens = pair.1;
-                                // tokens' input might be empty
-                                // and then we cannot use `fragment()` or `to_range()`
-                                let (end, token_string) = if tokens.input_len() > 0 {
-                                    (tokens.to_range().end, tokens.fragment().to_string())
-                                } else {
-                                    (tokens.error_pos, String::new())
-                                };
-                                let range = ident.to_range().start..end;
-                                let err = SplError(
-                                    range.clone(),
-                                    ParseErrorMessage::UnexpectedCharacters(
-                                        ident.value + &token_string,
-                                    )
-                                    .to_string(),
-                                );
-                                tokens.broker.report_error(err);
-                                return Self::Error(range);
-                            }
-                            Variable::ArrayAccess(a) => var = *a.array,
-                        }
-                    }
-                },
-            ),
+            parse_error,
         ))(input)
     }
 }
@@ -635,21 +616,31 @@ impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
 
 impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+        fn parse_error<B: DiagnosticsBroker>(
+            input: TokenStream<B>,
+        ) -> IResult<GlobalDeclaration, B> {
+            let tokens = input.clone();
+            let (input, ignored) = ignore_until1(peek(alt((
+                recognize(keywords::r#type),
+                recognize(keywords::proc),
+                recognize(eof),
+            ))))(input)?;
+            // convert into AstInfo, so that `to_range()` and `to_string()` are available
+            let ignored_info = AstInfo::new(&ignored[..]);
+            let err = SplError(
+                ignored_info.to_range(),
+                ParseErrorMessage::UnexpectedCharacters(ignored_info.to_string()).to_string(),
+            );
+            input.broker.report_error(err);
+            let offset = tokens.offset(&input);
+            let gd = GlobalDeclaration::Error(AstInfo::new(&tokens[..offset]));
+            Ok((input, gd))
+        }
+
         alt((
             map(TypeDeclaration::parse, Self::Type),
             map(ProcedureDeclaration::parse, Self::Procedure),
-            map(
-                ignore_until1(peek(alt((keywords::r#type::<B>, keywords::proc, eof)))),
-                |token| {
-                    let err = SplError(
-                        token.to_range(),
-                        ParseErrorMessage::UnexpectedCharacters(token.fragment().to_string())
-                            .to_string(),
-                    );
-                    token.broker.report_error(err);
-                    Self::Error(AstInfo::new(&token[0..0]))
-                },
-            ),
+            parse_error,
         ))(input)
     }
 }
@@ -669,11 +660,12 @@ impl<B: DiagnosticsBroker> Parser<B> for Program {
 
 // Comment parser is separated from the other token parsers,
 // because it is used in the `tag_parser` macro
-fn comment<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<TokenStream<B>, B> {
+fn comment<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Token, B> {
     let original_input = input.clone();
     let (input, tokens) = take(1usize)(input)?;
-    if matches!(tokens.fragment().token_type, TokenType::Comment(_)) {
-        Ok((input, tokens))
+    let token = tokens.fragment().clone();
+    if matches!(token.token_type, TokenType::Comment(_)) {
+        Ok((input, token))
     } else {
         Err(nom::Err::Error(nom::error::Error::new(
             original_input,
@@ -686,15 +678,16 @@ macro_rules! tag_parser {
     ($name:ident, $token_type:pat) => {
         pub(super) fn $name<B: crate::DiagnosticsBroker>(
             input: crate::lexer::token::TokenStream<B>,
-        ) -> crate::parser::IResult<crate::lexer::token::TokenStream<B>, B> {
+        ) -> crate::parser::IResult<crate::lexer::token::Token, B> {
             use crate::{lexer::token::TokenType, parser::comment};
             use nom::{bytes::complete::take, multi::many0};
             let original_input = input.clone();
             // Consume comments in front of any `tag_parser`
             let (input, _) = many0(comment)(input)?;
             let (input, tokens) = take(1usize)(input)?;
-            if matches!(tokens.fragment().token_type, $token_type) {
-                Ok((input, tokens))
+            let token = tokens.fragment().clone();
+            if matches!(token.token_type, $token_type) {
+                Ok((input, token))
             } else {
                 Err(nom::Err::Error(nom::error::Error::new(
                     original_input,

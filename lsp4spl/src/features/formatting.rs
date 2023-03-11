@@ -67,9 +67,12 @@ mod fmt {
     fn add_leading_comments(text: String, tokens: &[Token]) -> String {
         tokens
             .iter()
-            .map_while(|token| match &token.token_type {
-                TokenType::Comment(comment) => Some(String::new() + "// " + comment.trim() + "\n"),
-                _ => None,
+            .map_while(|token| {
+                if matches!(&token.token_type, TokenType::Comment(_)) {
+                    Some(token.to_string())
+                } else {
+                    None
+                }
             })
             .collect::<String>()
             + &text
@@ -78,9 +81,12 @@ mod fmt {
     fn add_all_comments(text: String, tokens: &[Token]) -> String {
         tokens
             .iter()
-            .filter_map(|token| match &token.token_type {
-                TokenType::Comment(comment) => Some(String::new() + "// " + comment.trim() + "\n"),
-                _ => None,
+            .filter_map(|token| {
+                if matches!(&token.token_type, TokenType::Comment(_)) {
+                    Some(token.to_string())
+                } else {
+                    None
+                }
             })
             .collect::<String>()
             + &text
@@ -105,18 +111,7 @@ mod fmt {
             match self {
                 Self::Type(td) => td.fmt(f),
                 Self::Procedure(pd) => pd.fmt(f),
-                Self::Error(info) => info
-                    .tokens
-                    .iter()
-                    .map(|token| token.to_string())
-                    .reduce(|acc, token| {
-                        if acc.ends_with('\n') {
-                            acc + &token
-                        } else {
-                            acc + " " + &token
-                        }
-                    })
-                    .unwrap_or_default(),
+                Self::Error(info) => format!("{}\n", info),
             }
         }
     }
@@ -190,7 +185,7 @@ mod fmt {
                 Self::If(i) => i.fmt(f),
                 Self::While(w) => w.fmt(f),
                 Self::Empty(info) => add_all_comments(";\n".to_string(), &info.tokens),
-                Self::Error(_) => String::new(),
+                Self::Error(info) => format!("{}\n", info),
             }
         }
     }

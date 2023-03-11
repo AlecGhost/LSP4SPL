@@ -237,7 +237,7 @@ pub enum Statement {
     If(IfStatement),
     While(WhileStatement),
     Block(BlockStatement),
-    Error(Range<usize>),
+    Error(AstInfo),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
@@ -260,6 +260,24 @@ pub enum GlobalDeclaration {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Program {
     pub global_declarations: Vec<GlobalDeclaration>,
+}
+
+impl Display for AstInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display = self
+            .tokens
+            .iter()
+            .map(|token| token.to_string())
+            .reduce(|acc, token| {
+                if acc.ends_with('\n') {
+                    acc + &token
+                } else {
+                    acc + " " + &token
+                }
+            })
+            .unwrap_or_default();
+        write!(f, "{}", display)
+    }
 }
 
 impl Display for Identifier {

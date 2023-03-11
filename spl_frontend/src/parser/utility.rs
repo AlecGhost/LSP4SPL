@@ -22,36 +22,9 @@ where
     }
 }
 
-/// Consumes tokens until the given pattern matches.
-/// Returns all consumed tokens as `Tokens`.
-pub(super) fn ignore_until<'a, B: Clone, F>(
-    mut pattern: F,
-) -> impl FnMut(TokenStream<'a, B>) -> IResult<TokenStream<'a, B>, B>
-where
-    F: InnerParser<'a, TokenStream<'a, B>, B>,
-{
-    move |mut i: TokenStream<B>| {
-        let original_input = i.clone();
-        loop {
-            match pattern.parse(i.clone()) {
-                Ok((i1, _)) => {
-                    // source: https://stackoverflow.com/a/73004814
-                    // compares remaining input with original input and returns the difference
-                    let offset = original_input.offset(&i1);
-                    let output = original_input.take(offset);
-                    return Ok((i1, output));
-                }
-                Err(nom::Err::Error(_)) => match take(1u32)(i.clone()) {
-                    Ok((i1, _)) => i = i1,
-                    Err(e) => return Err(e),
-                },
-                Err(e) => return Err(e),
-            };
-        }
-    }
-}
-
-/// Like `ignore_until`, but fails if the pattern does not match at least once.
+/// Consumes tokens until the given pattern matches,
+/// but fails if the pattern does not match at least once.
+/// Returns all consumed tokens as `TokenStream`.
 pub(super) fn ignore_until1<'a, B: Clone, F>(
     mut pattern: F,
 ) -> impl FnMut(TokenStream<'a, B>) -> IResult<TokenStream<'a, B>, B>

@@ -47,6 +47,12 @@ impl Token {
     }
 }
 
+impl ToRange for Token {
+    fn to_range(&self) -> Range<usize> {
+        self.range.clone()
+    }
+}
+
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.token_type)
@@ -171,7 +177,7 @@ impl TokenType {
         )
     }
 
-    pub(super) fn as_static_str(&self) -> Option<&'static str> {
+    pub(super) const fn as_static_str(&self) -> Option<&'static str> {
         use TokenType::*;
         match self {
             LParen => Some(LPAREN),
@@ -213,7 +219,7 @@ impl std::fmt::Display for TokenType {
         use TokenType::*;
         let string = match self {
             Ident(s) | Unknown(s) => s.to_string(),
-            Comment(s) => format!("// {}\n", s),
+            Comment(s) => format!("// {}\n", s.trim()),
             Char(c) => {
                 if c == &'\n' {
                     "'\\n'".to_string()
