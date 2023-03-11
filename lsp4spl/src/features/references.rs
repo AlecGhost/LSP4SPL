@@ -239,8 +239,10 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
             }
             ArrayAccess(a) => {
                 let mut idents = find_in_variable(&a.array, name);
-                let mut new_idents = find_in_expression(&a.index, name);
-                idents.append(&mut new_idents);
+                if let Some(index) = &a.index {
+                    let mut new_idents = find_in_expression(index, name);
+                    idents.append(&mut new_idents);
+                }
                 idents
             }
         }

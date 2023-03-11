@@ -239,7 +239,7 @@ impl std::fmt::Display for TokenType {
 }
 
 #[derive(Clone, Debug)]
-pub struct Tokens<'a, B> {
+pub struct TokenStream<'a, B> {
     tokens: &'a [Token],
     pub broker: B,
     // error_pos is the end position of the previous token
@@ -248,7 +248,7 @@ pub struct Tokens<'a, B> {
 
 /// source: [Stackoverflow](https://stackoverflow.com/a/57203324)
 /// enables indexing and slicing
-impl<'a, B, Idx> std::ops::Index<Idx> for Tokens<'a, B>
+impl<'a, B, Idx> std::ops::Index<Idx> for TokenStream<'a, B>
 where
     Idx: std::slice::SliceIndex<[Token]>,
 {
@@ -259,7 +259,7 @@ where
     }
 }
 
-impl<'a, B: Clone> Tokens<'a, B> {
+impl<'a, B: Clone> TokenStream<'a, B> {
     pub const fn new(tokens: &'a [Token], broker: B) -> Self {
         Self {
             tokens,
@@ -279,19 +279,19 @@ impl<'a, B: Clone> Tokens<'a, B> {
     }
 }
 
-impl<'a, B: Clone> ToRange for Tokens<'a, B> {
+impl<'a, B: Clone> ToRange for TokenStream<'a, B> {
     fn to_range(&self) -> Range<usize> {
         self.fragment().range.clone()
     }
 }
 
-impl<'a, B: Clone> nom::InputLength for Tokens<'a, B> {
+impl<'a, B: Clone> nom::InputLength for TokenStream<'a, B> {
     fn input_len(&self) -> usize {
         self.tokens.len()
     }
 }
 
-impl<'a, B: Clone> nom::InputTake for Tokens<'a, B> {
+impl<'a, B: Clone> nom::InputTake for TokenStream<'a, B> {
     fn take(&self, count: usize) -> Self {
         Self {
             tokens: &self.tokens[0..count],
@@ -321,7 +321,7 @@ impl<'a, B: Clone> nom::InputTake for Tokens<'a, B> {
 }
 
 /// source: [nom traits](https://docs.rs/nom/latest/src/nom/traits.rs.html#62-69)
-impl<'a, B> nom::Offset for Tokens<'a, B> {
+impl<'a, B> nom::Offset for TokenStream<'a, B> {
     fn offset(&self, second: &Self) -> usize {
         let fst = self.tokens.as_ptr();
         let snd = second.tokens.as_ptr();
@@ -333,7 +333,7 @@ impl<'a, B> nom::Offset for Tokens<'a, B> {
     }
 }
 
-impl<'a, B: Clone> nom::Slice<RangeTo<usize>> for Tokens<'a, B> {
+impl<'a, B: Clone> nom::Slice<RangeTo<usize>> for TokenStream<'a, B> {
     fn slice(&self, range: RangeTo<usize>) -> Self {
         // if no previous token exists, error_pos stays 0
         let error_pos = if range.end > 0 {
@@ -350,7 +350,7 @@ impl<'a, B: Clone> nom::Slice<RangeTo<usize>> for Tokens<'a, B> {
 }
 
 /// source: [Monkey Rust lexer](https://github.com/Rydgel/monkey-rust/blob/master/lib/lexer/token.rs)
-impl<'a, B: Clone> nom::InputIter for Tokens<'a, B> {
+impl<'a, B: Clone> nom::InputIter for TokenStream<'a, B> {
     type Item = &'a Token;
     type Iter = Enumerate<::std::slice::Iter<'a, Token>>;
     type IterElem = ::std::slice::Iter<'a, Token>;

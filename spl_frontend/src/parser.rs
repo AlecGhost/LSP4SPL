@@ -1,7 +1,7 @@
 use crate::{
     ast::*,
     error::{ParseErrorMessage, SplError},
-    lexer::token::{IntResult, Token, TokenType, Tokens},
+    lexer::token::{IntResult, Token, TokenStream, TokenType},
     DiagnosticsBroker, ToRange,
 };
 use nom::{
@@ -12,15 +12,13 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     InputLength, Offset,
 };
-use utility::{expect, ignore_until, ignore_until1};
-
-use self::utility::parse_list;
+use utility::{expect, ignore_until, ignore_until1, parse_list};
 
 #[cfg(test)]
 mod tests;
 mod utility;
 
-type IResult<'a, T, B> = nom::IResult<Tokens<'a, B>, T>;
+type IResult<'a, T, B> = nom::IResult<TokenStream<'a, B>, T>;
 
 /// Parses the given tokens and returns an AST.
 /// Errors are reported by the specified broker.
@@ -29,7 +27,7 @@ type IResult<'a, T, B> = nom::IResult<Tokens<'a, B>, T>;
 ///
 /// Panics if parsing fails.
 pub(crate) fn parse<B: DiagnosticsBroker>(input: &[Token], broker: B) -> Program {
-    let input = Tokens::new(input, broker);
+    let input = TokenStream::new(input, broker);
     let (_, program) = all_consuming(Program::parse)(input).expect("Parser cannot fail");
     program
 }
@@ -37,11 +35,11 @@ pub(crate) fn parse<B: DiagnosticsBroker>(input: &[Token], broker: B) -> Program
 /// Try to parse token stream.
 /// Implemented by all AST nodes.
 trait Parser<B>: Sized {
-    fn parse(input: Tokens<B>) -> IResult<Self, B>;
+    fn parse(input: TokenStream<B>) -> IResult<Self, B>;
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, value) = alt((
             map(hex, |token| {
@@ -84,7 +82,7 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Identifier {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, ident) = ident(input)?;
         let offset = tokens.offset(&input);
@@ -99,21 +97,24 @@ impl<B: DiagnosticsBroker> Parser<B> for Identifier {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Variable {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
-        let (input, (mut variable, accesses)) = tuple((
+        let (input, (mut variable, accesses)) = pair(
             map(Identifier::parse, Self::NamedVariable),
             many0(delimited(
                 symbols::lbracket,
-                Expression::parse,
-                symbols::rbracket,
+                expect(
+                    Expression::parse,
+                    ParseErrorMessage::ExpectedToken("expression".to_string()),
+                ),
+                expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
             )),
-        ))(input)?;
+        )(input)?;
         for access in accesses {
             let offset = tokens.offset(&input);
             variable = Self::ArrayAccess(ArrayAccess {
                 array: Box::new(variable),
-                index: Box::new(access),
+                index: access.map(Box::new),
                 info: AstInfo::new(&tokens[..offset]),
             });
         }
@@ -122,8 +123,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Variable {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Expression {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        fn parse_bracketed<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+        fn parse_bracketed<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Bracketed := "(" Expr ")"
             let tokens = input.clone();
             let (input, (lparen, expr, _)) = tuple((
@@ -144,7 +145,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, bracketed))
         }
 
-        fn parse_primary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+        fn parse_primary<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Primary := IntLit | Variable | Bracketed
             alt((
                 map(IntLiteral::parse, Expression::IntLiteral),
@@ -153,7 +154,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             ))(input)
         }
 
-        fn parse_unary<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+        fn parse_unary<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Unary := "-" Primary
             let tokens = input.clone();
             let (input, primary) = preceded(symbols::minus, parse_factor)(input)?;
@@ -166,20 +167,20 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, expr))
         }
 
-        fn parse_factor<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+        fn parse_factor<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Factor := Primary | Unary
             alt((parse_primary, parse_unary))(input)
         }
 
         fn parse_rhs<'a, P, B: DiagnosticsBroker>(
-            input: Tokens<'a, B>,
-            tokens: &Tokens<B>,
+            input: TokenStream<'a, B>,
+            tokens: &TokenStream<B>,
             lhs: Expression,
             operator: Operator,
             parser: P,
         ) -> IResult<'a, Expression, B>
         where
-            P: Fn(Tokens<B>) -> IResult<Expression, B>,
+            P: Fn(TokenStream<B>) -> IResult<Expression, B>,
         {
             let (input, rhs) = expect(
                 parser,
@@ -197,7 +198,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, exp))
         }
 
-        fn parse_mul<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+        fn parse_mul<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Mul := Factor (("*" | "/") Factor)*
             let tokens = input.clone();
             let (mut input, mut exp) = parse_factor(input)?;
@@ -217,7 +218,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, exp))
         }
 
-        fn parse_add<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+        fn parse_add<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Add := Mul (("+" | "-") Mul)*
             let tokens = input.clone();
             let (mut input, mut exp) = parse_mul(input)?;
@@ -237,7 +238,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, exp))
         }
 
-        fn parse_comparison<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Expression, B> {
+        fn parse_comparison<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Comp := Add (("=" | "#" | "<" | "<=" | ">" | ">=") Add)?
             let tokens = input.clone();
             let (mut input, mut exp) = parse_add(input)?;
@@ -271,8 +272,10 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
-        fn parse_array_type<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<TypeExpression, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+        fn parse_array_type<B: DiagnosticsBroker>(
+            input: TokenStream<B>,
+        ) -> IResult<TypeExpression, B> {
             let tokens = input.clone();
             let (input, (_, _, size, _, _, type_expr)) = tuple((
                 keywords::array,
@@ -310,7 +313,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, (_, name, _, type_expr, _)) = tuple((
             keywords::r#type,
@@ -341,7 +344,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, (_, name, _, type_expr, _)) = tuple((
             keywords::var,
@@ -372,7 +375,7 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, ((ref_kw, name), _, type_expr)) = tuple((
             alt((
@@ -412,7 +415,7 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, (name, arguments, _, _)) = tuple((
             terminated(Identifier::parse, symbols::lparen),
@@ -436,7 +439,7 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Assignment {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, (variable, expr, _)) = tuple((
             terminated(Variable::parse, symbols::assign),
@@ -459,7 +462,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, (_, _, condition, _, if_branch, else_branch)) = tuple((
             keywords::r#if,
@@ -495,7 +498,7 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, (_, _, condition, _, stmt)) = tuple((
             keywords::r#while,
@@ -523,7 +526,7 @@ impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, statements) = delimited(
             symbols::lcurly,
@@ -542,7 +545,7 @@ impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Statement {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         alt((
             map(symbols::semic, |semic| {
                 Self::Empty(AstInfo::new(&semic[0..0]))
@@ -596,7 +599,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, (_, name, _, parameters, _, _, variable_declarations, statements, _)) =
             tuple((
@@ -631,7 +634,7 @@ impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         alt((
             map(TypeDeclaration::parse, Self::Type),
             map(ProcedureDeclaration::parse, Self::Procedure),
@@ -652,7 +655,7 @@ impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Program {
-    fn parse(input: Tokens<B>) -> IResult<Self, B> {
+    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let (input, global_declarations) = many0(GlobalDeclaration::parse)(input)?;
         let (input, _) = eof(input)?;
         Ok((
@@ -666,7 +669,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Program {
 
 // Comment parser is separated from the other token parsers,
 // because it is used in the `tag_parser` macro
-fn comment<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Tokens<B>, B> {
+fn comment<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<TokenStream<B>, B> {
     let original_input = input.clone();
     let (input, tokens) = take(1usize)(input)?;
     if matches!(tokens.fragment().token_type, TokenType::Comment(_)) {
@@ -682,8 +685,8 @@ fn comment<B: DiagnosticsBroker>(input: Tokens<B>) -> IResult<Tokens<B>, B> {
 macro_rules! tag_parser {
     ($name:ident, $token_type:pat) => {
         pub(super) fn $name<B: crate::DiagnosticsBroker>(
-            input: crate::lexer::token::Tokens<B>,
-        ) -> crate::parser::IResult<crate::lexer::token::Tokens<B>, B> {
+            input: crate::lexer::token::TokenStream<B>,
+        ) -> crate::parser::IResult<crate::lexer::token::TokenStream<B>, B> {
             use crate::{lexer::token::TokenType, parser::comment};
             use nom::{bytes::complete::take, multi::many0};
             let original_input = input.clone();

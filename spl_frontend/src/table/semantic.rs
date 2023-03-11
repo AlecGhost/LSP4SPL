@@ -226,13 +226,15 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Variable {
 
 impl<B: DiagnosticsBroker> AnalyzeExpression<B> for ArrayAccess {
     fn analyze(&self, table: &LookupTable, broker: &B) -> Option<DataType> {
-        let index_type = self.index.analyze(table, broker);
-        if index_type != Some(DataType::Int) {
-            broker.report_error(SplError(
-                self.index.to_range(),
-                SemanticErrorMessage::IndexingWithNonInteger.to_string(),
-            ));
-        };
+        if let Some(index) = &self.index {
+            let index_type = index.analyze(table, broker);
+            if index_type != Some(DataType::Int) {
+                broker.report_error(SplError(
+                    index.to_range(),
+                    SemanticErrorMessage::IndexingWithNonInteger.to_string(),
+                ));
+            };
+        }
         self.array
             .analyze(table, broker)
             .and_then(|array_type| match array_type {

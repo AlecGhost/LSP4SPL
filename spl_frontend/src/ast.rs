@@ -1,11 +1,10 @@
 //! Contains structs and enums for all AST nodes
-use spl_frontend_macros::ToRange;
-
 use crate::{
     error::OperatorConversionError,
     lexer::token::{Token, TokenType},
     ToRange,
 };
+use spl_frontend_macros::ToRange;
 use std::{fmt::Display, ops::Range};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
@@ -66,7 +65,7 @@ impl Identifier {
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
 pub struct ArrayAccess {
     pub array: Box<Variable>,
-    pub index: Box<Expression>,
+    pub index: Option<Box<Expression>>,
     pub info: AstInfo,
 }
 
@@ -310,7 +309,8 @@ impl Display for Operator {
 
 impl Display for ArrayAccess {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}[{}]", self.array, self.index)
+        let index = fmt_or_empty(&self.index);
+        write!(f, "{}[{}]", self.array, index)
     }
 }
 

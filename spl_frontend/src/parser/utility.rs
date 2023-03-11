@@ -1,5 +1,5 @@
 use super::IResult;
-use crate::{error::ParseErrorMessage, lexer::token::Tokens, DiagnosticsBroker};
+use crate::{error::ParseErrorMessage, lexer::token::TokenStream, DiagnosticsBroker};
 use nom::{
     bytes::complete::take,
     combinator::opt,
@@ -10,14 +10,14 @@ use nom::{
 };
 
 pub(super) trait InnerParser<'a, O, B> {
-    fn parse(&mut self, input: Tokens<'a, B>) -> IResult<'a, O, B>;
+    fn parse(&mut self, input: TokenStream<'a, B>) -> IResult<'a, O, B>;
 }
 
 impl<'a, O, B, F> InnerParser<'a, O, B> for F
 where
-    F: FnMut(Tokens<'a, B>) -> IResult<'a, O, B>,
+    F: FnMut(TokenStream<'a, B>) -> IResult<'a, O, B>,
 {
-    fn parse(&mut self, input: Tokens<'a, B>) -> IResult<'a, O, B> {
+    fn parse(&mut self, input: TokenStream<'a, B>) -> IResult<'a, O, B> {
         self(input)
     }
 }
@@ -26,11 +26,11 @@ where
 /// Returns all consumed tokens as `Tokens`.
 pub(super) fn ignore_until<'a, B: Clone, F>(
     mut pattern: F,
-) -> impl FnMut(Tokens<'a, B>) -> IResult<Tokens<'a, B>, B>
+) -> impl FnMut(TokenStream<'a, B>) -> IResult<TokenStream<'a, B>, B>
 where
-    F: InnerParser<'a, Tokens<'a, B>, B>,
+    F: InnerParser<'a, TokenStream<'a, B>, B>,
 {
-    move |mut i: Tokens<B>| {
+    move |mut i: TokenStream<B>| {
         let original_input = i.clone();
         loop {
             match pattern.parse(i.clone()) {
@@ -54,11 +54,11 @@ where
 /// Like `ignore_until`, but fails if the pattern does not match at least once.
 pub(super) fn ignore_until1<'a, B: Clone, F>(
     mut pattern: F,
-) -> impl FnMut(Tokens<'a, B>) -> IResult<Tokens<'a, B>, B>
+) -> impl FnMut(TokenStream<'a, B>) -> IResult<TokenStream<'a, B>, B>
 where
-    F: InnerParser<'a, Tokens<'a, B>, B>,
+    F: InnerParser<'a, TokenStream<'a, B>, B>,
 {
-    move |mut i: Tokens<B>| {
+    move |mut i: TokenStream<B>| {
         if let Ok((i1, _)) = pattern.parse(i.clone()) {
             return Err(nom::Err::Error(nom::error::ParseError::from_error_kind(
                 i1,
@@ -88,21 +88,23 @@ where
 /// Tries to parse the input with the given parser.
 /// If parsing succeeds, the result of inner is returned.
 /// If parsing fails, an error with the given message is reported.
+/// Source: [Eyal Kalderon](https://eyalkalderon.com/blog/nom-error-recovery/)
 pub(super) fn expect<'a, O, B: DiagnosticsBroker, F>(
     mut parser: F,
     error_msg: ParseErrorMessage,
-) -> impl FnMut(Tokens<'a, B>) -> IResult<Option<O>, B>
+) -> impl FnMut(TokenStream<'a, B>) -> IResult<Option<O>, B>
 where
     F: InnerParser<'a, O, B>,
 {
-    move |input: Tokens<B>| match parser.parse(input.clone()) {
+    move |input: TokenStream<B>| match parser.parse(input) {
         Ok((input, out)) => Ok((input, Some(out))),
-        Err(_) => {
-            let pos = input.error_pos;
-            let err = crate::error::SplError(pos..pos, error_msg.to_string());
-            input.broker.report_error(err);
-            Ok((input, None))
+        Err(nom::Err::Failure(err) | nom::Err::Error(err)) => {
+            let pos = err.input.error_pos;
+            let spl_error = crate::error::SplError(pos..pos, error_msg.to_string());
+            err.input.broker.report_error(spl_error);
+            Ok((err.input, None))
         }
+        Err(_) => panic!("Incomplete data"),
     }
 }
 
@@ -110,13 +112,13 @@ where
 pub(super) fn parse_list<'a, O, B: DiagnosticsBroker, F>(
     mut parser: F,
     error_msg: ParseErrorMessage,
-) -> impl FnMut(Tokens<'a, B>) -> IResult<Vec<O>, B>
+) -> impl FnMut(TokenStream<'a, B>) -> IResult<Vec<O>, B>
 where
     F: InnerParser<'a, O, B>,
 {
     // Create new parser from closure because `InnerParser` must be used with `parse` function
     let mut parser = move |input| parser.parse(input);
-    move |input: Tokens<B>| {
+    move |input: TokenStream<B>| {
         let (input, mut list) = many0(terminated(&mut parser, super::symbols::comma))(input)?;
         let (input, opt_argument) = if list.is_empty() {
             opt(&mut parser)(input)?
