@@ -10,7 +10,6 @@ fn simple() {
             GlobalEntry::Procedure(ProcedureEntry {
                 name: Identifier::new("main".to_string(), &tokens[1..2]),
                 local_table: LocalTable::default(),
-                parameters: Vec::new(),
                 doc: None,
             })
         )])
@@ -51,7 +50,6 @@ fn redeclaration() {
             GlobalEntry::Procedure(ProcedureEntry {
                 name: Identifier::new("main".to_string(), &tokens[6..7]),
                 local_table: LocalTable::default(),
-                parameters: Vec::new(),
                 doc: None,
             })
         )])
@@ -85,12 +83,6 @@ fn main_with_params() {
                         })
                     )])
                 },
-                parameters: vec![VariableEntry {
-                    name: Identifier::new("a".to_string(), &tokens[3..4]),
-                    is_ref: false,
-                    data_type: Some(DataType::Int),
-                    doc: None,
-                }],
                 doc: None,
             })
         )])

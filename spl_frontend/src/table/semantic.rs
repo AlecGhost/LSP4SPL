@@ -108,7 +108,8 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
             |entry| {
                 if let Entry::Procedure(proc_entry) = &entry {
                     let arg_len = self.arguments.len();
-                    let param_len = proc_entry.parameters.len();
+                    let params = proc_entry.parameters();
+                    let param_len = params.len();
                     match arg_len.cmp(&param_len) {
                         Ordering::Less => {
                             broker.report_error(SplError(
@@ -127,7 +128,7 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                         Ordering::Equal => {}
                     };
                     for (i, (arg, param)) in
-                        std::iter::zip(&self.arguments, &proc_entry.parameters).enumerate()
+                        std::iter::zip(&self.arguments, params).enumerate()
                     {
                         if param.is_ref && !matches!(arg, Expression::Variable(_)) {
                             broker.report_error(SplError(

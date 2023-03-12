@@ -60,13 +60,23 @@ pub struct TypeEntry {
 pub struct ProcedureEntry {
     pub name: Identifier,
     pub local_table: LocalTable,
-    pub parameters: Vec<VariableEntry>,
     pub doc: Option<String>,
 }
 
 impl ProcedureEntry {
     pub fn is_default(&self) -> bool {
         initialization::DEFAULT_ENTRIES.contains(&self.name.value.as_str())
+    }
+
+    pub fn parameters(&self) -> Vec<&VariableEntry> {
+        self.local_table
+            .entries
+            .values()
+            .filter_map(|entry| match &entry {
+                LocalEntry::Parameter(param_entry) => Some(param_entry),
+                LocalEntry::Variable(_) => None,
+            })
+            .collect()
     }
 }
 
@@ -248,7 +258,7 @@ impl Display for ProcedureEntry {
             f,
             "proc {}({})",
             self.name,
-            self.parameters
+            self.parameters()
                 .iter()
                 .map(|param| param.to_string())
                 .collect::<Vec<_>>()

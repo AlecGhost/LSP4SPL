@@ -1,11 +1,15 @@
 use crate::{
     ast::*,
-    error::{SplError, BuildErrorMessage},
+    error::{BuildErrorMessage, SplError},
     lexer::token::{Token, TokenType},
-    ToRange, DiagnosticsBroker, table::Entry,
+    table::Entry,
+    DiagnosticsBroker, ToRange,
 };
 
-use super::{GlobalTable, SymbolTable, GlobalEntry, LookupTable, TypeEntry, LocalTable, ProcedureEntry, VariableEntry, LocalEntry, DataType};
+use super::{
+    DataType, GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, ProcedureEntry,
+    SymbolTable, TypeEntry, VariableEntry,
+};
 
 #[cfg(test)]
 mod tests;
@@ -34,7 +38,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
             || broker.report_error(SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())),
             |entry| {
                 if let GlobalEntry::Procedure(main) = &entry {
-                    if !main.parameters.is_empty() {
+                    if !main.parameters().is_empty() {
                         broker.report_error(SplError(
                             main.name.to_range(),
                             BuildErrorMessage::MainMustNotHaveParameters.to_string(),
@@ -77,12 +81,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
                 name.to_string(),
                 GlobalEntry::Type(TypeEntry {
                     name: name.clone(),
-                    data_type: get_data_type(
-                        &self.type_expr,
-                        &self.name,
-                        &lookup_table,
-                        broker,
-                    ),
+                    data_type: get_data_type(&self.type_expr, &self.name, &lookup_table, broker),
                     doc: documentation,
                 }),
                 || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsType)),
@@ -96,18 +95,15 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
         if let Some(name) = &self.name {
             let documentation = get_documentation(&self.info.tokens);
             let mut local_table = LocalTable::default();
-            let parameters = self
-                .parameters
+            self.parameters
                 .iter()
-                .filter_map(|param| build_parameter(param, table, &mut local_table, broker))
-                .collect();
+                .for_each(|param| build_parameter(param, table, &mut local_table, broker));
             self.variable_declarations
                 .iter()
                 .for_each(|dec| build_variable(dec, table, &mut local_table, broker));
             let entry = ProcedureEntry {
                 name: name.clone(),
                 local_table,
-                parameters,
                 doc: documentation,
             };
             table.enter(name.to_string(), GlobalEntry::Procedure(entry), || {
@@ -122,8 +118,8 @@ fn build_parameter<B: DiagnosticsBroker>(
     global_table: &GlobalTable,
     local_table: &mut LocalTable,
     broker: &B,
-) -> Option<VariableEntry> {
-    param.name.as_ref().map(|name| {
+) {
+    if let Some(name) = &param.name {
         let documentation = get_documentation(&param.info.tokens);
         let lookup_table = LookupTable {
             global_table: Some(global_table),
@@ -140,13 +136,10 @@ fn build_parameter<B: DiagnosticsBroker>(
                 broker.report_error(name.to_error(BuildErrorMessage::MustBeAReferenceParameter));
             }
         }
-        local_table.enter(
-            name.to_string(),
-            LocalEntry::Parameter(param_entry.clone()),
-            || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter)),
-        );
-        param_entry
-    })
+        local_table.enter(name.to_string(), LocalEntry::Parameter(param_entry), || {
+            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter))
+        });
+    }
 }
 
 fn build_variable<B: DiagnosticsBroker>(

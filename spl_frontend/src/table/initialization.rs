@@ -1,7 +1,7 @@
 use super::{DataType, GlobalTable, LocalTable, TypeEntry};
 use crate::{
     ast::Identifier,
-    table::{GlobalEntry, ProcedureEntry, VariableEntry},
+    table::{GlobalEntry, LocalEntry, ProcedureEntry, VariableEntry},
 };
 use std::collections::HashMap;
 
@@ -28,10 +28,13 @@ impl GlobalTable {
             documentation: &str,
             parameters: Vec<VariableEntry>,
         ) -> GlobalEntry {
+            let param_map = parameters
+                .into_iter()
+                .map(|param| (param.name.value.clone(), LocalEntry::Parameter(param)))
+                .collect();
             GlobalEntry::Procedure(ProcedureEntry {
                 name,
-                local_table: LocalTable::default(),
-                parameters,
+                local_table: LocalTable { entries: param_map },
                 doc: Some(documentation.to_string()),
             })
         }
