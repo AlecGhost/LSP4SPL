@@ -3,10 +3,10 @@ use color_eyre::eyre::Result;
 use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentation, MarkupKind};
 use spl_frontend::{
     ast::{GlobalDeclaration, ProcedureDeclaration, Statement, TypeDeclaration},
-    token::{Token, TokenList, TokenType},
     table::{
         GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, SymbolTable, TableEntry,
     },
+    token::{Token, TokenList, TokenType},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -30,7 +30,7 @@ pub async fn propose(
             match gd {
                 Type(td) => Ok(complete_type(td, position, table)),
                 Procedure(pd) => Ok(complete_procedure(pd, position, table)),
-                Error(_) => Ok(None),
+                Error(_) => Ok(Some(new_global_declaration(table))),
             }
         } else {
             // fixes, that a cursor at the end of an unfinished type declaration at the end of the
@@ -45,18 +45,7 @@ pub async fn propose(
             // The cursor is not inside the scope of any global declaration,
             // which means, that a new one can be startet with the `proc` or `type` keywords.
             // Furthermore, some snippets are provided for those definitions
-            let mut completions = vec![
-                snippets::proc(),
-                snippets::r#type(),
-                items::proc(),
-                items::r#type(),
-            ];
-            if let Some(GlobalEntry::Procedure(_)) = cursor.doc_info.table.lookup("main") {
-                // main already exists
-            } else {
-                completions.push(snippets::main());
-            }
-            Ok(Some(completions))
+            Ok(Some(new_global_declaration(table)))
         }
     } else {
         Ok(None)
@@ -307,6 +296,21 @@ fn new_stmt(lookup_table: &LookupTable) -> Vec<CompletionItem> {
             .map_or_else(Vec::new, search_procedures),
     ]
     .concat()
+}
+
+fn new_global_declaration(global_table: &GlobalTable) -> Vec<CompletionItem> {
+    let mut completions = vec![
+        snippets::proc(),
+        snippets::r#type(),
+        items::proc(),
+        items::r#type(),
+    ];
+    if let Some(GlobalEntry::Procedure(_)) = global_table.lookup("main") {
+        // main already exists
+    } else {
+        completions.push(snippets::main());
+    }
+    completions
 }
 
 mod items {
