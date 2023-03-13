@@ -1,6 +1,6 @@
 use crate::ast::Identifier;
 use crate::lexer::token::TokenType;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::ops::Range;
 use thiserror::Error;
 
@@ -20,7 +20,8 @@ impl Identifier {
                 .iter()
                 .find(|token| matches!(token.token_type, TokenType::Ident(_)))
                 .expect("Identifier must contain ident token")
-                .range.clone(),
+                .range
+                .clone(),
             msg(self.value.clone()).to_string(),
         )
     }
@@ -173,18 +174,35 @@ impl Display for SemanticErrorMessage {
 }
 
 #[derive(Debug, Error)]
-pub struct OperatorConversionError<T: Display> {
+pub struct OperatorConversionError<T: Debug> {
     item: T,
 }
 
-impl<T: Display> OperatorConversionError<T> {
+impl<T: Debug> OperatorConversionError<T> {
     pub const fn new(item: T) -> Self {
         Self { item }
     }
 }
 
-impl<T: Display> Display for OperatorConversionError<T> {
+impl<T: Debug> Display for OperatorConversionError<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Cannot convert {} to an operator", self.item)
+        writeln!(f, "Cannot convert `{:?}` to an operator", self.item)
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct KeyAlreadyExistsError<T: Debug> {
+    key: T,
+}
+
+impl<T: Debug> KeyAlreadyExistsError<T> {
+    pub const fn new(key: T) -> Self {
+        Self { key }
+    }
+}
+
+impl<T: Debug> Display for KeyAlreadyExistsError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Key `{:?}` already exists", self.key)
     }
 }

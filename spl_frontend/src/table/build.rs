@@ -1,14 +1,13 @@
+use super::{
+    DataType, GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, ProcedureEntry,
+    SymbolTable, TypeEntry, VariableEntry,
+};
 use crate::{
     ast::*,
     error::{BuildErrorMessage, SplError},
     lexer::token::{Token, TokenType},
     table::Entry,
     DiagnosticsBroker, ToRange,
-};
-
-use super::{
-    DataType, GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, ProcedureEntry,
-    SymbolTable, TypeEntry, VariableEntry,
 };
 
 #[cfg(test)]
@@ -77,15 +76,24 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for TypeDeclaration {
                 global_table: Some(table),
                 local_table: None,
             };
-            table.enter(
-                name.to_string(),
-                GlobalEntry::Type(TypeEntry {
-                    name: name.clone(),
-                    data_type: get_data_type(&self.type_expr, &self.name, &lookup_table, broker),
-                    doc: documentation,
-                }),
-                || broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsType)),
-            );
+            if table
+                .enter(
+                    name.to_string(),
+                    GlobalEntry::Type(TypeEntry {
+                        name: name.clone(),
+                        data_type: get_data_type(
+                            &self.type_expr,
+                            &self.name,
+                            &lookup_table,
+                            broker,
+                        ),
+                        doc: documentation,
+                    }),
+                )
+                .is_err()
+            {
+                broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsType));
+            }
         }
     }
 }
@@ -106,9 +114,12 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
                 local_table,
                 doc: documentation,
             };
-            table.enter(name.to_string(), GlobalEntry::Procedure(entry), || {
+            if table
+                .enter(name.to_string(), GlobalEntry::Procedure(entry))
+                .is_err()
+            {
                 broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsProcedure));
-            });
+            }
         }
     }
 }
@@ -136,9 +147,12 @@ fn build_parameter<B: DiagnosticsBroker>(
                 broker.report_error(name.to_error(BuildErrorMessage::MustBeAReferenceParameter));
             }
         }
-        local_table.enter(name.to_string(), LocalEntry::Parameter(param_entry), || {
+        if local_table
+            .enter(name.to_string(), LocalEntry::Parameter(param_entry))
+            .is_err()
+        {
             broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter))
-        });
+        }
     }
 }
 
@@ -164,9 +178,12 @@ fn build_variable<B: DiagnosticsBroker>(
             ),
             doc: documentation,
         };
-        local_table.enter(name.to_string(), LocalEntry::Variable(entry), || {
+        if local_table
+            .enter(name.to_string(), LocalEntry::Variable(entry))
+            .is_err()
+        {
             broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsVariable));
-        });
+        }
     }
 }
 

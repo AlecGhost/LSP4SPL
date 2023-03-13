@@ -1,7 +1,11 @@
-use crate::{ast::Identifier, ToRange};
+use crate::{ast::Identifier, error::KeyAlreadyExistsError, ToRange};
 pub(crate) use build::build;
 pub(crate) use semantic::analyze;
-use std::{collections::HashMap, fmt::Display, ops::Range};
+use std::{
+    collections::{hash_map, HashMap},
+    fmt::Display,
+    ops::Range,
+};
 
 mod build;
 mod initialization;
@@ -10,7 +14,11 @@ mod semantic;
 pub trait SymbolTable {
     type Value;
     fn lookup(&self, key: &str) -> Option<&Self::Value>;
-    fn enter(&mut self, key: String, value: Self::Value, on_error: impl FnMut());
+    fn enter(
+        &mut self,
+        key: String,
+        value: Self::Value,
+    ) -> Result<(), KeyAlreadyExistsError<String>>;
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -112,11 +120,17 @@ impl SymbolTable for GlobalTable {
         self.entries.get(key)
     }
 
-    fn enter(&mut self, key: String, value: GlobalEntry, mut on_error: impl FnMut()) {
-        if let std::collections::hash_map::Entry::Vacant(v) = self.entries.entry(key) {
-            v.insert(value);
-        } else {
-            on_error();
+    fn enter(
+        &mut self,
+        key: String,
+        value: GlobalEntry,
+    ) -> Result<(), KeyAlreadyExistsError<String>> {
+        match self.entries.entry(key) {
+            hash_map::Entry::Vacant(v) => {
+                v.insert(value);
+                Ok(())
+            }
+            hash_map::Entry::Occupied(o) => Err(KeyAlreadyExistsError::new(o.key().clone())),
         }
     }
 }
@@ -128,11 +142,17 @@ impl SymbolTable for LocalTable {
         self.entries.get(key)
     }
 
-    fn enter(&mut self, key: String, value: LocalEntry, mut on_error: impl FnMut()) {
-        if let std::collections::hash_map::Entry::Vacant(v) = self.entries.entry(key) {
-            v.insert(value);
-        } else {
-            on_error();
+    fn enter(
+        &mut self,
+        key: String,
+        value: LocalEntry,
+    ) -> Result<(), KeyAlreadyExistsError<String>> {
+        match self.entries.entry(key) {
+            hash_map::Entry::Vacant(v) => {
+                v.insert(value);
+                Ok(())
+            }
+            hash_map::Entry::Occupied(o) => Err(KeyAlreadyExistsError::new(o.key().clone())),
         }
     }
 }
