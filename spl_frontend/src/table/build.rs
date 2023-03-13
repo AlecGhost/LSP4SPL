@@ -4,10 +4,9 @@ use super::{
 };
 use crate::{
     ast::*,
-    error::{BuildErrorMessage, SplError},
+    error::{SplError, BuildErrorMessage},
     lexer::token::{Token, TokenType},
-    table::Entry,
-    DiagnosticsBroker, ToRange,
+    ToRange, DiagnosticsBroker, table::Entry,
 };
 
 #[cfg(test)]
@@ -37,7 +36,7 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for Program {
             || broker.report_error(SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())),
             |entry| {
                 if let GlobalEntry::Procedure(main) = &entry {
-                    if !main.parameters().is_empty() {
+                    if !main.parameters.is_empty() {
                         broker.report_error(SplError(
                             main.name.to_range(),
                             BuildErrorMessage::MainMustNotHaveParameters.to_string(),
@@ -103,15 +102,18 @@ impl<B: DiagnosticsBroker> TableBuilder<B> for ProcedureDeclaration {
         if let Some(name) = &self.name {
             let documentation = get_documentation(&self.info.tokens);
             let mut local_table = LocalTable::default();
-            self.parameters
+            let parameters = self
+                .parameters
                 .iter()
-                .for_each(|param| build_parameter(param, table, &mut local_table, broker));
+                .filter_map(|param| build_parameter(param, table, &mut local_table, broker))
+                .collect();
             self.variable_declarations
                 .iter()
                 .for_each(|dec| build_variable(dec, table, &mut local_table, broker));
             let entry = ProcedureEntry {
                 name: name.clone(),
                 local_table,
+                parameters,
                 doc: documentation,
             };
             if table
@@ -129,8 +131,8 @@ fn build_parameter<B: DiagnosticsBroker>(
     global_table: &GlobalTable,
     local_table: &mut LocalTable,
     broker: &B,
-) {
-    if let Some(name) = &param.name {
+) -> Option<VariableEntry> {
+    param.name.as_ref().map(|name| {
         let documentation = get_documentation(&param.info.tokens);
         let lookup_table = LookupTable {
             global_table: Some(global_table),

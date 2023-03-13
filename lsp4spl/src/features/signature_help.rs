@@ -36,7 +36,7 @@ pub async fn signature_help(
                 &cursor.doc_info.table.lookup(&call_stmt.name.value)
             {
                 let parameters: Vec<ParameterInformation> = proc_entry
-                    .parameters()
+                    .parameters
                     .iter()
                     .map(|param| ParameterInformation {
                         label: ParameterLabel::Simple(param.name.to_string()),
