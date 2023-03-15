@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
     log::info!("Startup");
     let ls = LanguageServer::setup(
         Some(ServerInfo {
-            name: "lsp4spl".to_string(),
+            name: "LSP4SPL".to_string(),
             version: Some("0.1".to_string()),
         }),
         ServerCapabilities {
