@@ -1,0 +1,24 @@
+[package]
+name = "tree-sitter-spl"
+description = "SPL grammar for the tree-sitter parsing library"
+version = "0.0.1"
+keywords = ["incremental", "parsing", "SPL"]
+categories = ["parsing", "text-editors"]
+repository = "https://github.com/AlecGhost/LSP4SPL"
+
+build = "bindings/rust/build.rs"
+include = [
+  "bindings/rust/*",
+  "grammar.js",
+  "queries/*",
+  "src/*",
+]
+
+[lib]
+path = "bindings/rust/lib.rs"
+
+[dependencies]
+tree-sitter = "~0.20.3"
+
+[build-dependencies]
+cc = "1.0"
