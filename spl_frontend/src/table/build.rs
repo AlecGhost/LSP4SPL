@@ -4,9 +4,10 @@ use super::{
 };
 use crate::{
     ast::*,
-    error::{SplError, BuildErrorMessage},
+    error::{BuildErrorMessage, SplError},
     lexer::token::{Token, TokenType},
-    ToRange, DiagnosticsBroker, table::Entry,
+    table::Entry,
+    DiagnosticsBroker, ToRange,
 };
 
 #[cfg(test)]
@@ -150,12 +151,13 @@ fn build_parameter<B: DiagnosticsBroker>(
             }
         }
         if local_table
-            .enter(name.to_string(), LocalEntry::Parameter(param_entry))
+            .enter(name.to_string(), LocalEntry::Parameter(param_entry.clone()))
             .is_err()
         {
             broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter))
         }
-    }
+        param_entry
+    })
 }
 
 fn build_variable<B: DiagnosticsBroker>(
