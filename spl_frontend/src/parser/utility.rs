@@ -5,7 +5,7 @@ use nom::{
     combinator::opt,
     error::ErrorKind,
     multi::many0,
-    sequence::terminated,
+    sequence::preceded,
     {InputTake, Offset},
 };
 
@@ -92,15 +92,17 @@ where
     // Create new parser from closure because `InnerParser` must be used with `parse` function
     let mut parser = move |input| parser.parse(input);
     move |input: TokenStream<B>| {
-        let (input, mut list) = many0(terminated(&mut parser, super::symbols::comma))(input)?;
-        let (input, opt_argument) = if list.is_empty() {
-            opt(&mut parser)(input)?
+        let (input, first) = opt(&mut parser)(input)?;
+        if let Some(head) = first {
+            let (input, tail) = many0(preceded(
+                super::symbols::comma,
+                expect(&mut parser, error_msg.clone()),
+            ))(input)?;
+            let mut list = vec![head];
+            list.append(&mut tail.into_iter().flatten().collect());
+            Ok((input, list))
         } else {
-            expect(&mut parser, error_msg.clone())(input)?
-        };
-        if let Some(argument) = opt_argument {
-            list.push(argument);
-        };
-        Ok((input, list))
+            Ok((input, Vec::new()))
+        }
     }
 }

@@ -550,8 +550,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
                     recognize(symbols::semic),
                     recognize(keywords::r#if),
                     recognize(keywords::r#while),
-                    recognize(Assignment::parse),
                     recognize(CallStatement::parse),
+                    recognize(Assignment::parse),
                     recognize(eof),
                 )))),
             ))(input)?;
@@ -572,8 +572,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
             map(IfStatement::parse, Self::If),
             map(WhileStatement::parse, Self::While),
             map(BlockStatement::parse, Self::Block),
-            map(Assignment::parse, Self::Assignment),
             map(CallStatement::parse, Self::Call),
+            map(Assignment::parse, Self::Assignment),
             parse_error,
         ))(input)
     }
