@@ -1,8 +1,13 @@
 use super::IResult;
-use crate::{error::ParseErrorMessage, lexer::token::TokenStream, DiagnosticsBroker};
+use crate::{
+    ast::AstInfo,
+    error::{ParseErrorMessage, SplError},
+    lexer::token::TokenStream,
+    DiagnosticsBroker, ToRange,
+};
 use nom::{
     bytes::complete::take,
-    combinator::opt,
+    combinator::{opt, peek},
     error::ErrorKind,
     multi::many0,
     sequence::preceded,
@@ -82,16 +87,44 @@ where
 }
 
 /// Parses a comma separated list of parsers
-pub(super) fn parse_list<'a, O, B: DiagnosticsBroker, F>(
+/// If the list is not followed by a `terminating_parser`,
+/// input is consumed and reported until it is.
+pub(super) fn parse_list<'a, O, B: DiagnosticsBroker, F, G>(
     mut parser: F,
+    mut terminating_parser: G,
     error_msg: ParseErrorMessage,
 ) -> impl FnMut(TokenStream<'a, B>) -> IResult<Vec<O>, B>
 where
     F: InnerParser<'a, O, B>,
+    G: InnerParser<'a, TokenStream<'a, B>, B>,
 {
-    // Create new parser from closure because `InnerParser` must be used with `parse` function
-    let mut parser = move |input| parser.parse(input);
+    fn ignore_if_not_finished<'a, B: DiagnosticsBroker, G>(
+        terminating_parser: &mut G,
+        input: TokenStream<'a, B>,
+    ) -> TokenStream<'a, B>
+    where
+        G: InnerParser<'a, TokenStream<'a, B>, B>,
+    {
+        let terminating_parser = |input| terminating_parser.parse(input);
+        match ignore_until(peek(terminating_parser))(input) {
+            Ok((input, ignored)) => {
+                // convert into AstInfo, so that `to_range()` and `to_string()` are available
+                let ignored_info = AstInfo::new(&ignored[..]);
+                let err = SplError(
+                    ignored_info.to_range(),
+                    ParseErrorMessage::UnexpectedCharacters(ignored_info.to_string()).to_string(),
+                );
+                input.broker.report_error(err);
+                input
+            }
+            Err(nom::Err::Failure(err) | nom::Err::Error(err)) => err.input,
+            Err(_) => panic!("Incomplete data"),
+        }
+    }
+
     move |input: TokenStream<B>| {
+        // Create new parser from closure because `InnerParser` must be used with `parse` function
+        let mut parser = |input| parser.parse(input);
         let (input, first) = opt(&mut parser)(input)?;
         if let Some(head) = first {
             let (input, tail) = many0(preceded(
@@ -100,8 +133,10 @@ where
             ))(input)?;
             let mut list = vec![head];
             list.append(&mut tail.into_iter().flatten().collect());
+            let input = ignore_if_not_finished(&mut terminating_parser, input);
             Ok((input, list))
         } else {
+            let input = ignore_if_not_finished(&mut terminating_parser, input);
             Ok((input, Vec::new()))
         }
     }

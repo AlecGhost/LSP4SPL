@@ -415,6 +415,11 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
             terminated(Identifier::parse, symbols::lparen),
             parse_list(
                 Expression::parse,
+                alt((
+                    recognize(symbols::rparen),
+                    recognize(symbols::semic),
+                    recognize(eof),
+                )),
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             ),
             expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
@@ -592,6 +597,11 @@ impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
                 expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
                 parse_list(
                     ParameterDeclaration::parse,
+                    alt((
+                        recognize(symbols::rparen),
+                        recognize(symbols::lcurly),
+                        recognize(eof),
+                    )),
                     ParseErrorMessage::ExpectedToken("parameter declaration".to_string()),
                 ),
                 expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
