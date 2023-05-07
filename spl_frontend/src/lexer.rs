@@ -96,7 +96,6 @@ impl<B: DiagnosticsBroker> Lexer<B> for Token {
             alt((
                 lex_symbol!(TokenType::LParen),
                 lex_symbol!(TokenType::RParen),
-                lex_symbol!(TokenType::RParen),
                 lex_symbol!(TokenType::LBracket),
                 lex_symbol!(TokenType::RBracket),
                 lex_symbol!(TokenType::LCurly),
