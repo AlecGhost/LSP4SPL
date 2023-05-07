@@ -133,33 +133,39 @@ fn build_parameter<B: DiagnosticsBroker>(
     local_table: &mut LocalTable,
     broker: &B,
 ) -> Option<VariableEntry> {
-    if let ParameterDeclaration::Valid { is_ref, name: opt_name, type_expr, info } = param {
-
-    opt_name.as_ref().map(|name| {
-        let documentation = get_documentation(&info.tokens);
-        let lookup_table = LookupTable {
-            global_table: Some(global_table),
-            local_table: None,
-        };
-        let param_entry = VariableEntry {
-            name: name.clone(),
-            is_ref: *is_ref,
-            data_type: get_data_type(&type_expr, &opt_name, &lookup_table, broker),
-            doc: documentation,
-        };
-        if let Some(data_type) = &param_entry.data_type {
-            if !data_type.is_primitive() && !param_entry.is_ref {
-                broker.report_error(name.to_error(BuildErrorMessage::MustBeAReferenceParameter));
+    if let ParameterDeclaration::Valid {
+        is_ref,
+        name: opt_name,
+        type_expr,
+        info,
+    } = param
+    {
+        opt_name.as_ref().map(|name| {
+            let documentation = get_documentation(&info.tokens);
+            let lookup_table = LookupTable {
+                global_table: Some(global_table),
+                local_table: None,
+            };
+            let param_entry = VariableEntry {
+                name: name.clone(),
+                is_ref: *is_ref,
+                data_type: get_data_type(&type_expr, &opt_name, &lookup_table, broker),
+                doc: documentation,
+            };
+            if let Some(data_type) = &param_entry.data_type {
+                if !data_type.is_primitive() && !param_entry.is_ref {
+                    broker
+                        .report_error(name.to_error(BuildErrorMessage::MustBeAReferenceParameter));
+                }
             }
-        }
-        if local_table
-            .enter(name.to_string(), LocalEntry::Parameter(param_entry.clone()))
-            .is_err()
-        {
-            broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter))
-        }
-        param_entry
-    })
+            if local_table
+                .enter(name.to_string(), LocalEntry::Parameter(param_entry.clone()))
+                .is_err()
+            {
+                broker.report_error(name.to_error(BuildErrorMessage::RedeclarationAsParameter))
+            }
+            param_entry
+        })
     } else {
         None
     }
@@ -171,14 +177,19 @@ fn build_variable<B: DiagnosticsBroker>(
     local_table: &mut LocalTable,
     broker: &B,
 ) {
-    if let Some(name) = &var.name {
-        let documentation = get_documentation(&var.info.tokens);
+    if let VariableDeclaration::Valid {
+        name: Some(name),
+        type_expr,
+        info,
+    } = &var
+    {
+        let documentation = get_documentation(&info.tokens);
         let entry = VariableEntry {
             name: name.clone(),
             is_ref: false,
             data_type: get_data_type(
-                &var.type_expr,
-                &var.name,
+                type_expr,
+                &Some(name.clone()),
                 &LookupTable {
                     global_table: Some(global_table),
                     local_table: Some(local_table),

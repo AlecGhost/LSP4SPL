@@ -8,7 +8,7 @@ use lsp_types::{
 use spl_frontend::{
     ast::{
         Expression, GlobalDeclaration, Identifier, ParameterDeclaration, Program, Statement,
-        TypeExpression, Variable,
+        TypeExpression, Variable, VariableDeclaration,
     },
     table::{Entry, GlobalEntry, GlobalTable, LookupTable},
     ToRange,
@@ -220,7 +220,10 @@ fn find_types(name: &str, program: &Program) -> Vec<Identifier> {
                 .for_each(|ident| idents.push(ident));
             pd.variable_declarations
                 .iter()
-                .flat_map(|vd| &vd.type_expr)
+                .filter_map(|vd| match vd {
+                    VariableDeclaration::Valid { type_expr, .. } => type_expr.as_ref(),
+                    _ => None,
+                })
                 .filter_map(get_ident_in_type_expr)
                 .filter(|ident| ident.value == name)
                 .for_each(|ident| idents.push(ident));
@@ -346,7 +349,10 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
                 });
             pd.variable_declarations
                 .iter()
-                .filter_map(|vd| vd.name.as_ref())
+                .filter_map(|vd| match vd {
+                    VariableDeclaration::Valid { name, ..} => name.as_ref(),
+                    _ => None,
+                })
                 .for_each(|ident| {
                     if ident.value == name {
                         idents.push(ident.clone());

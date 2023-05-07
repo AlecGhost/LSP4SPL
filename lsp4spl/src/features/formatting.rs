@@ -33,7 +33,7 @@ mod fmt {
     use spl_frontend::{
         ast::{
             BlockStatement, GlobalDeclaration, IfStatement, ParameterDeclaration,
-            ProcedureDeclaration, Program, Statement, TypeDeclaration, WhileStatement,
+            ProcedureDeclaration, Program, Statement, TypeDeclaration, WhileStatement, VariableDeclaration,
         },
         token::{Token, TokenType},
     };
@@ -126,8 +126,8 @@ mod fmt {
                     add_all_comments(
                         param.to_string(),
                         match param {
-                            ParameterDeclaration::Valid { info, .. } => info.tokens.as_ref(),
-                            ParameterDeclaration::Error(info) => info.tokens.as_ref(),
+                            ParameterDeclaration::Valid { info, .. } => &info.tokens,
+                            ParameterDeclaration::Error(info) => &info.tokens,
                         },
                     )
                 })
@@ -156,7 +156,10 @@ mod fmt {
             let var_decs: String = self
                 .variable_declarations
                 .iter()
-                .map(|var_dec| add_all_comments(var_dec.to_string(), &var_dec.info.tokens))
+                .map(|var_dec| add_all_comments(var_dec.to_string(), match var_dec {
+                    VariableDeclaration::Valid { info, .. } => &info.tokens,
+                    VariableDeclaration::Error(info) => &info.tokens
+                }))
                 .collect();
             let var_decs = indent(var_decs, f);
             let stmts: String = self.statements.iter().map(|stmt| stmt.fmt(f)).collect();

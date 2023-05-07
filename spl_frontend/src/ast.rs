@@ -184,10 +184,13 @@ pub enum TypeExpression {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
-pub struct VariableDeclaration {
-    pub name: Option<Identifier>,
-    pub type_expr: Option<TypeExpression>,
-    pub info: AstInfo,
+pub enum VariableDeclaration {
+    Valid {
+        name: Option<Identifier>,
+        type_expr: Option<TypeExpression>,
+        info: AstInfo,
+    },
+    Error(AstInfo),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
@@ -401,25 +404,34 @@ impl Display for TypeExpression {
 
 impl Display for VariableDeclaration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = fmt_or_empty(&self.name);
-        let type_expr = fmt_or_empty(&self.type_expr);
-        writeln!(f, "var {}: {};", name, type_expr)
+        match self {
+            Self::Valid {
+                name, type_expr, ..
+            } => {
+                let name = fmt_or_empty(&name);
+                let type_expr = fmt_or_empty(&type_expr);
+                writeln!(f, "var {}: {};", name, type_expr)
+            }
+            Self::Error(info) => write!(f, "{}", info),
+        }
     }
 }
 
 impl Display for ParameterDeclaration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Valid { is_ref, name, type_expr, .. } => {
-
-        let r#ref = if *is_ref { "ref " } else { "" };
-        let name = fmt_or_empty(&name);
-        let type_expr = fmt_or_empty(&type_expr);
-        write!(f, "{}{}: {}", r#ref, name, type_expr)
+            Self::Valid {
+                is_ref,
+                name,
+                type_expr,
+                ..
+            } => {
+                let r#ref = if *is_ref { "ref " } else { "" };
+                let name = fmt_or_empty(&name);
+                let type_expr = fmt_or_empty(&type_expr);
+                write!(f, "{}{}: {}", r#ref, name, type_expr)
             }
-            Self::Error(info) => {
-                write!(f, "{}", info)
-            }
+            Self::Error(info) => write!(f, "{}", info),
         }
     }
 }

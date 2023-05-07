@@ -337,32 +337,56 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
 
 impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, (_, name, _, type_expr, _)) = tuple((
-            keywords::var,
-            expect(
-                Identifier::parse,
-                ParseErrorMessage::ExpectedToken("identifier".to_string()),
-            ),
-            expect(
-                symbols::colon,
-                ParseErrorMessage::ExpectedToken(":".to_string()),
-            ),
-            expect(
-                TypeExpression::parse,
-                ParseErrorMessage::ExpectedToken("type expression".to_string()),
-            ),
-            expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
-        ))(input)?;
-        let offset = tokens.offset(&input);
-        Ok((
-            input,
-            Self {
-                name,
-                type_expr,
-                info: AstInfo::new(&tokens[..offset]),
-            },
-        ))
+        fn parse_valid<B: DiagnosticsBroker>(
+            input: TokenStream<B>,
+        ) -> IResult<VariableDeclaration, B> {
+            let tokens = input.clone();
+            let (input, (_, name, _, type_expr, _)) = tuple((
+                keywords::var,
+                expect(
+                    Identifier::parse,
+                    ParseErrorMessage::ExpectedToken("identifier".to_string()),
+                ),
+                expect(
+                    symbols::colon,
+                    ParseErrorMessage::ExpectedToken(":".to_string()),
+                ),
+                expect(
+                    TypeExpression::parse,
+                    ParseErrorMessage::ExpectedToken("type expression".to_string()),
+                ),
+                expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+            ))(input)?;
+            let offset = tokens.offset(&input);
+            Ok((
+                input,
+                VariableDeclaration::Valid {
+                    name,
+                    type_expr,
+                    info: AstInfo::new(&tokens[..offset]),
+                },
+            ))
+        }
+
+        fn parse_error<B: DiagnosticsBroker>(
+            input: TokenStream<B>,
+        ) -> IResult<VariableDeclaration, B> {
+            let (input, ignored) = ignore_until1(peek(look_ahead::var_dec))(input)?;
+            let ignored_info = AstInfo::new(&ignored[..]);
+            let error_range = if ignored_info.tokens.is_empty() {
+                ignored.error_pos..ignored.error_pos
+            } else {
+                ignored_info.to_range()
+            };
+            let err = SplError(
+                error_range,
+                ParseErrorMessage::ExpectedToken("variable declaration".to_string()).to_string(),
+            );
+            ignored.broker.report_error(err);
+            Ok((input, VariableDeclaration::Error(ignored_info)))
+        }
+
+        alt((|input| parse_valid(input), |input| parse_error(input)))(input)
     }
 }
 
@@ -620,19 +644,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         fn parse_error<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Statement, B> {
             let tokens = input.clone();
-            let (input, (_, ignored)) = tuple((
-                many0(comment),
-                ignore_until1(peek(alt((
-                    recognize(symbols::lcurly),
-                    recognize(symbols::rcurly),
-                    recognize(symbols::semic),
-                    recognize(keywords::r#if),
-                    recognize(keywords::r#while),
-                    recognize(CallStatement::parse),
-                    recognize(Assignment::parse),
-                    recognize(eof),
-                )))),
-            ))(input)?;
+            let (input, (_, ignored)) =
+                tuple((many0(comment), ignore_until1(peek(look_ahead::stmt))))(input)?;
             // convert into AstInfo, so that `to_range()` and `to_string()` are available
             let ignored_info = AstInfo::new(&ignored[..]);
             let err = SplError(
@@ -822,4 +835,39 @@ mod symbols {
     tag_parser!(minus, TokenType::Minus);
     tag_parser!(times, TokenType::Times);
     tag_parser!(divide, TokenType::Divide);
+}
+
+macro_rules! look_ahead_parser {
+    ($name:ident, $($parser:expr, )+) => {
+    pub(super) fn $name<B: crate::DiagnosticsBroker>(
+        input: crate::token::TokenStream<B>,
+    ) -> crate::parser::IResult<crate::token::TokenStream<B>, B> {
+        nom::branch::alt((
+            $(
+                nom::combinator::recognize($parser),
+            )+
+        ))(input)
+    }
+    };
+}
+
+mod look_ahead {
+    use super::{eof, keywords, symbols, Parser};
+    use crate::ast::Identifier;
+    use nom::{branch::alt, sequence::pair};
+
+    look_ahead_parser!(
+        stmt,
+        symbols::lcurly,
+        symbols::rcurly,
+        symbols::semic,
+        keywords::r#if,
+        keywords::r#while,
+        pair(
+            Identifier::parse,
+            alt((symbols::assign, symbols::lparen, symbols::lbracket))
+        ),
+        eof,
+    );
+    look_ahead_parser!(var_dec, keywords::var, stmt, eof,);
 }

@@ -78,7 +78,7 @@ fn acker() {
                             info: AstInfo::new(&tokens[14..18]),
                         },
                     ],
-                    variable_declarations: vec![VariableDeclaration {
+                    variable_declarations: vec![VariableDeclaration::Valid {
                         name: a(&tokens[21..22]),
                         type_expr: int_type(&tokens[23..24]),
                         info: AstInfo::new(&tokens[20..25]),
@@ -174,17 +174,17 @@ fn acker() {
                     name: Some(Identifier::new("main".to_string(), &tokens[88..89])),
                     parameters: Vec::new(),
                     variable_declarations: vec![
-                        VariableDeclaration {
+                        VariableDeclaration::Valid {
                             name: i(&tokens[93..94]),
                             type_expr: int_type(&tokens[95..96]),
                             info: AstInfo::new(&tokens[92..97]),
                         },
-                        VariableDeclaration {
+                        VariableDeclaration::Valid {
                             name: j(&tokens[98..99]),
                             type_expr: int_type(&tokens[100..101]),
                             info: AstInfo::new(&tokens[97..102]),
                         },
-                        VariableDeclaration {
+                        VariableDeclaration::Valid {
                             name: k(&tokens[103..104]),
                             type_expr: int_type(&tokens[105..106]),
                             info: AstInfo::new(&tokens[102..107]),
