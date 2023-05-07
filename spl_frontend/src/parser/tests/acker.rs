@@ -59,19 +59,19 @@ fn acker() {
                 GlobalDeclaration::Procedure(ProcedureDeclaration {
                     name: Some(Identifier::new("ackermann".to_string(), &tokens[4..5])),
                     parameters: vec![
-                        ParameterDeclaration {
+                        ParameterDeclaration::Valid {
                             is_ref: false,
                             name: i(&tokens[6..7]),
                             type_expr: int_type(&tokens[8..9]),
                             info: AstInfo::new(&tokens[6..9]),
                         },
-                        ParameterDeclaration {
+                        ParameterDeclaration::Valid {
                             is_ref: false,
                             name: j(&tokens[10..11]),
                             type_expr: int_type(&tokens[12..13]),
                             info: AstInfo::new(&tokens[10..13]),
                         },
-                        ParameterDeclaration {
+                        ParameterDeclaration::Valid {
                             is_ref: true,
                             name: k(&tokens[15..16]),
                             type_expr: int_type(&tokens[17..18]),

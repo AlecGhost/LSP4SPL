@@ -30,6 +30,10 @@ impl AstInfo {
             tokens: tokens.to_vec(),
         }
     }
+
+    pub fn empty() -> Self {
+        Self { tokens: Vec::new() }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, ToRange)]
@@ -159,7 +163,7 @@ pub enum Expression {
     IntLiteral(IntLiteral),
     Unary(UnaryExpression),
     Variable(Variable),
-    Error(Range<usize>),
+    Error(AstInfo),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
@@ -187,11 +191,14 @@ pub struct VariableDeclaration {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
-pub struct ParameterDeclaration {
-    pub is_ref: bool,
-    pub name: Option<Identifier>,
-    pub type_expr: Option<TypeExpression>,
-    pub info: AstInfo,
+pub enum ParameterDeclaration {
+    Valid {
+        is_ref: bool,
+        name: Option<Identifier>,
+        type_expr: Option<TypeExpression>,
+        info: AstInfo,
+    },
+    Error(AstInfo),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, ToRange)]
@@ -402,10 +409,18 @@ impl Display for VariableDeclaration {
 
 impl Display for ParameterDeclaration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let r#ref = if self.is_ref { "ref " } else { "" };
-        let name = fmt_or_empty(&self.name);
-        let type_expr = fmt_or_empty(&self.type_expr);
+        match self {
+            Self::Valid { is_ref, name, type_expr, .. } => {
+
+        let r#ref = if *is_ref { "ref " } else { "" };
+        let name = fmt_or_empty(&name);
+        let type_expr = fmt_or_empty(&type_expr);
         write!(f, "{}{}: {}", r#ref, name, type_expr)
+            }
+            Self::Error(info) => {
+                write!(f, "{}", info)
+            }
+        }
     }
 }
 

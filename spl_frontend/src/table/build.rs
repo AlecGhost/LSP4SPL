@@ -133,16 +133,18 @@ fn build_parameter<B: DiagnosticsBroker>(
     local_table: &mut LocalTable,
     broker: &B,
 ) -> Option<VariableEntry> {
-    param.name.as_ref().map(|name| {
-        let documentation = get_documentation(&param.info.tokens);
+    if let ParameterDeclaration::Valid { is_ref, name: opt_name, type_expr, info } = param {
+
+    opt_name.as_ref().map(|name| {
+        let documentation = get_documentation(&info.tokens);
         let lookup_table = LookupTable {
             global_table: Some(global_table),
             local_table: None,
         };
         let param_entry = VariableEntry {
             name: name.clone(),
-            is_ref: param.is_ref,
-            data_type: get_data_type(&param.type_expr, &param.name, &lookup_table, broker),
+            is_ref: *is_ref,
+            data_type: get_data_type(&type_expr, &opt_name, &lookup_table, broker),
             doc: documentation,
         };
         if let Some(data_type) = &param_entry.data_type {
@@ -158,6 +160,9 @@ fn build_parameter<B: DiagnosticsBroker>(
         }
         param_entry
     })
+    } else {
+        None
+    }
 }
 
 fn build_variable<B: DiagnosticsBroker>(

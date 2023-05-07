@@ -7,7 +7,8 @@ use lsp_types::{
 };
 use spl_frontend::{
     ast::{
-        Expression, GlobalDeclaration, Identifier, Program, Statement, TypeExpression, Variable,
+        Expression, GlobalDeclaration, Identifier, ParameterDeclaration, Program, Statement,
+        TypeExpression, Variable,
     },
     table::{Entry, GlobalEntry, GlobalTable, LookupTable},
     ToRange,
@@ -141,8 +142,8 @@ fn find_procs(name: &str, program: &Program) -> Vec<Identifier> {
                     .as_ref()
                     .map_or(Vec::new(), |branch| find_in_statement(branch, name));
                 if let Some(stmt) = &i.else_branch {
-                    let mut new_idents = find_in_statement(stmt, name);
-                    idents.append(&mut new_idents);
+                    let new_idents = find_in_statement(stmt, name);
+                    idents.extend(new_idents);
                 }
                 idents
             }
@@ -169,12 +170,12 @@ fn find_procs(name: &str, program: &Program) -> Vec<Identifier> {
                     idents.push(ident.clone());
                 }
             }
-            let mut new_idents = pd
+            let new_idents: Vec<_> = pd
                 .statements
                 .iter()
                 .flat_map(|stmt| find_in_statement(stmt, name))
                 .collect();
-            idents.append(&mut new_idents);
+            idents.extend(new_idents);
         });
     idents
 }
@@ -210,7 +211,10 @@ fn find_types(name: &str, program: &Program) -> Vec<Identifier> {
         Procedure(pd) => {
             pd.parameters
                 .iter()
-                .flat_map(|param| &param.type_expr)
+                .filter_map(|param| match param {
+                    ParameterDeclaration::Valid { type_expr, .. } => type_expr.as_ref(),
+                    _ => None,
+                })
                 .filter_map(get_ident_in_type_expr)
                 .filter(|ident| ident.value == name)
                 .for_each(|ident| idents.push(ident));
@@ -240,8 +244,8 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
             ArrayAccess(a) => {
                 let mut idents = find_in_variable(&a.array, name);
                 if let Some(index) = &a.index {
-                    let mut new_idents = find_in_expression(index, name);
-                    idents.append(&mut new_idents);
+                    let new_idents = find_in_expression(index, name);
+                    idents.extend(new_idents);
                 }
                 idents
             }
@@ -254,10 +258,10 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
             Variable(v) => find_in_variable(v, name),
             Binary(b) => {
                 let mut idents = Vec::new();
-                let mut new_idents = find_in_expression(&b.lhs, name);
-                idents.append(&mut new_idents);
-                let mut new_idents = find_in_expression(&b.rhs, name);
-                idents.append(&mut new_idents);
+                let new_idents = find_in_expression(&b.lhs, name);
+                idents.extend(new_idents);
+                let new_idents = find_in_expression(&b.rhs, name);
+                idents.extend(new_idents);
                 idents
             }
             _ => Vec::new(),
@@ -269,8 +273,8 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
             Statement::Assignment(a) => {
                 let mut idents = find_in_variable(&a.variable, name);
                 if let Some(expr) = &a.expr {
-                    let mut new_idents = find_in_expression(expr, name);
-                    idents.append(&mut new_idents);
+                    let new_idents = find_in_expression(expr, name);
+                    idents.extend(new_idents);
                 }
                 idents
             }
@@ -290,12 +294,12 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
                     .as_ref()
                     .map_or(Vec::new(), |expr| find_in_expression(expr, name));
                 if let Some(stmt) = &i.if_branch {
-                    let mut new_idents = find_in_statement(stmt, name);
-                    idents.append(&mut new_idents);
+                    let new_idents = find_in_statement(stmt, name);
+                    idents.extend(new_idents);
                 }
                 if let Some(stmt) = &i.else_branch {
-                    let mut new_idents = find_in_statement(stmt, name);
-                    idents.append(&mut new_idents);
+                    let new_idents = find_in_statement(stmt, name);
+                    idents.extend(new_idents);
                 }
                 idents
             }
@@ -304,11 +308,11 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
                     .condition
                     .as_ref()
                     .map_or(Vec::new(), |expr| find_in_expression(expr, name));
-                let mut new_idents = w
+                let new_idents = w
                     .statement
                     .as_ref()
                     .map_or(Vec::new(), |branch| find_in_statement(branch, name));
-                idents.append(&mut new_idents);
+                idents.extend(new_idents);
                 idents
             }
             _ => Vec::new(),
@@ -331,7 +335,10 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
             let mut idents = Vec::new();
             pd.parameters
                 .iter()
-                .filter_map(|param| param.name.as_ref())
+                .filter_map(|param| match param {
+                    ParameterDeclaration::Valid { name, .. } => name.as_ref(),
+                    _ => None,
+                })
                 .for_each(|ident| {
                     if ident.value == name {
                         idents.push(ident.clone());
@@ -345,12 +352,12 @@ fn find_vars(name: &str, proc_name: &str, program: &Program) -> Vec<Identifier> 
                         idents.push(ident.clone());
                     }
                 });
-            let mut new_idents = pd
+            let new_idents: Vec<_> = pd
                 .statements
                 .iter()
                 .flat_map(|stmt| find_in_statement(stmt, name))
                 .collect();
-            idents.append(&mut new_idents);
+            idents.extend(new_idents);
             idents
         })
 }

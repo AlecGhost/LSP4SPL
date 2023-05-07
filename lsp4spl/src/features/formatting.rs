@@ -32,8 +32,8 @@ pub async fn format(
 mod fmt {
     use spl_frontend::{
         ast::{
-            BlockStatement, GlobalDeclaration, IfStatement, ProcedureDeclaration, Program,
-            Statement, TypeDeclaration, WhileStatement,
+            BlockStatement, GlobalDeclaration, IfStatement, ParameterDeclaration,
+            ProcedureDeclaration, Program, Statement, TypeDeclaration, WhileStatement,
         },
         token::{Token, TokenType},
     };
@@ -122,7 +122,15 @@ mod fmt {
             let param_vec: Vec<String> = self
                 .parameters
                 .iter()
-                .map(|param| add_all_comments(param.to_string(), &param.info.tokens))
+                .map(|param| {
+                    add_all_comments(
+                        param.to_string(),
+                        match param {
+                            ParameterDeclaration::Valid { info, .. } => info.tokens.as_ref(),
+                            ParameterDeclaration::Error(info) => info.tokens.as_ref(),
+                        },
+                    )
+                })
                 .collect();
             let params = if param_vec.is_empty() {
                 String::new()

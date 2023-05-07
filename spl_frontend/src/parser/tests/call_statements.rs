@@ -55,7 +55,7 @@ fn trailing_comma() {
         cs,
         CallStatement {
             name: Identifier::new("a".to_string(), &tokens[0..1]),
-            arguments: vec![*int_lit(1, &tokens[2..3])],
+            arguments: vec![*int_lit(1, &tokens[2..3]), Expression::Error(AstInfo::empty())],
             info: AstInfo::new(&tokens[..5]),
         },
         "CallStatement: {}",
