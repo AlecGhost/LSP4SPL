@@ -110,6 +110,7 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                     let arg_len = self.arguments.len();
                     let param_len = proc_entry.parameters.len();
                     match arg_len.cmp(&param_len) {
+                        Ordering::Equal => { /* happy path */ }
                         Ordering::Less => {
                             broker.report_error(SplError(
                                 self.to_range(),
@@ -124,7 +125,6 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                                     .to_string(),
                             ));
                         }
-                        Ordering::Equal => {}
                     };
                     for (i, (arg, param)) in
                         std::iter::zip(&self.arguments, &proc_entry.parameters).enumerate()
@@ -140,16 +140,20 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                                 .to_string(),
                             ));
                         }
-                        if arg.analyze(table, broker) != param.data_type {
-                            broker.report_error(SplError(
-                                self.name.to_range(),
-                                SemanticErrorMessage::ArgumentsTypeMismatch(
-                                    self.name.value.clone(),
-                                    // enumeration starts with 1
-                                    i + 1,
-                                )
-                                .to_string(),
-                            ));
+                        let arg_type = arg.analyze(table, broker);
+                        // only analyze further if type information for both sides is available
+                        if let (Some(arg_type), Some(param_type)) = (&arg_type, &param.data_type) {
+                            if arg_type != param_type {
+                                broker.report_error(SplError(
+                                    self.name.to_range(),
+                                    SemanticErrorMessage::ArgumentsTypeMismatch(
+                                        self.name.value.clone(),
+                                        // enumeration starts with 1
+                                        i + 1,
+                                    )
+                                    .to_string(),
+                                ));
+                            }
                         }
                     }
                 } else {
@@ -228,12 +232,20 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for ArrayAccess {
     fn analyze(&self, table: &LookupTable, broker: &B) -> Option<DataType> {
         if let Some(index) = &self.index {
             let index_type = index.analyze(table, broker);
-            if index_type != Some(DataType::Int) {
-                broker.report_error(SplError(
-                    index.to_range(),
-                    SemanticErrorMessage::IndexingWithNonInteger.to_string(),
-                ));
-            };
+            match index_type {
+                Some(DataType::Int) => { /* happy path */ }
+                Some(_) => {
+                    broker.report_error(SplError(
+                        index.to_range(),
+                        SemanticErrorMessage::IndexingWithNonInteger.to_string(),
+                    ));
+                }
+                None => {
+                    // Index has no type information.
+                    // Therefore an error already occurred
+                    // and nothing is reported here to prevent spurious errors.
+                }
+            }
         }
         self.array
             .analyze(table, broker)
@@ -265,30 +277,39 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Expression {
 
 impl<B: DiagnosticsBroker> AnalyzeExpression<B> for BinaryExpression {
     fn analyze(&self, table: &LookupTable, broker: &B) -> Option<DataType> {
-        let lhs = self.lhs.analyze(table, broker);
-        let rhs = self.rhs.analyze(table, broker);
-        if lhs != rhs {
-            broker.report_error(SplError(
-                self.to_range(),
-                SemanticErrorMessage::OperatorDifferentTypes.to_string(),
-            ));
-            // no immediate return with None
-            // because operator still states the type intention
-        }
-        if lhs != Some(DataType::Int) {
-            if self.operator.is_arithmetic() {
+        let lhs_type = self.lhs.analyze(table, broker);
+        let rhs_type = self.rhs.analyze(table, broker);
+
+        match (lhs_type, rhs_type) {
+            (Some(DataType::Int), Some(DataType::Int)) => { /* happy path */ }
+            (Some(DataType::Int), Some(_)) | (Some(_), Some(DataType::Int)) => {
                 broker.report_error(SplError(
                     self.to_range(),
-                    SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
-                ));
-            } else {
-                broker.report_error(SplError(
-                    self.to_range(),
-                    SemanticErrorMessage::ComparisonNonInteger.to_string(),
+                    SemanticErrorMessage::OperatorDifferentTypes.to_string(),
                 ));
             }
-            None
-        } else if self.operator.is_arithmetic() {
+            (Some(_), Some(_)) => {
+                if self.operator.is_arithmetic() {
+                    broker.report_error(SplError(
+                        self.to_range(),
+                        SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
+                    ));
+                } else {
+                    broker.report_error(SplError(
+                        self.to_range(),
+                        SemanticErrorMessage::ComparisonNonInteger.to_string(),
+                    ));
+                }
+            }
+            _ => {
+                // At least one expression has no type information.
+                // Therefore an error already occurred
+                // and nothing is reported here to prevent spurious errors.
+            }
+        }
+
+        // Type is always inferable from operator.
+        if self.operator.is_arithmetic() {
             Some(DataType::Int)
         } else {
             // non arithmetic means comparison

@@ -196,7 +196,7 @@ fn acker() {
                                 "i".to_string(),
                                 &tokens[107..108]
                             )),
-                            expr: Some(*int_lit(0, &tokens[109..110]).clone()),
+                            expr: Some(*int_lit(0, &tokens[109..110])),
                             info: AstInfo::new(&tokens[107..111]),
                         }),
                         Statement::While(WhileStatement {

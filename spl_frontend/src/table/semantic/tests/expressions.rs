@@ -53,9 +53,15 @@ fn arithmetic_op_non_int() {
     );
     eq!(
         errors,
-        vec![SplError(
-            121..126,
-            SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
-        )]
+        vec![
+            SplError(
+                121..126,
+                SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
+            ),
+            SplError(
+                116..127,
+                SemanticErrorMessage::AssignmentHasDifferentTypes.to_string()
+            )
+        ]
     );
 }
