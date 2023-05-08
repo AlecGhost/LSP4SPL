@@ -33,7 +33,8 @@ mod fmt {
     use spl_frontend::{
         ast::{
             BlockStatement, GlobalDeclaration, IfStatement, ParameterDeclaration,
-            ProcedureDeclaration, Program, Statement, TypeDeclaration, WhileStatement, VariableDeclaration,
+            ProcedureDeclaration, Program, Statement, TypeDeclaration, VariableDeclaration,
+            WhileStatement,
         },
         token::{Token, TokenType},
     };
@@ -156,10 +157,15 @@ mod fmt {
             let var_decs: String = self
                 .variable_declarations
                 .iter()
-                .map(|var_dec| add_all_comments(var_dec.to_string(), match var_dec {
-                    VariableDeclaration::Valid { info, .. } => &info.tokens,
-                    VariableDeclaration::Error(info) => &info.tokens
-                }))
+                .map(|var_dec| {
+                    add_all_comments(
+                        var_dec.to_string(),
+                        match var_dec {
+                            VariableDeclaration::Valid { info, .. } => &info.tokens,
+                            VariableDeclaration::Error(info) => &info.tokens,
+                        },
+                    )
+                })
                 .collect();
             let var_decs = indent(var_decs, f);
             let stmts: String = self.statements.iter().map(|stmt| stmt.fmt(f)).collect();
@@ -217,16 +223,26 @@ mod fmt {
     impl Format for IfStatement {
         fn fmt(&self, f: &FormattingOptions) -> String {
             let condition = fmt_or_empty(&self.condition);
-            let stmt = if self.else_branch.is_some() {
-                format!(
-                    "if ({}){}else{}",
-                    condition,
-                    fmt_branch(f, &self.if_branch, ' '),
-                    fmt_branch(f, &self.else_branch, '\n'),
-                )
-            } else {
-                format!("if ({}){}", condition, fmt_branch(f, &self.if_branch, '\n'))
-            };
+            let stmt = self.else_branch.as_ref().map_or_else(
+                || format!("if ({}){}", condition, fmt_branch(f, &self.if_branch, '\n')),
+                |else_branch| {
+                    if let Statement::If(else_if) = else_branch.as_ref() {
+                        format!(
+                            "if ({}){}else {}",
+                            condition,
+                            fmt_branch(f, &self.if_branch, ' '),
+                            else_if.fmt(f),
+                        )
+                    } else {
+                        format!(
+                            "if ({}){}else{}",
+                            condition,
+                            fmt_branch(f, &self.if_branch, ' '),
+                            fmt_branch(f, &self.else_branch, '\n'),
+                        )
+                    }
+                },
+            );
             add_leading_comments(stmt, &self.info.tokens)
         }
     }
