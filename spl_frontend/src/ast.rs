@@ -31,7 +31,7 @@ impl AstInfo {
         }
     }
 
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self { tokens: Vec::new() }
     }
 }
@@ -408,8 +408,8 @@ impl Display for VariableDeclaration {
             Self::Valid {
                 name, type_expr, ..
             } => {
-                let name = fmt_or_empty(&name);
-                let type_expr = fmt_or_empty(&type_expr);
+                let name = fmt_or_empty(name);
+                let type_expr = fmt_or_empty(type_expr);
                 writeln!(f, "var {}: {};", name, type_expr)
             }
             Self::Error(info) => write!(f, "{}", info),
@@ -427,8 +427,8 @@ impl Display for ParameterDeclaration {
                 ..
             } => {
                 let r#ref = if *is_ref { "ref " } else { "" };
-                let name = fmt_or_empty(&name);
-                let type_expr = fmt_or_empty(&type_expr);
+                let name = fmt_or_empty(name);
+                let type_expr = fmt_or_empty(type_expr);
                 write!(f, "{}{}: {}", r#ref, name, type_expr)
             }
             Self::Error(info) => write!(f, "{}", info),

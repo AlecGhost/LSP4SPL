@@ -149,7 +149,7 @@ fn build_parameter<B: DiagnosticsBroker>(
             let param_entry = VariableEntry {
                 name: name.clone(),
                 is_ref: *is_ref,
-                data_type: get_data_type(&type_expr, &opt_name, &lookup_table, broker),
+                data_type: get_data_type(type_expr, opt_name, &lookup_table, broker),
                 doc: documentation,
             };
             if let Some(data_type) = &param_entry.data_type {
