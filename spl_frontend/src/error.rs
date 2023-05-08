@@ -51,6 +51,7 @@ pub enum ParseErrorMessage {
     MissingTrailingSemic,
     UnexpectedCharacters(String),
     ExpectedToken(String),
+    ConfusedToken(String, String),
 }
 
 impl Display for ParseErrorMessage {
@@ -61,6 +62,9 @@ impl Display for ParseErrorMessage {
             Self::MissingTrailingSemic => "missing trailing `;`".to_string(),
             Self::UnexpectedCharacters(s) => format!("unexpected `{}`", s),
             Self::ExpectedToken(t) => format!("expected `{}`", t),
+            Self::ConfusedToken(expected, got) => {
+                format!("expected `{}`, but got `{}`", expected, got)
+            }
         };
         writeln!(f, "{}", display)
     }

@@ -2,8 +2,8 @@ use crate::{
     ast::*,
     error::{ParseErrorMessage, SplError},
     lexer::token::{IntResult, Token, TokenStream, TokenType},
-    parser::utility::{expect, ignore_until0, ignore_until1, parse_list},
-    DiagnosticsBroker, ToRange,
+    parser::utility::{confusable, expect, ignore_until0, ignore_until1, parse_list},
+    token, DiagnosticsBroker, ToRange,
 };
 use nom::{
     branch::alt,
@@ -314,8 +314,24 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
                 ParseErrorMessage::ExpectedToken("identifier".to_string()),
             ),
             expect(
-                symbols::eq,
-                ParseErrorMessage::ExpectedToken("=".to_string()),
+                alt((
+                    symbols::eq,
+                    confusable(
+                        symbols::assign,
+                        ParseErrorMessage::ConfusedToken(
+                            token::EQ.to_string(),
+                            token::ASSIGN.to_string(),
+                        ),
+                    ),
+                    confusable(
+                        symbols::colon,
+                        ParseErrorMessage::ConfusedToken(
+                            token::EQ.to_string(),
+                            token::COLON.to_string(),
+                        ),
+                    ),
+                )),
+                ParseErrorMessage::ExpectedToken(token::EQ.to_string()),
             ),
             expect(
                 TypeExpression::parse,
@@ -348,8 +364,24 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
                     ParseErrorMessage::ExpectedToken("identifier".to_string()),
                 ),
                 expect(
-                    symbols::colon,
-                    ParseErrorMessage::ExpectedToken(":".to_string()),
+                    alt((
+                        symbols::colon,
+                        confusable(
+                            symbols::assign,
+                            ParseErrorMessage::ConfusedToken(
+                                token::COLON.to_string(),
+                                token::ASSIGN.to_string(),
+                            ),
+                        ),
+                        confusable(
+                            symbols::eq,
+                            ParseErrorMessage::ConfusedToken(
+                                token::COLON.to_string(),
+                                token::EQ.to_string(),
+                            ),
+                        ),
+                    )),
+                    ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
                 ),
                 expect(
                     TypeExpression::parse,
@@ -412,7 +444,7 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
                 )),
                 expect(
                     symbols::colon,
-                    ParseErrorMessage::ExpectedToken(":".to_string()),
+                    ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
                 ),
                 expect(
                     TypeExpression::parse,
@@ -538,7 +570,19 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         let tokens = input.clone();
         let (input, (variable, expr, _)) = tuple((
-            terminated(Variable::parse, symbols::assign),
+            terminated(
+                Variable::parse,
+                alt((
+                    symbols::assign,
+                    confusable(
+                        symbols::eq,
+                        ParseErrorMessage::ConfusedToken(
+                            token::ASSIGN.to_string(),
+                            token::EQ.to_string(),
+                        ),
+                    ),
+                )),
+            ),
             expect(
                 Expression::parse,
                 ParseErrorMessage::ExpectedToken("expression".to_string()),

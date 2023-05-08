@@ -1,5 +1,5 @@
 use super::IResult;
-use crate::{error::ParseErrorMessage, lexer::token::TokenStream, DiagnosticsBroker};
+use crate::{error::ParseErrorMessage, lexer::token::TokenStream, DiagnosticsBroker, ToRange};
 use nom::{
     bytes::complete::take,
     error::ErrorKind,
@@ -126,5 +126,21 @@ where
         let mut list = vec![head];
         list.extend(tail);
         Ok((input, list))
+    }
+}
+
+pub(super) fn confusable<'a, O, B: DiagnosticsBroker, F>(
+    mut parser: F,
+    error_msg: ParseErrorMessage,
+) -> impl FnMut(TokenStream<'a, B>) -> IResult<O, B>
+where
+    F: InnerParser<'a, O, B>,
+{
+    move |input: TokenStream<B>| {
+        let error_start = input.to_range().start;
+        let (input, out) = parser.parse(input)?;
+        let spl_error = crate::error::SplError(error_start..input.error_pos, error_msg.to_string());
+        input.broker.report_error(spl_error);
+        Ok((input, out))
     }
 }
