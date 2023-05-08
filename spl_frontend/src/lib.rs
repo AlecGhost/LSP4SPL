@@ -1,4 +1,5 @@
 #![warn(clippy::nursery)]
+#![allow(clippy::redundant_pub_crate)]
 use ast::Program;
 use error::SplError;
 use lexer::token::Token;
