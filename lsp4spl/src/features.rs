@@ -3,8 +3,8 @@ use color_eyre::eyre::{Context, Result};
 use lsp_types::{TextDocumentPositionParams, Url};
 use spl_frontend::{
     ast::{GlobalDeclaration, Identifier, ProcedureDeclaration},
-    token::{TokenList, TokenType},
     table::{GlobalEntry, GlobalTable, LocalTable, SymbolTable},
+    token::{TokenList, TokenType},
     AnalyzedSource, ToRange,
 };
 use tokio::sync::{mpsc::Sender, oneshot};
@@ -23,6 +23,9 @@ pub use formatting::format;
 pub use hover::hover;
 pub use semantic_tokens::semantic_tokens;
 pub use signature_help::signature_help;
+
+#[cfg(test)]
+mod tests;
 
 struct DocumentCursor {
     doc_info: AnalyzedSource,

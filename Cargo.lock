@@ -415,6 +415,7 @@ dependencies = [
  "httparse",
  "log",
  "lsp-types",
+ "pretty_assertions",
  "serde",
  "serde_json",
  "serde_repr",
