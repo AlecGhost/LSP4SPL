@@ -1,0 +1,25 @@
+---
+source: lsp4spl/src/features/tests/completion.rs
+expression: result
+---
+[
+    "keyword: if",
+    "keyword: while",
+    "proc: ackermann",
+    "proc: clearAll",
+    "proc: drawCircle",
+    "proc: drawLine",
+    "proc: exit",
+    "proc: main",
+    "proc: printc",
+    "proc: printi",
+    "proc: readc",
+    "proc: readi",
+    "proc: setPixel",
+    "proc: time",
+    "snippet: if",
+    "snippet: while",
+    "variable: i",
+    "variable: j",
+    "variable: k",
+]

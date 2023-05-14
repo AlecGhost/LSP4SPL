@@ -3,12 +3,32 @@ use crate::{
     io::Message,
 };
 use color_eyre::eyre::Result;
-use lsp_types::{DidOpenTextDocumentParams, TextDocumentItem, Url};
+use lsp_types::{DidOpenTextDocumentParams, TextDocumentItem, Url, Position};
 use tokio::sync::mpsc::{self, Sender};
 
+mod completion;
 mod formatting;
 mod goto;
 mod fold;
+
+pub async fn test_feature<P, F, R, E>(
+    f: F,
+    uri: Url,
+    text: &str,
+    params: P,
+) -> Result<E>
+where
+    F: Fn(Sender<DocumentRequest>, P) -> R,
+    R: std::future::Future<Output = Result<E>>,
+    E: std::fmt::Debug + std::cmp::PartialEq,
+{
+    let (iotx, iorx) = tokio::sync::mpsc::channel(32);
+    let doctx = start_document_broker(iotx);
+    open_document(doctx.clone(), uri, text.to_string()).await;
+    let result = f(doctx, params).await?;
+    drop(iorx);
+    Ok(result)
+}
 
 fn start_document_broker(iotx: Sender<Message>) -> Sender<DocumentRequest> {
     let (doctx, docrx) = mpsc::channel(32);
@@ -32,21 +52,6 @@ async fn open_document(doctx: Sender<DocumentRequest>, uri: Url, text: String) {
     .unwrap();
 }
 
-pub async fn test_feature<P, F, R, E>(
-    f: F,
-    uri: Url,
-    text: &str,
-    params: P,
-) -> Result<E>
-where
-    F: Fn(Sender<DocumentRequest>, P) -> R,
-    R: std::future::Future<Output = Result<E>>,
-    E: std::fmt::Debug + std::cmp::PartialEq,
-{
-    let (iotx, iorx) = tokio::sync::mpsc::channel(32);
-    let doctx = start_document_broker(iotx);
-    open_document(doctx.clone(), uri, text.to_string()).await;
-    let result = f(doctx, params).await?;
-    drop(iorx);
-    Ok(result)
+pub fn pos(line: u32, character: u32) -> Position {
+    Position { line, character }
 }

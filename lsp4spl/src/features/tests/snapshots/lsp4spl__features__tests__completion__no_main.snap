@@ -1,0 +1,10 @@
+---
+source: lsp4spl/src/features/tests/completion.rs
+expression: result
+---
+[
+    "keyword: proc",
+    "keyword: type",
+    "snippet: proc",
+    "snippet: type",
+]

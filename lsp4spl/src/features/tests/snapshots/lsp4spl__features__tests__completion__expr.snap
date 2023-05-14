@@ -1,0 +1,10 @@
+---
+source: lsp4spl/src/features/tests/completion.rs
+expression: result
+---
+[
+    "variable: a",
+    "variable: i",
+    "variable: j",
+    "variable: k",
+]

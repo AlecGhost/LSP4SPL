@@ -1,6 +1,6 @@
 use super::*;
 use crate::features::format;
-use insta;
+use insta::assert_snapshot;
 use lsp_types::{
     DocumentFormattingParams, FormattingOptions, TextDocumentIdentifier, WorkDoneProgressParams,
 };
@@ -25,49 +25,49 @@ async fn test_formatting(text: &str) -> String {
 #[tokio::test]
 async fn empty() {
     let result = test_formatting("").await;
-    insta::assert_snapshot!(result);
+    assert_snapshot!(result);
 }
 
 #[tokio::test]
 async fn type_dec_correct() {
     let result = test_formatting("type a = int;\n").await;
-    insta::assert_snapshot!(result);
+    assert_snapshot!(result);
 }
 
 #[tokio::test]
 async fn type_dec_incorrect() {
     let result = test_formatting("type\n a=int;").await;
-    insta::assert_snapshot!(result);
+    assert_snapshot!(result);
 }
 
 #[tokio::test]
 async fn type_dec_missing_semic() {
     let result = test_formatting("type a=int").await;
-    insta::assert_snapshot!(result);
+    assert_snapshot!(result);
 }
 
 #[tokio::test]
 async fn proc_dec_correct() {
     let result = test_formatting("proc a() {}\n").await;
-    insta::assert_snapshot!(result);
+    assert_snapshot!(result);
 }
 
 #[tokio::test]
 async fn proc_dec_no_body() {
     let result = test_formatting("proc a() {\n}").await;
-    insta::assert_snapshot!(result);
+    assert_snapshot!(result);
 }
 
 #[tokio::test]
 async fn acker() {
     let acker = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
     let result = test_formatting(&acker).await;
-    insta::assert_snapshot!(result);
+    assert_snapshot!(result);
 }
 
 #[tokio::test]
 async fn big_test() {
     let big_test = std::fs::read_to_string("tests/programs/bigtest.spl").unwrap();
     let result = test_formatting(&big_test).await;
-    insta::assert_snapshot!(result);
+    assert_snapshot!(result);
 }

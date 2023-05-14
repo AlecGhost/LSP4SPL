@@ -34,10 +34,6 @@ fn location(uri: Url, start: Position, end: Position) -> Location {
     }
 }
 
-fn pos(line: u32, character: u32) -> Position {
-    Position { line, character }
-}
-
 fn goto_def_params(uri: Url, pos: Position) -> GotoDefinitionParams {
     GotoDefinitionParams {
         text_document_position_params: TextDocumentPositionParams {
