@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn acker() {
-    let acker = std::fs::read_to_string("/Users/alex/dev/compiler/programs/acker.spl").unwrap();
+    let acker = std::fs::read_to_string("tests/parser/acker.spl").unwrap();
     let broker = LocalBroker::default();
     let tokens = lex(&acker, broker);
     let (input, program) = all_consuming(Program::parse)(tokens.to_tokens()).unwrap();

@@ -4,9 +4,9 @@ use crate::{
 };
 use color_eyre::eyre::Result;
 use lsp_types::{DidOpenTextDocumentParams, TextDocumentItem, Url};
-use pretty_assertions::assert_eq;
 use tokio::sync::mpsc::{self, Sender};
 
+mod formatting;
 mod goto;
 
 fn start_document_broker(iotx: Sender<Message>) -> Sender<DocumentRequest> {
@@ -36,8 +36,7 @@ pub async fn test_feature<P, F, R, E>(
     uri: Url,
     text: &str,
     params: P,
-    expected: E,
-) -> Result<()>
+) -> Result<E>
 where
     F: Fn(Sender<DocumentRequest>, P) -> R,
     R: std::future::Future<Output = Result<E>>,
@@ -47,7 +46,6 @@ where
     let doctx = start_document_broker(iotx);
     open_document(doctx.clone(), uri, text.to_string()).await;
     let result = f(doctx, params).await?;
-    assert_eq!(result, expected,);
     drop(iorx);
-    Ok(())
+    Ok(result)
 }

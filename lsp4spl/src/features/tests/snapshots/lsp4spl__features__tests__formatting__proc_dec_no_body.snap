@@ -1,0 +1,6 @@
+---
+source: lsp4spl/src/features/tests/formatting.rs
+expression: result
+---
+proc a() {}
+

@@ -4,6 +4,7 @@ use lsp_types::{
     GotoDefinitionParams, Location, PartialResultParams, Position, Range, TextDocumentIdentifier,
     TextDocumentPositionParams, Url, WorkDoneProgressParams,
 };
+use pretty_assertions::assert_eq;
 
 async fn test_goto<F, R>(f: F, text: &str, pos: Position, goal: Option<(Position, Position)>)
 where
@@ -12,15 +13,10 @@ where
 {
     let uri = Url::parse("file:///test.spl").unwrap();
     let expected = goal.map(|(start, end)| location(uri.clone(), start, end));
-    test_feature(
-        f,
-        uri.clone(),
-        text,
-        goto_def_params(uri.clone(), pos),
-        expected,
-    )
-    .await
-    .unwrap();
+    let result = test_feature(f, uri.clone(), text, goto_def_params(uri.clone(), pos))
+        .await
+        .unwrap();
+    assert_eq!(result, expected);
 }
 
 fn location(uri: Url, start: Position, end: Position) -> Location {
