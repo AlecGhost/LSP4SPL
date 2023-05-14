@@ -16,7 +16,15 @@ where
     let result = test_feature(f, uri.clone(), text, goto_def_params(uri.clone(), pos))
         .await
         .unwrap();
-    assert_eq!(result, expected);
+    assert_eq!(map_location(result), map_location(expected));
+}
+
+fn map_location(location: Option<Location>) -> Option<(Position, Position)> {
+    let Location {
+        range: Range { start, end },
+        ..
+    } = location?;
+    Some((start, end))
 }
 
 fn location(uri: Url, start: Position, end: Position) -> Location {

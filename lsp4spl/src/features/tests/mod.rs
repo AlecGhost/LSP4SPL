@@ -8,6 +8,7 @@ use tokio::sync::mpsc::{self, Sender};
 
 mod formatting;
 mod goto;
+mod fold;
 
 fn start_document_broker(iotx: Sender<Message>) -> Sender<DocumentRequest> {
     let (doctx, docrx) = mpsc::channel(32);
