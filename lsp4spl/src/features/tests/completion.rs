@@ -55,28 +55,61 @@ async fn no_main() {
 
 #[tokio::test]
 async fn var_and_stmt() {
-    let acker = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
-    let result = test_completion(&acker, pos(7, 0)).await;
+    let program = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
+    let result = test_completion(&program, pos(7, 0)).await;
     assert_debug_snapshot!(result);
 }
 
 #[tokio::test]
 async fn stmt() {
-    let acker = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
-    let result = test_completion(&acker, pos(29, 0)).await;
+    let program = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
+    let result = test_completion(&program, pos(29, 0)).await;
     assert_debug_snapshot!(result);
 }
 
 #[tokio::test]
 async fn expr() {
-    let acker = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
-    let result = test_completion(&acker, pos(9, 9)).await;
+    let program = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
+    let result = test_completion(&program, pos(9, 9)).await;
     assert_debug_snapshot!(result);
 }
 
 #[tokio::test]
 async fn no_else() {
-    let acker = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
-    let result = test_completion(&acker, pos(10, 3)).await;
+    let program = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
+    let result = test_completion(&program, pos(10, 3)).await;
+    assert_debug_snapshot!(result);
+}
+
+#[tokio::test]
+async fn valid_else() {
+    let program = "
+proc main() {
+    if (0=0) {
+
+    } e
+}
+";
+    let result = test_completion(program, pos(4, 7)).await;
+    assert_debug_snapshot!(result);
+}
+
+#[tokio::test]
+async fn param_type() {
+    let program = "
+proc a(x: ) {}
+";
+    let result = test_completion(program, pos(1, 10)).await;
+    assert_debug_snapshot!(result);
+}
+
+#[tokio::test]
+async fn var_type() {
+    let program = "
+proc main() {
+    var x: 
+}
+";
+    let result = test_completion(program, pos(2, 11)).await;
     assert_debug_snapshot!(result);
 }

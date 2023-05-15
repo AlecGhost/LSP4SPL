@@ -11,7 +11,7 @@ fn one() {
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        *int_lit(1, &tokens[0..1]),
+        *int_lit(1, 0..1),
         "Expression: {}",
         expr
     );
@@ -28,9 +28,9 @@ fn addition() {
             .1,
         E::Binary(BinaryExpression {
             operator: Operator::Add,
-            lhs: int_lit(1, &tokens[0..1]),
-            rhs: int_lit(2, &tokens[2..3]),
-            info: AstInfo::new(&tokens[0..3]),
+            lhs: int_lit(1, 0..1),
+            rhs: int_lit(2, 2..3),
+            info: AstInfo::new(0..3),
         }),
         "Expression: {}",
         expr
@@ -48,14 +48,14 @@ fn multiplication_before_addition() {
             .1,
         E::Binary(BinaryExpression {
             operator: Operator::Add,
-            lhs: int_lit(1, &tokens[0..1]),
+            lhs: int_lit(1, 0..1),
             rhs: Box::new(E::Binary(BinaryExpression {
                 operator: Operator::Mul,
-                lhs: int_lit(2, &tokens[2..3]),
-                rhs: int_lit(3, &tokens[4..5]),
-                info: AstInfo::new(&tokens[2..5]),
+                lhs: int_lit(2, 2..3),
+                rhs: int_lit(3, 4..5),
+                info: AstInfo::new(2..5),
             })),
-            info: AstInfo::new(&tokens[..5]),
+            info: AstInfo::new(0..5),
         }),
         "Expression: {}",
         expr
@@ -75,12 +75,12 @@ fn division_before_addition() {
             operator: Operator::Add,
             lhs: Box::new(E::Binary(BinaryExpression {
                 operator: Operator::Div,
-                lhs: int_lit(1, &tokens[0..1]),
-                rhs: int_lit(2, &tokens[2..3]),
-                info: AstInfo::new(&tokens[0..3]),
+                lhs: int_lit(1, 0..1),
+                rhs: int_lit(2, 2..3),
+                info: AstInfo::new(0..3),
             })),
-            rhs: int_lit(3, &tokens[4..5]),
-            info: AstInfo::new(&tokens[..5]),
+            rhs: int_lit(3, 4..5),
+            info: AstInfo::new(0..5),
         }),
         "Expression: {}",
         expr
@@ -102,15 +102,15 @@ fn left_associativity_in_multiplication() {
                 operator: Operator::Div,
                 lhs: Box::new(E::Binary(BinaryExpression {
                     operator: Operator::Mul,
-                    lhs: int_lit(1, &tokens[0..1]),
-                    rhs: int_lit(2, &tokens[2..3]),
-                    info: AstInfo::new(&tokens[0..3]),
+                    lhs: int_lit(1, 0..1),
+                    rhs: int_lit(2, 2..3),
+                    info: AstInfo::new(0..3),
                 })),
-                rhs: int_lit(3, &tokens[4..5]),
-                info: AstInfo::new(&tokens[0..5]),
+                rhs: int_lit(3, 4..5),
+                info: AstInfo::new(0..5),
             })),
-            rhs: int_lit(4, &tokens[6..7]),
-            info: AstInfo::new(&tokens[..7]),
+            rhs: int_lit(4, 6..7),
+            info: AstInfo::new(0..7),
         }),
         "Expression: {}",
         expr
@@ -132,15 +132,15 @@ fn left_associativity_in_addition() {
                 operator: Operator::Add,
                 lhs: Box::new(E::Binary(BinaryExpression {
                     operator: Operator::Sub,
-                    lhs: int_lit(1, &tokens[0..1]),
-                    rhs: int_lit(2, &tokens[2..3]),
-                    info: AstInfo::new(&tokens[0..3]),
+                    lhs: int_lit(1, 0..1),
+                    rhs: int_lit(2, 2..3),
+                    info: AstInfo::new(0..3),
                 })),
-                rhs: int_lit(3, &tokens[4..5]),
-                info: AstInfo::new(&tokens[0..5]),
+                rhs: int_lit(3, 4..5),
+                info: AstInfo::new(0..5),
             })),
-            rhs: int_lit(4, &tokens[6..7]),
-            info: AstInfo::new(&tokens[..7]),
+            rhs: int_lit(4, 6..7),
+            info: AstInfo::new(0..7),
         }),
         "Expression: {}",
         expr
@@ -163,32 +163,32 @@ fn complex_comparison() {
                 lhs: Box::new(E::Bracketed(BracketedExpression {
                     expr: Box::new(E::Binary(BinaryExpression {
                         operator: Operator::Add,
-                        lhs: int_lit(1, &tokens[1..2]),
-                        rhs: int_lit(2, &tokens[3..4]),
-                        info: AstInfo::new(&tokens[1..4]),
+                        lhs: int_lit(1, 1..2),
+                        rhs: int_lit(2, 3..4),
+                        info: AstInfo::new(1..4),
                     })),
-                    info: AstInfo::new(&tokens[0..5])
+                    info: AstInfo::new(0..5)
                 })),
-                rhs: int_lit(3, &tokens[6..7]),
-                info: AstInfo::new(&tokens[0..7]),
+                rhs: int_lit(3, 6..7),
+                info: AstInfo::new(0..7),
             })),
             rhs: Box::new(E::Binary(BinaryExpression {
                 operator: Operator::Add,
-                lhs: int_lit(4, &tokens[8..9]),
+                lhs: int_lit(4, 8..9),
                 rhs: Box::new(E::Binary(BinaryExpression {
                     operator: Operator::Div,
                     lhs: Box::new(E::Binary(BinaryExpression {
                         operator: Operator::Mul,
-                        lhs: int_lit(5, &tokens[10..11]),
-                        rhs: int_lit(6, &tokens[12..13]),
-                        info: AstInfo::new(&tokens[10..13]),
+                        lhs: int_lit(5, 10..11),
+                        rhs: int_lit(6, 12..13),
+                        info: AstInfo::new(10..13),
                     })),
-                    rhs: int_lit(6, &tokens[14..15]),
-                    info: AstInfo::new(&tokens[10..15]),
+                    rhs: int_lit(6, 14..15),
+                    info: AstInfo::new(10..15),
                 })),
-                info: AstInfo::new(&tokens[8..15]),
+                info: AstInfo::new(8..15),
             })),
-            info: AstInfo::new(&tokens[..15]),
+            info: AstInfo::new(0..15),
         }),
         "Expression: {}",
         expr

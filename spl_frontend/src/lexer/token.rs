@@ -1,4 +1,4 @@
-use crate::ToRange;
+use crate::{error::SplError, ErrorContainer, ToRange};
 use nom::Needed;
 use std::{
     iter::Enumerate,
@@ -39,17 +39,40 @@ pub const VAR: &str = "var";
 pub struct Token {
     pub token_type: TokenType,
     pub range: Range<usize>,
+    errors: Vec<SplError>,
 }
 
 impl Token {
     pub const fn new(token_type: TokenType, range: Range<usize>) -> Self {
-        Self { token_type, range }
+        Self {
+            token_type,
+            range,
+            errors: Vec::new(),
+        }
+    }
+
+    pub const fn new_with_errors(
+        token_type: TokenType,
+        range: Range<usize>,
+        errors: Vec<SplError>,
+    ) -> Self {
+        Self {
+            token_type,
+            range,
+            errors,
+        }
     }
 }
 
 impl ToRange for Token {
     fn to_range(&self) -> Range<usize> {
         self.range.clone()
+    }
+}
+
+impl ErrorContainer for Token {
+    fn errors(&self) -> Vec<SplError> {
+        self.errors.clone()
     }
 }
 
@@ -60,15 +83,10 @@ impl std::fmt::Display for Token {
 }
 
 pub trait TokenList {
-    fn token_at(&self, index: usize) -> Option<&Token>;
     fn token_before(&self, index: usize) -> Option<&Token>;
 }
 
-impl TokenList for Vec<Token> {
-    fn token_at(&self, index: usize) -> Option<&Token> {
-        self.iter().find(|token| token.range.contains(&index))
-    }
-
+impl TokenList for &[Token] {
     fn token_before(&self, index: usize) -> Option<&Token> {
         if let Some(first) = self.first() {
             if first.range.start > index {
@@ -85,6 +103,12 @@ impl TokenList for Vec<Token> {
         } else {
             None
         }
+    }
+}
+
+impl ErrorContainer for Vec<Token> {
+    fn errors(&self) -> Vec<SplError> {
+        self.iter().flat_map(|token| token.errors()).collect()
     }
 }
 
@@ -209,6 +233,7 @@ impl TokenType {
             Ref => Some(REF),
             Type => Some(TYPE),
             Var => Some(VAR),
+            Eof => Some(""),
             _ => None,
         }
     }
@@ -248,8 +273,9 @@ impl std::fmt::Display for TokenType {
 pub struct TokenStream<'a, B> {
     tokens: &'a [Token],
     pub broker: B,
-    // error_pos is the end position of the previous token
-    pub error_pos: usize,
+    first_ptr: *const Token,
+    pub error_buffer: Vec<SplError>,
+    pub reference_pos: usize,
 }
 
 /// source: [Stackoverflow](https://stackoverflow.com/a/57203324)
@@ -270,7 +296,9 @@ impl<'a, B: Clone> TokenStream<'a, B> {
         Self {
             tokens,
             broker,
-            error_pos: 0,
+            first_ptr: tokens.as_ptr(),
+            error_buffer: Vec::new(),
+            reference_pos: 0,
         }
     }
 
@@ -279,15 +307,32 @@ impl<'a, B: Clone> TokenStream<'a, B> {
     /// # Panics
     ///
     /// Panics if underlying token array is empty.
-    pub fn fragment(&self) -> &Token {
-        assert!(!self.tokens.is_empty(), "Token slice must not be empty");
-        &self.tokens[0]
+    pub fn fragment(&self) -> Option<&Token> {
+        self.tokens.get(0)
+    }
+}
+
+impl<B> TokenStream<'_, B> {
+    fn distance(first: *const Token, second: *const Token) -> usize {
+        // because we do pointer arithmetic, the size of `Token` in memory is needed,
+        // to calculate the offset.
+        let size = std::mem::size_of::<Token>();
+
+        (second as usize - first as usize) / size
+    }
+
+    pub fn location_offset(&self) -> usize {
+        TokenStream::<B>::distance(self.first_ptr, self.tokens.as_ptr())
+    }
+
+    pub fn tokens(&self) -> Vec<Token> {
+        self.tokens.to_owned()
     }
 }
 
 impl<'a, B: Clone> ToRange for TokenStream<'a, B> {
     fn to_range(&self) -> Range<usize> {
-        self.fragment().range.clone()
+        self.fragment().map_or(0..0, |token| token.range.clone())
     }
 }
 
@@ -306,16 +351,9 @@ impl<'a, B: Clone> nom::InputTake for TokenStream<'a, B> {
     }
 
     fn take_split(&self, count: usize) -> (Self, Self) {
-        // if no previous token exists, error_pos stays 0
-        let error_pos = if count > 0 {
-            self.tokens[count - 1].range.end
-        } else {
-            0
-        };
         (
             Self {
                 tokens: &self.tokens[count..],
-                error_pos,
                 ..self.clone()
             },
             Self {
@@ -331,25 +369,14 @@ impl<'a, B> nom::Offset for TokenStream<'a, B> {
     fn offset(&self, second: &Self) -> usize {
         let fst = self.tokens.as_ptr();
         let snd = second.tokens.as_ptr();
-        // because we do pointer arithmetic, the size of `Token` in memory is needed,
-        // to calculate the offset.
-        let size = std::mem::size_of::<Token>();
-
-        (snd as usize - fst as usize) / size
+        TokenStream::<B>::distance(fst, snd)
     }
 }
 
 impl<'a, B: Clone> nom::Slice<RangeTo<usize>> for TokenStream<'a, B> {
     fn slice(&self, range: RangeTo<usize>) -> Self {
-        // if no previous token exists, error_pos stays 0
-        let error_pos = if range.end > 0 {
-            self.tokens[range.end - 1].range.end
-        } else {
-            0
-        };
         Self {
             tokens: &self.tokens[range],
-            error_pos,
             ..self.clone()
         }
     }
@@ -365,10 +392,12 @@ impl<'a, B: Clone> nom::InputIter for TokenStream<'a, B> {
     fn iter_indices(&self) -> Enumerate<::std::slice::Iter<'a, Token>> {
         self.tokens.iter().enumerate()
     }
+
     #[inline]
     fn iter_elements(&self) -> ::std::slice::Iter<'a, Token> {
         self.tokens.iter()
     }
+
     #[inline]
     fn position<P>(&self, predicate: P) -> Option<usize>
     where
@@ -376,6 +405,7 @@ impl<'a, B: Clone> nom::InputIter for TokenStream<'a, B> {
     {
         self.tokens.iter().position(predicate)
     }
+
     #[inline]
     fn slice_index(&self, count: usize) -> Result<usize, Needed> {
         if self.tokens.len() >= count {

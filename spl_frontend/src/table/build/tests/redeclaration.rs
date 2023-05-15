@@ -2,61 +2,61 @@ use super::*;
 
 #[test]
 fn type_proc() {
-    let (_, _, broker) = test("type a = int; proc a() {}");
+    let (_, errors) = test("type a = int; proc a() {}");
     eq!(
-        broker.errors(),
+        errors,
         vec![
+            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()),
             SplError(
-                19..20,
+                6..7,
                 BuildErrorMessage::RedeclarationAsProcedure("a".to_string()).to_string()
             ),
-            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())
         ]
     );
 }
 
 #[test]
 fn proc_type() {
-    let (_, _, broker) = test("proc a() {}\ntype a = int; ");
+    let (_, errors) = test("proc a() {}\ntype a = int; ");
     eq!(
-        broker.errors(),
+        errors,
         vec![
+            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()),
             SplError(
-                17..18,
+                7..8,
                 BuildErrorMessage::RedeclarationAsType("a".to_string()).to_string()
             ),
-            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())
         ]
     );
 }
 
 #[test]
 fn param() {
-    let (_, _, broker) = test("proc a(i: int, i: int) {}");
+    let (_, errors) = test("proc a(i: int, i: int) {}");
     eq!(
-        broker.errors(),
+        errors,
         vec![
+            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()),
             SplError(
-                15..16,
+                7..8,
                 BuildErrorMessage::RedeclarationAsParameter("i".to_string()).to_string()
             ),
-            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())
         ]
     );
 }
 
 #[test]
 fn variable() {
-    let (_, _, broker) = test(
+    let (_, errors) = test(
         "proc main() {
             var i: int;
             var i: int;
         }",
     );
     eq!(
-        broker.errors(),
+        errors,
         vec![SplError(
-            54..55,
+            11..12,
             BuildErrorMessage::RedeclarationAsVariable("i".to_string()).to_string()
         )]
     );

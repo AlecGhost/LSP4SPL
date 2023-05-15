@@ -1,42 +1,127 @@
 //! Contains structs and enums for all AST nodes
 use crate::{
-    error::OperatorConversionError,
-    lexer::token::{Token, TokenType},
-    ToRange,
+    error::{OperatorConversionError, SplError},
+    lexer::token::TokenType,
+    token::Token,
+    ErrorContainer, Shiftable, ToRange, ToTextRange,
 };
-use spl_frontend_macros::ToRange;
-use std::{fmt::Display, ops::Range};
+use spl_frontend_macros::{ToRange, ToTextRange};
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut, Range},
+};
 
+// TODO: Remove Hash
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub struct AstInfo {
-    pub tokens: Vec<Token>,
+    range: Range<usize>,
+    errors: Vec<SplError>,
+}
+
+impl AstInfo {
+    pub const fn new(range: Range<usize>) -> Self {
+        Self {
+            range,
+            errors: Vec::new(),
+        }
+    }
+
+    pub fn new_with_errors(range: Range<usize>, errors: Vec<SplError>) -> Self {
+        Self { range, errors }
+    }
+
+    pub fn append_error(&mut self, error: SplError) {
+        self.errors.push(error);
+    }
+
+    pub(crate) fn extend_range(&mut self, other: &Self) {
+        let start = self.range.start.min(other.range.start);
+        let end = self.range.end.max(other.range.end);
+        self.range = start..end;
+    }
+
+    pub fn slice<'a>(&self, tokens: &'a [Token]) -> &'a [Token] {
+        &tokens[self.range.clone()]
+    }
 }
 
 impl ToRange for AstInfo {
     fn to_range(&self) -> Range<usize> {
-        self.tokens.to_range()
+        self.range.clone()
     }
 }
 
-impl ToRange for Range<usize> {
-    fn to_range(&self) -> Range<usize> {
-        self.clone()
-    }
-}
-
-impl AstInfo {
-    pub fn new(tokens: &[Token]) -> Self {
-        Self {
-            tokens: tokens.to_vec(),
+impl ToTextRange for AstInfo {
+    fn to_text_range(&self, tokens: &[Token]) -> Range<usize> {
+        match self.to_range() {
+            range if range.len() == 0 => {
+                let token = &tokens[range.end];
+                let end_pos = token.range.end;
+                end_pos..end_pos
+            }
+            range => {
+                let tokens = &tokens[range];
+                let start_pos = tokens.first().expect("Token slice is empty").range.start;
+                let end_pos = tokens.last().expect("Token slice is empty").range.end;
+                start_pos..end_pos
+            }
         }
     }
+}
 
-    pub const fn empty() -> Self {
-        Self { tokens: Vec::new() }
+impl ErrorContainer for AstInfo {
+    fn errors(&self) -> Vec<SplError> {
+        self.errors.clone()
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, ToRange)]
+impl Shiftable for AstInfo {
+    fn shift(self, offset: usize) -> Self {
+        Self {
+            range: self.range.shift(offset),
+            errors: self.errors,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Reference<T> {
+    pub reference: T,
+    pub offset: usize,
+}
+
+impl<T> Reference<T> {
+    pub const fn new(reference: T, offset: usize) -> Self {
+        Self { reference, offset }
+    }
+}
+
+impl<T> Deref for Reference<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.reference
+    }
+}
+
+impl<T> DerefMut for Reference<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.reference
+    }
+}
+
+impl<T> AsRef<T> for Reference<T> {
+    fn as_ref(&self) -> &T {
+        &self.reference
+    }
+}
+
+impl<T> AsMut<T> for Reference<T> {
+    fn as_mut(&mut self) -> &mut T {
+        &mut self.reference
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, ToRange, ToTextRange)]
 pub struct IntLiteral {
     pub value: Option<u32>,
     pub info: AstInfo,
@@ -51,32 +136,79 @@ impl IntLiteral {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, ToRange)]
+impl ErrorContainer for IntLiteral {
+    fn errors(&self) -> Vec<SplError> {
+        self.info.errors()
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct Identifier {
     pub value: String,
     pub info: AstInfo,
 }
 
 impl Identifier {
-    pub fn new(value: String, tokens: &[Token]) -> Self {
+    pub const fn new(value: String, range: Range<usize>) -> Self {
         Self {
             value,
-            info: AstInfo::new(tokens),
+            info: AstInfo::new(range),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for Identifier {
+    fn errors(&self) -> Vec<SplError> {
+        self.info.errors()
+    }
+}
+
+impl Shiftable for Identifier {
+    fn shift(self, offset: usize) -> Self {
+        Self {
+            value: self.value,
+            info: self.info.shift(offset),
+        }
+    }
+}
+
+impl Shiftable for Vec<Identifier> {
+    fn shift(self, offset: usize) -> Self {
+        self.into_iter().map(|ident| ident.shift(offset)).collect()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct ArrayAccess {
     pub array: Box<Variable>,
-    pub index: Option<Box<Expression>>,
+    pub index: Option<Box<Reference<Expression>>>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for ArrayAccess {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        errors.extend(self.array.errors());
+        if let Some(index) = &self.index {
+            errors.extend(index.errors().shift(index.offset))
+        }
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub enum Variable {
     NamedVariable(Identifier),
     ArrayAccess(ArrayAccess),
+}
+
+impl ErrorContainer for Variable {
+    fn errors(&self) -> Vec<SplError> {
+        match self {
+            Self::ArrayAccess(a) => a.errors(),
+            Self::NamedVariable(n) => n.errors(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -135,7 +267,7 @@ impl TryFrom<TokenType> for Operator {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct BinaryExpression {
     pub operator: Operator,
     pub lhs: Box<Expression>,
@@ -143,20 +275,45 @@ pub struct BinaryExpression {
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for BinaryExpression {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        errors.extend(self.lhs.errors());
+        errors.extend(self.rhs.errors());
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct BracketedExpression {
     pub expr: Box<Expression>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for BracketedExpression {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        errors.extend(self.expr.errors());
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct UnaryExpression {
     pub operator: Operator,
     pub expr: Box<Expression>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for UnaryExpression {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        errors.extend(self.expr.errors());
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub enum Expression {
     Binary(BinaryExpression),
     Bracketed(BracketedExpression),
@@ -166,80 +323,253 @@ pub enum Expression {
     Error(AstInfo),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl Expression {
+    pub fn info_mut(&mut self) -> &mut AstInfo {
+        match self {
+            Self::Binary(b) => &mut b.info,
+            Self::Bracketed(b) => &mut b.info,
+            Self::Error(info) => info,
+            Self::Unary(u) => &mut u.info,
+            Self::IntLiteral(i) => &mut i.info,
+            Self::Variable(v) => match v {
+                Variable::ArrayAccess(a) => &mut a.info,
+                Variable::NamedVariable(n) => &mut n.info,
+            },
+        }
+    }
+}
+
+impl ErrorContainer for Expression {
+    fn errors(&self) -> Vec<SplError> {
+        match self {
+            Self::Binary(b) => b.errors(),
+            Self::Bracketed(b) => b.errors(),
+            Self::Error(info) => info.errors(),
+            Self::IntLiteral(i) => i.errors(),
+            Self::Variable(v) => v.errors(),
+            Self::Unary(u) => u.errors(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct TypeDeclaration {
+    pub doc: Vec<String>,
     pub name: Option<Identifier>,
-    pub type_expr: Option<TypeExpression>,
+    pub type_expr: Option<Reference<TypeExpression>>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for TypeDeclaration {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        if let Some(name) = &self.name {
+            errors.extend(name.errors());
+        }
+        if let Some(type_expr) = &self.type_expr {
+            errors.extend(type_expr.errors().shift(type_expr.offset));
+        }
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub enum TypeExpression {
     NamedType(Identifier),
     ArrayType {
         size: Option<IntLiteral>,
-        base_type: Option<Box<TypeExpression>>,
+        base_type: Option<Box<Reference<TypeExpression>>>,
         info: AstInfo,
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for TypeExpression {
+    fn errors(&self) -> Vec<SplError> {
+        match self {
+            Self::NamedType(n) => n.errors(),
+            Self::ArrayType {
+                base_type, info, ..
+            } => {
+                let mut errors = info.errors();
+                if let Some(base_type) = base_type {
+                    errors.extend(base_type.errors());
+                }
+                errors
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub enum VariableDeclaration {
     Valid {
+        doc: Vec<String>,
         name: Option<Identifier>,
-        type_expr: Option<TypeExpression>,
+        type_expr: Option<Reference<TypeExpression>>,
         info: AstInfo,
     },
     Error(AstInfo),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for VariableDeclaration {
+    fn errors(&self) -> Vec<SplError> {
+        match self {
+            Self::Error(info) => info.errors(),
+            Self::Valid {
+                name,
+                type_expr,
+                info,
+                ..
+            } => {
+                let mut errors = info.errors();
+                if let Some(name) = name {
+                    errors.extend(name.errors());
+                }
+                if let Some(type_expr) = type_expr {
+                    errors.extend(type_expr.errors().shift(type_expr.offset));
+                }
+                errors
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub enum ParameterDeclaration {
     Valid {
+        doc: Vec<String>,
         is_ref: bool,
         name: Option<Identifier>,
-        type_expr: Option<TypeExpression>,
+        type_expr: Option<Reference<TypeExpression>>,
         info: AstInfo,
     },
     Error(AstInfo),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for ParameterDeclaration {
+    fn errors(&self) -> Vec<SplError> {
+        match self {
+            Self::Error(info) => info.errors(),
+            Self::Valid {
+                name,
+                type_expr,
+                info,
+                ..
+            } => {
+                let mut errors = info.errors();
+                if let Some(name) = name {
+                    errors.extend(name.errors());
+                }
+                if let Some(type_expr) = type_expr {
+                    errors.extend(type_expr.errors().shift(type_expr.offset));
+                }
+                errors
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct CallStatement {
     pub name: Identifier,
-    pub arguments: Vec<Expression>,
+    pub arguments: Vec<Reference<Expression>>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for CallStatement {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        errors.extend(self.name.errors());
+        errors.extend(
+            self.arguments
+                .iter()
+                .flat_map(|arg| arg.errors().shift(arg.offset)),
+        );
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct Assignment {
     pub variable: Variable,
-    pub expr: Option<Expression>,
+    pub expr: Option<Reference<Expression>>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for Assignment {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        errors.extend(self.variable.errors());
+        if let Some(expr) = &self.expr {
+            errors.extend(expr.errors().shift(expr.offset));
+        }
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct IfStatement {
-    pub condition: Option<Expression>,
-    pub if_branch: Option<Box<Statement>>,
-    pub else_branch: Option<Box<Statement>>,
+    pub condition: Option<Reference<Expression>>,
+    pub if_branch: Option<Box<Reference<Statement>>>,
+    pub else_branch: Option<Box<Reference<Statement>>>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for IfStatement {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        if let Some(expr) = &self.condition {
+            errors.extend(expr.errors().shift(expr.offset));
+        }
+        if let Some(stmt) = &self.if_branch {
+            errors.extend(stmt.errors().shift(stmt.offset));
+        }
+        if let Some(stmt) = &self.else_branch {
+            errors.extend(stmt.errors().shift(stmt.offset));
+        }
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct WhileStatement {
-    pub condition: Option<Expression>,
-    pub statement: Option<Box<Statement>>,
+    pub condition: Option<Reference<Expression>>,
+    pub statement: Option<Box<Reference<Statement>>>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for WhileStatement {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        if let Some(expr) = &self.condition {
+            errors.extend(expr.errors().shift(expr.offset));
+        }
+        if let Some(stmt) = &self.statement {
+            errors.extend(stmt.errors().shift(stmt.offset));
+        }
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct BlockStatement {
-    pub statements: Vec<Statement>,
+    pub statements: Vec<Reference<Statement>>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for BlockStatement {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        errors.extend(
+            self.statements
+                .iter()
+                .flat_map(|stmt| stmt.errors().shift(stmt.offset)),
+        );
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub enum Statement {
     Empty(AstInfo),
     Assignment(Assignment),
@@ -250,66 +580,108 @@ pub enum Statement {
     Error(AstInfo),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl Statement {
+    pub fn info(&self) -> &AstInfo {
+        match self {
+            Self::Empty(info) => info,
+            Self::If(i) => &i.info,
+            Self::Call(c) => &c.info,
+            Self::While(w) => &w.info,
+            Self::Block(b) => &b.info,
+            Self::Assignment(a) => &a.info,
+            Self::Error(info) => info,
+        }
+    }
+}
+
+impl ErrorContainer for Statement {
+    fn errors(&self) -> Vec<SplError> {
+        match self {
+            Self::Empty(info) => info.errors(),
+            Self::Error(info) => info.errors(),
+            Self::Assignment(a) => a.errors(),
+            Self::Block(b) => b.errors(),
+            Self::Call(c) => c.errors(),
+            Self::If(i) => i.errors(),
+            Self::While(w) => w.errors(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct ProcedureDeclaration {
+    pub doc: Vec<String>,
     pub name: Option<Identifier>,
-    pub parameters: Vec<ParameterDeclaration>,
-    pub variable_declarations: Vec<VariableDeclaration>,
-    pub statements: Vec<Statement>,
+    pub parameters: Vec<Reference<ParameterDeclaration>>,
+    pub variable_declarations: Vec<Reference<VariableDeclaration>>,
+    pub statements: Vec<Reference<Statement>>,
     pub info: AstInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ToRange)]
+impl ErrorContainer for ProcedureDeclaration {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        if let Some(name) = &self.name {
+            errors.extend(name.errors());
+        }
+        errors.extend(
+            self.parameters
+                .iter()
+                .flat_map(|stmt| stmt.errors().shift(stmt.offset)),
+        );
+        errors.extend(
+            self.variable_declarations
+                .iter()
+                .flat_map(|stmt| stmt.errors().shift(stmt.offset)),
+        );
+        errors.extend(
+            self.statements
+                .iter()
+                .flat_map(|stmt| stmt.errors().shift(stmt.offset)),
+        );
+        errors
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub enum GlobalDeclaration {
     Type(TypeDeclaration),
     Procedure(ProcedureDeclaration),
     Error(AstInfo),
 }
 
-/// Contains entire AST
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Program {
-    pub global_declarations: Vec<GlobalDeclaration>,
+impl ErrorContainer for GlobalDeclaration {
+    fn errors(&self) -> Vec<SplError> {
+        match self {
+            Self::Type(t) => t.errors(),
+            Self::Procedure(p) => p.errors(),
+            Self::Error(info) => info.errors(),
+        }
+    }
 }
 
-impl Display for AstInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let display = self
-            .tokens
-            .iter()
-            .map(|token| token.to_string())
-            .reduce(|acc, token| {
-                if acc.ends_with('\n') {
-                    acc + &token
-                } else {
-                    acc + " " + &token
-                }
-            })
-            .unwrap_or_default();
-        write!(f, "{}", display)
+/// Contains entire AST
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
+pub struct Program {
+    pub global_declarations: Vec<Reference<GlobalDeclaration>>,
+    pub info: AstInfo,
+}
+
+impl ErrorContainer for Program {
+    fn errors(&self) -> Vec<SplError> {
+        let mut errors = self.info.errors();
+        errors.extend(
+            self.global_declarations
+                .iter()
+                .flat_map(|gd| gd.errors().shift(gd.offset)),
+        );
+        errors
     }
 }
 
 impl Display for Identifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)
-    }
-}
-
-impl Display for IntLiteral {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let display = self
-            .info
-            .tokens
-            .iter()
-            .find_map(|token| match &token.token_type {
-                TokenType::Int(_) | TokenType::Hex(_) | TokenType::Char(_) => {
-                    Some(token.to_string())
-                }
-                _ => None,
-            })
-            .expect("IntLiteral must contain a `Int`, `Hex` or `Char` token");
-        write!(f, "{}", display)
     }
 }
 
@@ -333,129 +705,4 @@ impl Display for Operator {
             }
         )
     }
-}
-
-impl Display for ArrayAccess {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let index = fmt_or_empty(&self.index);
-        write!(f, "{}[{}]", self.array, index)
-    }
-}
-
-impl Display for Variable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let display = match self {
-            Self::NamedVariable(ident) => ident.to_string(),
-            Self::ArrayAccess(access) => access.to_string(),
-        };
-        write!(f, "{}", display)
-    }
-}
-
-impl Display for BinaryExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {} {}", self.lhs, self.operator, self.rhs)
-    }
-}
-
-impl Display for BracketedExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({})", self.expr)
-    }
-}
-
-impl Display for UnaryExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{}", self.operator, self.expr)
-    }
-}
-
-impl Display for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let display = match self {
-            Self::Binary(binary) => binary.to_string(),
-            Self::Bracketed(bracketed) => bracketed.to_string(),
-            Self::IntLiteral(int_lit) => int_lit.to_string(),
-            Self::Unary(unary) => unary.to_string(),
-            Self::Variable(var) => var.to_string(),
-            Self::Error(_) => String::new(),
-        };
-        write!(f, "{}", display)
-    }
-}
-
-impl Display for TypeExpression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let display = match self {
-            Self::NamedType(ident) => ident.to_string(),
-            Self::ArrayType {
-                size, base_type, ..
-            } => {
-                let size = fmt_or_empty(size);
-                base_type.as_ref().map_or_else(
-                    || format!("array [{}] of", size),
-                    |type_expr| format!("array [{}] of {}", size, type_expr),
-                )
-            }
-        };
-        write!(f, "{}", display)
-    }
-}
-
-impl Display for VariableDeclaration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Valid {
-                name, type_expr, ..
-            } => {
-                let name = fmt_or_empty(name);
-                let type_expr = fmt_or_empty(type_expr);
-                writeln!(f, "var {}: {};", name, type_expr)
-            }
-            Self::Error(info) => write!(f, "{}", info),
-        }
-    }
-}
-
-impl Display for ParameterDeclaration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Valid {
-                is_ref,
-                name,
-                type_expr,
-                ..
-            } => {
-                let r#ref = if *is_ref { "ref " } else { "" };
-                let name = fmt_or_empty(name);
-                let type_expr = fmt_or_empty(type_expr);
-                write!(f, "{}{}: {}", r#ref, name, type_expr)
-            }
-            Self::Error(info) => write!(f, "{}", info),
-        }
-    }
-}
-
-impl Display for Assignment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let expr = fmt_or_empty(&self.expr);
-        writeln!(f, "{} := {};", self.variable, expr)
-    }
-}
-
-impl Display for CallStatement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let args = self
-            .arguments
-            .iter()
-            .map(|arg| arg.to_string())
-            .reduce(|acc, arg| acc + ", " + arg.as_str())
-            .unwrap_or_default();
-        writeln!(f, "{}({});", self.name, args)
-    }
-}
-
-fn fmt_or_empty<T: Display>(opt: &Option<T>) -> String {
-    opt.as_ref()
-        .map_or_else(String::new, |inner| inner.to_string())
 }

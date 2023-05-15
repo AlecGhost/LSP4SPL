@@ -21,6 +21,24 @@ pub trait ToRange {
     fn to_range(&self) -> Range<usize>;
 }
 
+pub trait ToTextRange {
+    fn to_text_range(&self, tokens: &[Token]) -> Range<usize>;
+}
+
+pub trait ErrorContainer {
+    fn errors(&self) -> Vec<SplError>;
+}
+
+pub trait Shiftable {
+    fn shift(self, offset: usize) -> Self;
+}
+
+impl Shiftable for Range<usize> {
+    fn shift(self, offset: usize) -> Self {
+        (self.start + offset)..(self.end + offset)
+    }
+}
+
 /// Contains all information extracted from a given SPL source file.
 #[derive(Clone, Debug)]
 pub struct AnalyzedSource {
@@ -28,24 +46,43 @@ pub struct AnalyzedSource {
     pub tokens: Vec<Token>,
     pub ast: Program,
     pub table: GlobalTable,
-    pub errors: Vec<SplError>,
 }
 
 impl AnalyzedSource {
     pub fn new(text: String) -> Self {
         let broker = LocalBroker::default();
         let tokens = lexer::lex(&text, broker.clone());
-        let program = parser::parse(&tokens, broker.clone());
-        let table = table::build(&program, &broker);
-        table::analyze(&program, &table, &broker);
-        let errors = broker.errors();
+        let mut program = parser::parse(&tokens, broker.clone());
+        let table = table::build(&mut program, &broker);
+        table::analyze(&mut program, &table, &broker);
         Self {
             text,
             tokens,
             ast: program,
             table,
-            errors,
         }
+    }
+}
+
+impl ErrorContainer for AnalyzedSource {
+    fn errors(&self) -> Vec<SplError> {
+        let token_ranged_errors = self.ast.errors();
+        token_ranged_errors
+            .into_iter()
+            .map(|error| match error.to_range() {
+                range if range.len() == 0 => {
+                    let token = &self.tokens[range.end];
+                    let end_pos = token.range.end;
+                    SplError(end_pos..end_pos, error.1)
+                }
+                range => {
+                    let tokens = &self.tokens[range];
+                    let start_pos = tokens.first().expect("Token slice is empty").range.start;
+                    let end_pos = tokens.last().expect("Token slice is empty").range.end;
+                    SplError(start_pos..end_pos, error.1)
+                }
+            })
+            .collect()
     }
 }
 

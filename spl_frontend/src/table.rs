@@ -1,4 +1,4 @@
-use crate::{ast::Identifier, error::KeyAlreadyExistsError, ToRange};
+use crate::{ast::Identifier, error::KeyAlreadyExistsError, ToRange, ToTextRange};
 pub(crate) use build::build;
 pub(crate) use semantic::analyze;
 use std::{
@@ -61,6 +61,7 @@ pub enum Entry<'a> {
 pub struct TypeEntry {
     pub name: Identifier,
     pub data_type: Option<DataType>,
+    pub range: Range<usize>,
     pub doc: Option<String>,
 }
 
@@ -69,6 +70,7 @@ pub struct ProcedureEntry {
     pub name: Identifier,
     pub local_table: LocalTable,
     pub parameters: Vec<VariableEntry>,
+    pub range: Range<usize>,
     pub doc: Option<String>,
 }
 
@@ -83,6 +85,7 @@ pub struct VariableEntry {
     pub name: Identifier,
     pub is_ref: bool,
     pub data_type: Option<DataType>,
+    pub range: Range<usize>,
     pub doc: Option<String>,
 }
 
@@ -93,7 +96,7 @@ pub enum DataType {
     Array {
         size: u32,
         base_type: Box<Self>,
-        creator: Identifier,
+        creator: String,
     },
 }
 
@@ -216,9 +219,50 @@ impl ToRange for Entry<'_> {
     fn to_range(&self) -> Range<usize> {
         use Entry::*;
         match self {
-            Type(t) => t.name.to_range(),
-            Procedure(p) => p.name.to_range(),
-            Variable(v) | Parameter(v) => v.name.to_range(),
+            Type(t) => t.to_range(),
+            Procedure(p) => p.to_range(),
+            Variable(v) | Parameter(v) => v.to_range(),
+        }
+    }
+}
+
+// TODO: Remove
+impl ToTextRange for Entry<'_> {
+    fn to_text_range(&self, tokens: &[crate::token::Token]) -> Range<usize> {
+        use Entry::*;
+        match self {
+            Type(t) => t.name.to_text_range(tokens),
+            Procedure(p) => p.name.to_text_range(tokens),
+            Variable(v) | Parameter(v) => v.name.to_text_range(tokens),
+        }
+    }
+}
+
+impl ToRange for VariableEntry {
+    fn to_range(&self) -> Range<usize> {
+        self.range.clone()
+    }
+}
+
+impl ToRange for ProcedureEntry {
+    fn to_range(&self) -> Range<usize> {
+        self.range.clone()
+    }
+}
+
+impl ToRange for TypeEntry {
+    fn to_range(&self) -> Range<usize> {
+        self.range.clone()
+    }
+}
+
+// TODO: Remove
+impl ToTextRange for GlobalEntry {
+    fn to_text_range(&self, tokens: &[crate::token::Token]) -> Range<usize> {
+        use GlobalEntry::*;
+        match self {
+            Procedure(p) => p.name.to_text_range(tokens),
+            Type(t) => t.name.to_text_range(tokens),
         }
     }
 }
@@ -227,8 +271,8 @@ impl ToRange for GlobalEntry {
     fn to_range(&self) -> Range<usize> {
         use GlobalEntry::*;
         match self {
-            Procedure(p) => p.name.to_range(),
-            Type(t) => t.name.to_range(),
+            Procedure(p) => p.to_range(),
+            Type(t) => t.to_range(),
         }
     }
 }

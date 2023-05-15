@@ -1,0 +1,7 @@
+---
+source: lsp4spl/src/features/tests/completion.rs
+expression: result
+---
+[
+    "type: int",
+]

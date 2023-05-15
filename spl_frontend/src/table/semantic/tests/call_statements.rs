@@ -23,7 +23,7 @@ fn too_few() {
     eq!(
         errors,
         vec![SplError(
-            40..44,
+            14..18,
             SemanticErrorMessage::TooFewArguments("a".to_string()).to_string()
         )]
     );
@@ -40,7 +40,7 @@ fn too_many() {
     eq!(
         errors,
         vec![SplError(
-            48..56,
+            14..21,
             SemanticErrorMessage::TooManyArguments("a".to_string()).to_string()
         )]
     );
@@ -57,7 +57,7 @@ fn ref_non_variable() {
     eq!(
         errors,
         vec![SplError(
-            52..53,
+            17..18,
             SemanticErrorMessage::ArgumentMustBeAVariable("a".to_string(), 1).to_string()
         )]
     );
@@ -78,7 +78,7 @@ fn arg_type_mismatch() {
     eq!(
         errors,
         vec![SplError(
-            128..129,
+            31..32,
             SemanticErrorMessage::ArgumentsTypeMismatch("a".to_string(), 1).to_string()
         )]
     );
@@ -97,7 +97,7 @@ fn non_proc() {
     eq!(
         errors,
         vec![SplError(
-            57..62,
+            10..15,
             SemanticErrorMessage::CallOfNoneProcedure("a".to_string()).to_string()
         )]
     );
@@ -115,7 +115,7 @@ fn undefined_proc() {
     eq!(
         errors,
         vec![SplError(
-            35..40,
+            5..10,
             SemanticErrorMessage::UndefinedProcedure("a".to_string()).to_string()
         )]
     );

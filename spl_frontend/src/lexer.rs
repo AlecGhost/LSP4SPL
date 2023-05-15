@@ -161,20 +161,26 @@ struct Int;
 impl<B: DiagnosticsBroker> Lexer<B> for Int {
     fn lex(input: Span<B>) -> IResult<B> {
         let (input, int_span) = digit1(input)?;
-        let result = match int_span.parse() {
-            Ok(value) => IntResult::Int(value),
+        match int_span.parse() {
+            Ok(value) => Ok((
+                input,
+                Token::new(TokenType::Int(IntResult::Int(value)), int_span.to_range()),
+            )),
             Err(_) => {
-                input.extra.report_error(SplError(
+                let err = SplError(
                     int_span.to_range(),
                     LexErrorMessage::InvalidIntLit(int_span.to_string()).to_string(),
-                ));
-                IntResult::Err(int_span.to_string())
+                );
+                Ok((
+                    input,
+                    Token::new_with_errors(
+                        TokenType::Int(IntResult::Err(int_span.to_string())),
+                        int_span.to_range(),
+                        vec![err],
+                    ),
+                ))
             }
-        };
-        Ok((
-            input,
-            Token::new(TokenType::Int(result), int_span.to_range()),
-        ))
+        }
     }
 }
 

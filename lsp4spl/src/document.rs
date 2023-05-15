@@ -3,7 +3,7 @@ use lsp_types::{
     notification::{Notification, PublishDiagnostics},
     *,
 };
-use spl_frontend::{error::SplError, AnalyzedSource};
+use spl_frontend::{error::SplError, AnalyzedSource, ErrorContainer};
 use std::collections::HashMap;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
@@ -76,7 +76,7 @@ pub async fn broker(
                         PublishDiagnosticsParams {
                             uri: uri.clone(),
                             diagnostics: doc_info
-                                .errors
+                                .errors()
                                 .iter()
                                 .map(|err| create_diagnostic(err, &doc_info.text))
                                 .collect(),
@@ -102,7 +102,7 @@ pub async fn broker(
                                 PublishDiagnosticsParams {
                                     uri: uri.clone(),
                                     diagnostics: doc_info
-                                        .errors
+                                        .errors()
                                         .iter()
                                         .map(|err| create_diagnostic(err, &doc_info.text))
                                         .collect(),

@@ -10,9 +10,9 @@ fn simple() {
     eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a".to_string(), &tokens[0..1]),
+            name: Identifier::new("a".to_string(), 0..1),
             arguments: Vec::new(),
-            info: AstInfo::new(&tokens[0..4]),
+            info: AstInfo::new(0..4),
         },
         "CallStatement: {}",
         stmt
@@ -25,23 +25,21 @@ fn with_args() {
     let stmt = "a(1, 2, 3);";
     let broker = LocalBroker::default();
     let tokens = lex(stmt, broker);
-    let (input, cs) =
-        all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
+    let (_, cs) = all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a".to_string(), &tokens[0..1]),
+            name: Identifier::new("a".to_string(), 0..1),
             arguments: vec![
-                *int_lit(1, &tokens[2..3]),
-                *int_lit(2, &tokens[4..5]),
-                *int_lit(3, &tokens[6..7]),
+                Reference::new(*int_lit(1, 0..1), 2),
+                Reference::new(*int_lit(2, 0..1), 4),
+                Reference::new(*int_lit(3, 0..1), 6),
             ],
-            info: AstInfo::new(&tokens[..9]),
+            info: AstInfo::new(0..9),
         },
         "CallStatement: {}",
         stmt
     );
-    assert!(input.broker.errors().is_empty(), "CallStatement: {}", stmt);
 }
 
 #[test]
@@ -49,27 +47,32 @@ fn trailing_comma() {
     let stmt = "a(1,)";
     let broker = LocalBroker::default();
     let tokens = lex(stmt, broker);
-    let (input, cs) =
-        all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
+    let (_, cs) = all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         cs,
         CallStatement {
-            name: Identifier::new("a".to_string(), &tokens[0..1]),
-            arguments: vec![*int_lit(1, &tokens[2..3]), Expression::Error(AstInfo::empty())],
-            info: AstInfo::new(&tokens[..5]),
-        },
-        "CallStatement: {}",
-        stmt
-    );
-    eq!(
-        input.broker.errors(),
-        vec![
-            SplError(
-                4..4,
-                ParseErrorMessage::ExpectedToken("expression".to_string()).to_string()
+            name: Identifier::new("a".to_string(), 0..1),
+            arguments: vec![
+                Reference::new(*int_lit(1, 0..1), 2),
+                Reference::new(
+                    Expression::Error(AstInfo::new_with_errors(
+                        0..0,
+                        vec![SplError(
+                            0..0,
+                            ParseErrorMessage::ExpectedToken("expression".to_string()).to_string()
+                        ),],
+                    )),
+                    4
+                ),
+            ],
+            info: AstInfo::new_with_errors(
+                0..5,
+                vec![SplError(
+                    4..4,
+                    ParseErrorMessage::MissingTrailingSemic.to_string()
+                ),],
             ),
-            SplError(5..5, ParseErrorMessage::MissingTrailingSemic.to_string()),
-        ],
+        },
         "CallStatement: {}",
         stmt
     );

@@ -2,7 +2,9 @@ use crate::{
     ast::*,
     error::{ParseErrorMessage, SplError},
     lexer::token::{IntResult, Token, TokenStream, TokenType},
-    parser::utility::{confusable, expect, ignore_until0, ignore_until1, parse_list},
+    parser::utility::{
+        confusable, expect, ignore_until0, ignore_until1, info, parse_list, reference,
+    },
     token, DiagnosticsBroker, ToRange,
 };
 use nom::{
@@ -11,7 +13,6 @@ use nom::{
     combinator::{all_consuming, map, opt, peek, recognize},
     multi::many0,
     sequence::{delimited, pair, preceded, terminated, tuple},
-    Offset,
 };
 
 #[cfg(test)]
@@ -40,8 +41,7 @@ trait Parser<B>: Sized {
 
 impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, value) = alt((
+        let (input, (value, info)) = info(alt((
             map(hex, |token| {
                 if let TokenType::Hex(hex_result) = token.token_type {
                     match hex_result {
@@ -69,28 +69,19 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
                     panic!("Invalid int parse")
                 }
             }),
-        ))(input)?;
-        let offset = tokens.offset(&input);
-        Ok((
-            input,
-            Self {
-                value,
-                info: AstInfo::new(&tokens[..offset]),
-            },
-        ))
+        )))(input)?;
+        Ok((input, Self { value, info }))
     }
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Identifier {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, ident) = ident(input)?;
-        let offset = tokens.offset(&input);
+        let (input, (ident, info)) = info(ident)(input)?;
         Ok((
             input,
             Self {
                 value: ident.to_string(),
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             },
         ))
     }
@@ -98,24 +89,24 @@ impl<B: DiagnosticsBroker> Parser<B> for Identifier {
 
 impl<B: DiagnosticsBroker> Parser<B> for Variable {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, (mut variable, accesses)) = pair(
-            map(Identifier::parse, Self::NamedVariable),
-            many0(delimited(
+        let (input, ((mut variable, variable_info), accesses)) = pair(
+            info(map(Identifier::parse, Self::NamedVariable)),
+            many0(info(delimited(
                 symbols::lbracket,
                 expect(
-                    Expression::parse,
+                    reference(Expression::parse),
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
                 expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
-            )),
+            ))),
         )(input)?;
         for access in accesses {
-            let offset = tokens.offset(&input);
+            let (index, mut index_info) = access;
+            index_info.extend_range(&variable_info);
             variable = Self::ArrayAccess(ArrayAccess {
                 array: Box::new(variable),
-                index: access.map(Box::new),
-                info: AstInfo::new(&tokens[..offset]),
+                index: index.map(Box::new),
+                info: index_info,
             });
         }
         Ok((input, variable))
@@ -126,20 +117,20 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         fn parse_bracketed<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Bracketed := "(" Expr ")"
-            let tokens = input.clone();
-            let (input, (_, expr, _)) = tuple((
-                symbols::lparen,
+            let (input, (((_, lparen_info), expr, _), info)) = info(tuple((
+                info(symbols::lparen),
                 expect(
-                    Expression::parse,
+                    parse_comparison, // directly go into comparison to prevent re-referencing
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
                 expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-            ))(input)?;
-            let offset = tokens.offset(&input);
-            let expr = expr.unwrap_or_else(|| Expression::Error(AstInfo::empty()));
+            )))(input)?;
+            let error_pos = lparen_info.to_range().end;
+            let expr =
+                expr.unwrap_or_else(|| Expression::Error(AstInfo::new(error_pos..error_pos)));
             let bracketed = Expression::Bracketed(BracketedExpression {
                 expr: Box::new(expr),
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             });
             Ok((input, bracketed))
         }
@@ -155,13 +146,11 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 
         fn parse_unary<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Unary := "-" Primary
-            let tokens = input.clone();
-            let (input, primary) = preceded(symbols::minus, parse_factor)(input)?;
-            let offset = tokens.offset(&input);
+            let (input, (primary, info)) = info(preceded(symbols::minus, parse_factor))(input)?;
             let expr = Expression::Unary(UnaryExpression {
                 operator: Operator::Sub,
                 expr: Box::new(primary),
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             });
             Ok((input, expr))
         }
@@ -171,13 +160,12 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             alt((parse_primary, parse_unary))(input)
         }
 
-        fn parse_rhs<'a, P, B: DiagnosticsBroker>(
-            input: TokenStream<'a, B>,
-            tokens: &TokenStream<B>,
+        fn parse_rhs<P, B: DiagnosticsBroker>(
+            input: TokenStream<B>,
             lhs: Expression,
             operator: Operator,
             parser: P,
-        ) -> IResult<'a, Expression, B>
+        ) -> IResult<Expression, B>
         where
             P: Fn(TokenStream<B>) -> IResult<Expression, B>,
         {
@@ -185,25 +173,28 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
                 parser,
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             )(input)?;
-            let rhs = rhs.unwrap_or_else(|| Expression::Error(AstInfo::empty()));
-            let offset = tokens.offset(&input);
+            let error_pos = lhs.to_range().end;
+            let rhs = rhs.unwrap_or_else(|| Expression::Error(AstInfo::new(error_pos..error_pos)));
+            // all errors are stored in lhs and rhs expressions.
+            // Operators cannot lead to errors.
+            let expr_start = lhs.to_range().start;
+            let expr_end = rhs.to_range().end;
+            let info = AstInfo::new(expr_start..expr_end);
             let exp = Expression::Binary(BinaryExpression {
                 operator,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             });
             Ok((input, exp))
         }
 
         fn parse_mul<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Mul := Factor (("*" | "/") Factor)*
-            let tokens = input.clone();
             let (mut input, mut exp) = parse_factor(input)?;
             while let Ok((i, op)) = alt((symbols::times, symbols::divide))(input.clone()) {
                 (input, exp) = parse_rhs(
                     i,
-                    &tokens,
                     exp,
                     op.token_type
                         .try_into()
@@ -216,12 +207,10 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 
         fn parse_add<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Add := Mul (("+" | "-") Mul)*
-            let tokens = input.clone();
             let (mut input, mut exp) = parse_mul(input)?;
             while let Ok((i, op)) = alt((symbols::plus, symbols::minus))(input.clone()) {
                 (input, exp) = parse_rhs(
                     i,
-                    &tokens,
                     exp,
                     op.token_type
                         .try_into()
@@ -234,7 +223,6 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
 
         fn parse_comparison<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
             // Comp := Add (("=" | "#" | "<" | "<=" | ">" | ">=") Add)?
-            let tokens = input.clone();
             let (mut input, mut exp) = parse_add(input)?;
             if let Ok((i, op)) = alt((
                 symbols::eq,
@@ -247,7 +235,6 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             {
                 (input, exp) = parse_rhs(
                     i,
-                    &tokens,
                     exp,
                     op.token_type
                         .try_into()
@@ -268,8 +255,7 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
         fn parse_array_type<B: DiagnosticsBroker>(
             input: TokenStream<B>,
         ) -> IResult<TypeExpression, B> {
-            let tokens = input.clone();
-            let (input, (_, _, size, _, _, type_expr)) = tuple((
+            let (input, ((_, _, size, _, _, type_expr), info)) = info(tuple((
                 keywords::array,
                 expect(
                     symbols::lbracket,
@@ -285,17 +271,16 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
                     ParseErrorMessage::ExpectedToken("of".to_string()),
                 ),
                 expect(
-                    TypeExpression::parse,
+                    reference(TypeExpression::parse),
                     ParseErrorMessage::ExpectedToken("type expression".to_string()),
                 ),
-            ))(input)?;
-            let offset = tokens.offset(&input);
+            )))(input)?;
             Ok((
                 input,
                 TypeExpression::ArrayType {
                     size,
                     base_type: type_expr.map(Box::new),
-                    info: AstInfo::new(&tokens[..offset]),
+                    info,
                 },
             ))
         }
@@ -306,8 +291,8 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
 
 impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, (_, name, _, type_expr, _)) = tuple((
+        let (input, ((doc, _, name, _, type_expr, _), info)) = info(tuple((
+            many0(comment),
             keywords::r#type,
             expect(
                 Identifier::parse,
@@ -334,18 +319,18 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
                 ParseErrorMessage::ExpectedToken(token::EQ.to_string()),
             ),
             expect(
-                TypeExpression::parse,
+                reference(TypeExpression::parse),
                 ParseErrorMessage::ExpectedToken("type expression".to_string()),
             ),
             expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
-        ))(input)?;
-        let offset = tokens.offset(&input);
+        )))(input)?;
         Ok((
             input,
             Self {
+                doc,
                 name,
                 type_expr,
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             },
         ))
     }
@@ -356,8 +341,8 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
         fn parse_valid<B: DiagnosticsBroker>(
             input: TokenStream<B>,
         ) -> IResult<VariableDeclaration, B> {
-            let tokens = input.clone();
-            let (input, (_, name, _, type_expr, _)) = tuple((
+            let (input, ((doc, _, name, _, type_expr, _), info)) = info(tuple((
+                many0(comment),
                 keywords::var,
                 expect(
                     Identifier::parse,
@@ -384,18 +369,18 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
                     ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
                 ),
                 expect(
-                    TypeExpression::parse,
+                    reference(TypeExpression::parse),
                     ParseErrorMessage::ExpectedToken("type expression".to_string()),
                 ),
                 expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
-            ))(input)?;
-            let offset = tokens.offset(&input);
+            )))(input)?;
             Ok((
                 input,
                 VariableDeclaration::Valid {
+                    doc,
                     name,
                     type_expr,
-                    info: AstInfo::new(&tokens[..offset]),
+                    info,
                 },
             ))
         }
@@ -403,19 +388,13 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
         fn parse_error<B: DiagnosticsBroker>(
             input: TokenStream<B>,
         ) -> IResult<VariableDeclaration, B> {
-            let (input, ignored) = ignore_until1(peek(look_ahead::var_dec))(input)?;
-            let ignored_info = AstInfo::new(&ignored[..]);
-            let error_range = if ignored_info.tokens.is_empty() {
-                ignored.error_pos..ignored.error_pos
-            } else {
-                ignored_info.to_range()
-            };
+            let (input, (_, mut info)) = info(ignore_until1(peek(look_ahead::var_dec)))(input)?;
             let err = SplError(
-                error_range,
+                info.to_range(),
                 ParseErrorMessage::ExpectedToken("variable declaration".to_string()).to_string(),
             );
-            ignored.broker.report_error(err);
-            Ok((input, VariableDeclaration::Error(ignored_info)))
+            info.append_error(err);
+            Ok((input, VariableDeclaration::Error(info)))
         }
 
         alt((|input| parse_valid(input), |input| parse_error(input)))(input)
@@ -427,8 +406,8 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
         fn parse_valid<B: DiagnosticsBroker>(
             input: TokenStream<B>,
         ) -> IResult<ParameterDeclaration, B> {
-            let tokens = input.clone();
-            let (input, ((ref_kw, name), _, type_expr, _)) = tuple((
+            let (input, ((doc, (ref_kw, name), _, type_expr, _), info)) = info(tuple((
+                many0(comment),
                 alt((
                     map(
                         pair(
@@ -447,7 +426,7 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
                     ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
                 ),
                 expect(
-                    TypeExpression::parse,
+                    reference(TypeExpression::parse),
                     ParseErrorMessage::ExpectedToken("type expression".to_string()),
                 ),
                 peek(alt((
@@ -456,16 +435,16 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
                     recognize(symbols::comma),
                     recognize(eof),
                 ))),
-            ))(input)?;
-            let offset = tokens.offset(&input);
+            )))(input)?;
             let is_ref = ref_kw.is_some();
             Ok((
                 input,
                 ParameterDeclaration::Valid {
+                    doc,
                     is_ref,
                     name,
                     type_expr,
-                    info: AstInfo::new(&tokens[..offset]),
+                    info,
                 },
             ))
         }
@@ -473,24 +452,18 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
         fn parse_error<B: DiagnosticsBroker>(
             input: TokenStream<B>,
         ) -> IResult<ParameterDeclaration, B> {
-            let (input, ignored) = ignore_until0(peek(alt((
+            let (input, (_, mut info)) = info(ignore_until0(peek(alt((
                 recognize(symbols::rparen),
                 recognize(symbols::lcurly),
                 recognize(symbols::comma),
                 recognize(eof),
-            ))))(input)?;
-            let ignored_info = AstInfo::new(&ignored[..]);
-            let error_range = if ignored_info.tokens.is_empty() {
-                ignored.error_pos..ignored.error_pos
-            } else {
-                ignored_info.to_range()
-            };
+            )))))(input)?;
             let err = SplError(
-                error_range,
+                info.to_range(),
                 ParseErrorMessage::ExpectedToken("parameter declaration".to_string()).to_string(),
             );
-            ignored.broker.report_error(err);
-            Ok((input, ParameterDeclaration::Error(ignored_info)))
+            info.append_error(err);
+            Ok((input, ParameterDeclaration::Error(info)))
         }
 
         alt((|input| parse_valid(input), |input| parse_error(input)))(input)
@@ -513,63 +486,53 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
                     ))),
                 ),
                 map(
-                    ignore_until0(peek(alt((
+                    info(ignore_until0(peek(alt((
                         recognize(symbols::rparen::<B>),
                         recognize(symbols::semic),
                         recognize(symbols::comma),
                         recognize(eof),
-                    )))),
-                    |ignored| {
-                        let ignored_info = AstInfo::new(&ignored[..]);
-                        let error_range = if ignored_info.tokens.is_empty() {
-                            ignored.error_pos..ignored.error_pos
-                        } else {
-                            ignored_info.to_range()
-                        };
+                    ))))),
+                    |(_, mut info)| {
                         let err = SplError(
-                            error_range,
+                            info.to_range(),
                             ParseErrorMessage::ExpectedToken("expression".to_string()).to_string(),
                         );
-                        ignored.broker.report_error(err);
-                        Expression::Error(ignored_info)
+                        info.append_error(err);
+                        Expression::Error(info)
                     },
                 ),
             ))(input)
         }
 
-        let tokens = input.clone();
-        let (input, (name, arguments, _, _)) = tuple((
-            terminated(Identifier::parse, symbols::lparen),
-            alt((
-                map(
-                    peek(alt((
-                        recognize(symbols::rparen),
-                        recognize(symbols::semic),
-                        recognize(eof),
-                    ))),
-                    |_| Vec::new(),
-                ),
-                parse_list(|input| parse_call_expression(input)),
-            )),
-            expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-            expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
-        ))(input)?;
-        let offset = tokens.offset(&input);
-        Ok((
-            input,
-            Self {
+        map(
+            info(tuple((
+                terminated(Identifier::parse, symbols::lparen),
+                alt((
+                    map(
+                        peek(alt((
+                            recognize(symbols::rparen),
+                            recognize(symbols::semic),
+                            recognize(eof),
+                        ))),
+                        |_| Vec::new(),
+                    ),
+                    parse_list(reference(parse_call_expression)),
+                )),
+                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+                expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+            ))),
+            |((name, arguments, _, _), info)| Self {
                 name,
                 arguments,
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             },
-        ))
+        )(input)
     }
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Assignment {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, (variable, expr, _)) = tuple((
+        let (input, ((variable, expr, _), info)) = info(tuple((
             terminated(
                 Variable::parse,
                 alt((
@@ -584,18 +547,17 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
                 )),
             ),
             expect(
-                Expression::parse,
+                reference(Expression::parse),
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             ),
             expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
-        ))(input)?;
-        let offset = tokens.offset(&input);
+        )))(input)?;
         Ok((
             input,
             Self {
                 variable,
                 expr,
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             },
         ))
     }
@@ -603,35 +565,33 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
 
 impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, (_, _, condition, _, if_branch, else_branch)) = tuple((
+        let (input, ((_, _, condition, _, if_branch, else_branch), info)) = info(tuple((
             keywords::r#if,
             expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
             expect(
-                Expression::parse,
+                reference(Expression::parse),
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             ),
             expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
             expect(
-                Statement::parse,
+                reference(Statement::parse),
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             ),
             opt(preceded(
                 keywords::r#else,
                 expect(
-                    Statement::parse,
+                    reference(Statement::parse),
                     ParseErrorMessage::ExpectedToken("statement".to_string()),
                 ),
             )),
-        ))(input)?;
-        let offset = tokens.offset(&input);
+        )))(input)?;
         Ok((
             input,
             Self {
                 condition,
                 if_branch: if_branch.map(Box::new),
                 else_branch: else_branch.flatten().map(Box::new),
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             },
         ))
     }
@@ -639,27 +599,25 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
 
 impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, (_, _, condition, _, stmt)) = tuple((
+        let (input, ((_, _, condition, _, stmt), info)) = info(tuple((
             keywords::r#while,
             expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
             expect(
-                Expression::parse,
+                reference(Expression::parse),
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             ),
             expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
             expect(
-                Statement::parse,
+                reference(Statement::parse),
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             ),
-        ))(input)?;
-        let offset = tokens.offset(&input);
+        )))(input)?;
         Ok((
             input,
             Self {
                 condition,
                 statement: stmt.map(Box::new),
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             },
         ))
     }
@@ -667,43 +625,36 @@ impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
 
 impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, statements) = delimited(
+        let (input, (statements, info)) = info(delimited(
             symbols::lcurly,
-            many0(Statement::parse),
+            many0(reference(Statement::parse)),
             expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
-        )(input)?;
-        let offset = tokens.offset(&input);
-        Ok((
-            input,
-            Self {
-                statements,
-                info: AstInfo::new(&tokens[..offset]),
-            },
-        ))
+        ))(input)?;
+        Ok((input, Self { statements, info }))
     }
 }
 
 impl<B: DiagnosticsBroker> Parser<B> for Statement {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
         fn parse_error<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Statement, B> {
-            let tokens = input.clone();
-            let (input, (_, ignored)) =
-                tuple((many0(comment), ignore_until1(peek(look_ahead::stmt))))(input)?;
-            // convert into AstInfo, so that `to_range()` and `to_string()` are available
-            let ignored_info = AstInfo::new(&ignored[..]);
+            let (input, ((_, ignored), mut info)) = info(tuple((
+                many0(comment),
+                ignore_until1(peek(look_ahead::stmt)),
+            )))(input)?;
             let err = SplError(
-                ignored_info.to_range(),
-                ParseErrorMessage::UnexpectedCharacters(ignored_info.to_string()).to_string(),
+                info.to_range(),
+                ParseErrorMessage::UnexpectedCharacters(
+                    ignored.iter().map(|token| token.to_string()).collect(),
+                )
+                .to_string(),
             );
-            input.broker.report_error(err);
-            let offset = tokens.offset(&input);
-            let stmt = Statement::Error(AstInfo::new(&tokens[..offset]));
+            info.append_error(err);
+            let stmt = Statement::Error(info);
             Ok((input, stmt))
         }
 
         alt((
-            map(symbols::semic, |semic| Self::Empty(AstInfo::new(&[semic]))),
+            map(info(symbols::semic), |(_, info)| Self::Empty(info)),
             map(IfStatement::parse, Self::If),
             map(WhileStatement::parse, Self::While),
             map(BlockStatement::parse, Self::Block),
@@ -716,41 +667,43 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
 
 impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let tokens = input.clone();
-        let (input, (_, name, _, parameters, _, _, variable_declarations, statements, _)) =
-            tuple((
-                keywords::proc,
-                expect(
-                    Identifier::parse,
-                    ParseErrorMessage::ExpectedToken("identifier".to_string()),
+        let (
+            input,
+            ((doc, _, name, _, parameters, _, _, variable_declarations, statements, _), info),
+        ) = info(tuple((
+            many0(comment),
+            keywords::proc,
+            expect(
+                Identifier::parse,
+                ParseErrorMessage::ExpectedToken("identifier".to_string()),
+            ),
+            expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
+            alt((
+                map(
+                    peek(alt((
+                        recognize(symbols::rparen),
+                        recognize(symbols::lcurly),
+                        recognize(eof),
+                    ))),
+                    |_| Vec::new(),
                 ),
-                expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
-                alt((
-                    map(
-                        peek(alt((
-                            recognize(symbols::rparen),
-                            recognize(symbols::lcurly),
-                            recognize(eof),
-                        ))),
-                        |_| Vec::new(),
-                    ),
-                    parse_list(ParameterDeclaration::parse),
-                )),
-                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-                expect(symbols::lcurly, ParseErrorMessage::MissingOpening('{')),
-                many0(VariableDeclaration::parse),
-                many0(Statement::parse),
-                expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
-            ))(input)?;
-        let offset = tokens.offset(&input);
+                parse_list(reference(ParameterDeclaration::parse)),
+            )),
+            expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+            expect(symbols::lcurly, ParseErrorMessage::MissingOpening('{')),
+            many0(reference(VariableDeclaration::parse)),
+            many0(reference(Statement::parse)),
+            expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
+        )))(input)?;
         Ok((
             input,
             Self {
+                doc,
                 name,
                 parameters,
                 variable_declarations,
                 statements,
-                info: AstInfo::new(&tokens[..offset]),
+                info,
             },
         ))
     }
@@ -761,21 +714,20 @@ impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
         fn parse_error<B: DiagnosticsBroker>(
             input: TokenStream<B>,
         ) -> IResult<GlobalDeclaration, B> {
-            let tokens = input.clone();
-            let (input, ignored) = ignore_until1(peek(alt((
+            let (input, (ignored, mut info)) = info(ignore_until1(peek(alt((
                 recognize(keywords::r#type),
                 recognize(keywords::proc),
                 recognize(eof),
-            ))))(input)?;
-            // convert into AstInfo, so that `to_range()` and `to_string()` are available
-            let ignored_info = AstInfo::new(&ignored[..]);
+            )))))(input)?;
             let err = SplError(
-                ignored_info.to_range(),
-                ParseErrorMessage::UnexpectedCharacters(ignored_info.to_string()).to_string(),
+                info.to_range(),
+                ParseErrorMessage::UnexpectedCharacters(
+                    ignored.iter().map(|token| token.to_string()).collect(),
+                )
+                .to_string(),
             );
-            input.broker.report_error(err);
-            let offset = tokens.offset(&input);
-            let gd = GlobalDeclaration::Error(AstInfo::new(&tokens[..offset]));
+            info.append_error(err);
+            let gd = GlobalDeclaration::Error(info);
             Ok((input, gd))
         }
 
@@ -789,12 +741,14 @@ impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
 
 impl<B: DiagnosticsBroker> Parser<B> for Program {
     fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        let (input, global_declarations) = many0(GlobalDeclaration::parse)(input)?;
+        let (input, (global_declarations, info)) =
+            info(many0(reference(GlobalDeclaration::parse)))(input)?;
         let (input, _) = eof(input)?;
         Ok((
             input,
             Self {
                 global_declarations,
+                info,
             },
         ))
     }
@@ -802,17 +756,20 @@ impl<B: DiagnosticsBroker> Parser<B> for Program {
 
 // Comment parser is separated from the other token parsers,
 // because it is used in the `tag_parser` macro
-fn comment<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Token, B> {
-    let original_input = input.clone();
+fn comment<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<String, B> {
+    let err = Err(nom::Err::Error(nom::error::ParseError::from_error_kind(
+        input.clone(),
+        nom::error::ErrorKind::Tag,
+    )));
     let (input, tokens) = take(1usize)(input)?;
-    let token = tokens.fragment().clone();
-    if matches!(token.token_type, TokenType::Comment(_)) {
-        Ok((input, token))
+    let token = match tokens.fragment() {
+        Some(token) => token.clone(),
+        None => return err,
+    };
+    if let TokenType::Comment(comment) = token.token_type {
+        Ok((input, comment))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(
-            original_input,
-            nom::error::ErrorKind::Tag,
-        )))
+        err
     }
 }
 
@@ -823,18 +780,21 @@ macro_rules! tag_parser {
         ) -> crate::parser::IResult<crate::lexer::token::Token, B> {
             use crate::{lexer::token::TokenType, parser::comment};
             use nom::{bytes::complete::take, multi::many0};
-            let original_input = input.clone();
+            let err = Err(nom::Err::Error(nom::error::ParseError::from_error_kind(
+                input.clone(),
+                nom::error::ErrorKind::Tag,
+            )));
             // Consume comments in front of any `tag_parser`
             let (input, _) = many0(comment)(input)?;
             let (input, tokens) = take(1usize)(input)?;
-            let token = tokens.fragment().clone();
+            let token = match tokens.fragment() {
+                Some(token) => token.clone(),
+                None => return err,
+            };
             if matches!(token.token_type, $token_type) {
                 Ok((input, token))
             } else {
-                Err(nom::Err::Error(nom::error::Error::new(
-                    original_input,
-                    nom::error::ErrorKind::Tag,
-                )))
+                err
             }
         }
     };

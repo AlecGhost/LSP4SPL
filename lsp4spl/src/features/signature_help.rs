@@ -5,9 +5,9 @@ use lsp_types::{
     SignatureHelpParams, SignatureInformation,
 };
 use spl_frontend::{
-    ast::{CallStatement, GlobalDeclaration, ProcedureDeclaration, Statement},
+    ast::{CallStatement, GlobalDeclaration, ProcedureDeclaration, Reference, Statement},
     table::{GlobalEntry, SymbolTable},
-    token::TokenType,
+    token::{Token, TokenType},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -18,19 +18,21 @@ pub async fn signature_help(
 ) -> Result<Option<SignatureHelp>> {
     let doc_params = params.text_document_position_params;
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
-        if let Some(call_stmt) = cursor
+        if let Some((call_stmt, offset)) = cursor
             .doc_info
             .ast
             .global_declarations
             .iter()
             .filter_map(|gd| {
-                if let GlobalDeclaration::Procedure(pd) = gd {
-                    Some(pd)
+                if let GlobalDeclaration::Procedure(pd) = gd.as_ref() {
+                    Some((pd, gd.offset))
                 } else {
                     None
                 }
             })
-            .find_map(|pd| find_call_stmt(pd, &cursor.index))
+            .find_map(|(pd, offset)| {
+                find_call_stmt(pd, &cursor.index).map(|call_stmt| (call_stmt, offset))
+            })
         {
             if let Some(GlobalEntry::Procedure(proc_entry)) =
                 &cursor.doc_info.table.lookup(&call_stmt.name.value)
@@ -49,7 +51,9 @@ pub async fn signature_help(
                         value: doc.clone(),
                     })
                 });
-                let active_parameter = get_active_param(&call_stmt, &parameters, &cursor.index);
+                let tokens = &cursor.doc_info.tokens[offset..];
+                let active_parameter =
+                    get_active_param(call_stmt.info.slice(tokens), &parameters, &cursor.index);
                 let help = SignatureInformation {
                     label: proc_entry.name.to_string(),
                     documentation,
@@ -70,22 +74,29 @@ pub async fn signature_help(
 fn find_call_stmt(pd: &ProcedureDeclaration, index: &usize) -> Option<CallStatement> {
     pd.statements
         .iter()
+        .map(|r| r.as_ref())
         .flat_map(get_call_stmts)
         .find(|call_stmt| call_stmt.to_range().contains(index))
         .cloned()
 }
 
 fn get_call_stmts(stmt: &Statement) -> Vec<&CallStatement> {
-    fn get_in_option(opt: &Option<Box<Statement>>) -> Vec<&CallStatement> {
+    fn get_in_option(opt: &Option<Box<Reference<Statement>>>) -> Vec<&CallStatement> {
         opt.iter()
             .map(|boxed| boxed.as_ref())
+            .map(|r| r.as_ref())
             .flat_map(get_call_stmts)
             .collect()
     }
 
     use Statement::*;
     match stmt {
-        Block(b) => b.statements.iter().flat_map(get_call_stmts).collect(),
+        Block(b) => b
+            .statements
+            .iter()
+            .map(|r| r.as_ref())
+            .flat_map(get_call_stmts)
+            .collect(),
         Call(c) => vec![c],
         If(i) => vec![get_in_option(&i.if_branch), get_in_option(&i.else_branch)].concat(),
         While(w) => get_in_option(&w.statement),
@@ -94,7 +105,7 @@ fn get_call_stmts(stmt: &Statement) -> Vec<&CallStatement> {
 }
 
 fn get_active_param(
-    call_stmt: &CallStatement,
+    tokens: &[Token],
     params: &[ParameterInformation],
     index: &usize,
 ) -> Option<u32> {
@@ -102,7 +113,7 @@ fn get_active_param(
         None
     } else {
         let mut param_index = 0;
-        for token in &call_stmt.info.tokens {
+        for token in tokens {
             if token.range.start >= *index {
                 break;
             }

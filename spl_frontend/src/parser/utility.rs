@@ -1,5 +1,11 @@
 use super::IResult;
-use crate::{error::ParseErrorMessage, lexer::token::TokenStream, DiagnosticsBroker, ToRange};
+use crate::{
+    ast::{AstInfo, Reference},
+    error::ParseErrorMessage,
+    lexer::token::TokenStream,
+    token::Token,
+    DiagnosticsBroker, ToRange,
+};
 use nom::{
     bytes::complete::take,
     error::ErrorKind,
@@ -57,7 +63,7 @@ where
 /// Returns all consumed tokens as `TokenStream`.
 pub(super) fn ignore_until1<'a, B: Clone, F>(
     mut pattern: F,
-) -> impl FnMut(TokenStream<'a, B>) -> IResult<TokenStream<'a, B>, B>
+) -> impl FnMut(TokenStream<'a, B>) -> IResult<Vec<Token>, B>
 where
     F: InnerParser<'a, TokenStream<'a, B>, B>,
 {
@@ -75,8 +81,8 @@ where
                     // source: https://stackoverflow.com/a/73004814
                     // compares remaining input with original input and returns the difference
                     let offset = original_input.offset(&i1);
-                    let output = original_input.take(offset);
-                    return Ok((i1, output));
+                    let ignored = original_input.take(offset);
+                    return Ok((i1, ignored.tokens()));
                 }
                 Err(nom::Err::Error(_)) => match take(1u32)(i.clone()) {
                     Ok((i1, _)) => i = i1,
@@ -101,10 +107,11 @@ where
 {
     move |input: TokenStream<B>| match parser.parse(input) {
         Ok((input, out)) => Ok((input, Some(out))),
-        Err(nom::Err::Failure(err) | nom::Err::Error(err)) => {
-            let pos = err.input.error_pos;
-            let spl_error = crate::error::SplError(pos..pos, error_msg.to_string());
-            err.input.broker.report_error(spl_error);
+        Err(nom::Err::Failure(mut err) | nom::Err::Error(mut err)) => {
+            let pos = err.input.location_offset() - err.input.reference_pos;
+            let error_pos = if pos > 0 { pos - 1 } else { 0 };
+            let spl_error = crate::error::SplError(error_pos..error_pos, error_msg.to_string());
+            err.input.error_buffer.push(spl_error);
             Ok((err.input, None))
         }
         Err(_) => panic!("Incomplete data"),
@@ -137,10 +144,74 @@ where
     F: InnerParser<'a, O, B>,
 {
     move |input: TokenStream<B>| {
-        let error_start = input.to_range().start;
-        let (input, out) = parser.parse(input)?;
-        let spl_error = crate::error::SplError(error_start..input.error_pos, error_msg.to_string());
-        input.broker.report_error(spl_error);
+        let (mut input, (out, info)) = info(|input| parser.parse(input))(input)?;
+        let spl_error = crate::error::SplError(info.to_range(), error_msg.to_string());
+        input.error_buffer.push(spl_error);
         Ok((input, out))
+    }
+}
+
+pub(super) fn info<'a, O, B: DiagnosticsBroker, F>(
+    mut parser: F,
+) -> impl FnMut(TokenStream<'a, B>) -> IResult<'a, (O, AstInfo), B>
+where
+    F: InnerParser<'a, O, B>,
+{
+    move |mut input: TokenStream<B>| {
+        let reference_pos = input.reference_pos;
+        let start_pos = input.location_offset() - reference_pos;
+        let error_backup = input.error_buffer;
+        input.error_buffer = Vec::new();
+        match parser.parse(input) {
+            Ok((mut input, out)) => {
+                let errors = input.error_buffer;
+                input.error_buffer = error_backup;
+                let end_pos = input.location_offset() - reference_pos;
+                let range = start_pos..end_pos;
+                let info = if errors.is_empty() {
+                    AstInfo::new(range)
+                } else {
+                    AstInfo::new_with_errors(range, errors)
+                };
+                Ok((input, (out, info)))
+            }
+            Err(nom::Err::Failure(mut err) | nom::Err::Error(mut err)) => {
+                // recover backup
+                err.input.error_buffer = error_backup;
+                Err(nom::Err::Error(err))
+            }
+            Err(_) => panic!("Incomplete data"),
+        }
+    }
+}
+
+pub(super) fn reference<'a, O, B: DiagnosticsBroker, F>(
+    mut parser: F,
+) -> impl FnMut(TokenStream<'a, B>) -> IResult<'a, Reference<O>, B>
+where
+    F: InnerParser<'a, O, B>,
+{
+    move |mut input: TokenStream<B>| {
+        let reference_backup = input.reference_pos;
+        input.reference_pos = input.location_offset();
+        let offset = input.reference_pos - reference_backup;
+        match parser.parse(input) {
+            Ok((mut input, out)) => {
+                input.reference_pos = reference_backup;
+                Ok((
+                    input,
+                    Reference {
+                        reference: out,
+                        offset,
+                    },
+                ))
+            }
+            Err(nom::Err::Failure(mut err) | nom::Err::Error(mut err)) => {
+                // recover backup
+                err.input.reference_pos = reference_backup;
+                Err(nom::Err::Error(err))
+            }
+            Err(_) => panic!("Incomplete data"),
+        }
     }
 }

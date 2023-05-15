@@ -12,9 +12,9 @@ fn simple() {
     eq!(
         assignment,
         Assignment {
-            variable: Variable::NamedVariable(Identifier::new("a".to_string(), &tokens[0..1])),
-            expr: Some(*int_lit(1, &tokens[2..3])),
-            info: AstInfo::new(&tokens[..4]),
+            variable: Variable::NamedVariable(Identifier::new("a".to_string(), 0..1)),
+            expr: Some(Reference::new(*int_lit(1, 0..1), 2)),
+            info: AstInfo::new(0..4),
         },
         "Assignment: {}",
         asgn
@@ -27,25 +27,25 @@ fn invalid_equals_symbol() {
     let asgn = "a = 1;";
     let broker = LocalBroker::default();
     let tokens = lex(asgn, broker);
-    let (input, assignment) =
+    let (_, assignment) =
         all_consuming(terminated(Assignment::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         assignment,
         Assignment {
-            variable: Variable::NamedVariable(Identifier::new("a".to_string(), &tokens[0..1])),
-            expr: Some(*int_lit(1, &tokens[2..3])),
-            info: AstInfo::new(&tokens[..4]),
+            variable: Variable::NamedVariable(Identifier::new("a".to_string(), 0..1)),
+            expr: Some(Reference::new(*int_lit(1, 0..1), 2)),
+            info: AstInfo::new_with_errors(
+                0..4,
+                vec![SplError(
+                    1..2,
+                    ParseErrorMessage::ConfusedToken(
+                        token::ASSIGN.to_string(),
+                        token::EQ.to_string()
+                    )
+                    .to_string()
+                )],
+            ),
         },
-        "Assignment: {}",
-        asgn
-    );
-    eq!(
-        input.broker.errors(),
-        vec![SplError(
-            2..3,
-            ParseErrorMessage::ConfusedToken(token::ASSIGN.to_string(), token::EQ.to_string())
-                .to_string()
-        )],
         "Assignment: {}",
         asgn
     );

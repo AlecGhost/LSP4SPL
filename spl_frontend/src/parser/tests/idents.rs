@@ -9,7 +9,7 @@ fn correct_alphanumeric() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("ab1".to_string(), &tokens[0..1]),
+        Identifier::new("ab1".to_string(), 0..1),
         "Identifier: {}",
         i
     );
@@ -24,7 +24,7 @@ fn underscore_in_middle() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("test_ident".to_string(), &tokens[0..1]),
+        Identifier::new("test_ident".to_string(), 0..1),
         "Identifier: {}",
         i
     );
@@ -39,7 +39,7 @@ fn underscore_in_front() {
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
             .1,
-        Identifier::new("_a".to_string(), &tokens[0..1]),
+        Identifier::new("_a".to_string(), 0..1),
         "Identifier: {}",
         i
     );

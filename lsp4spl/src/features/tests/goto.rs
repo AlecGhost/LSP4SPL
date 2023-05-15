@@ -157,6 +157,23 @@ proc b() {
 }
 
 #[tokio::test]
+async fn type_dec_type() {
+    test_goto(
+        goto::type_definition,
+        "
+type a = array [3] of int;
+type b = array [3] of int;
+proc c() {
+    var x: b;
+}
+",
+        pos(4, 11),
+        Some((pos(2, 5), pos(2, 6))),
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn impl_proc() {
     test_goto(
         goto::implementation,

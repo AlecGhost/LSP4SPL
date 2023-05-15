@@ -1,6 +1,6 @@
 use crate::{
     ast::*,
-    error::{SplError, ParseErrorMessage},
+    error::{ParseErrorMessage, SplError},
     lexer::{
         lex,
         token::{Token, TokenStream},
@@ -11,6 +11,7 @@ use crate::{
 use nom::{combinator::all_consuming, sequence::terminated};
 #[cfg(test)]
 use pretty_assertions::assert_eq as eq;
+use std::ops::Range;
 
 trait ToTokens<B> {
     fn to_tokens(&self) -> TokenStream<B>;
@@ -22,10 +23,10 @@ impl ToTokens<LocalBroker> for Vec<Token> {
     }
 }
 
-fn int_lit(value: u32, tokens: &[Token]) -> Box<Expression> {
+fn int_lit(value: u32, range: Range<usize>) -> Box<Expression> {
     Box::new(Expression::IntLiteral(IntLiteral::new(
         value,
-        AstInfo::new(tokens),
+        AstInfo::new(range),
     )))
 }
 

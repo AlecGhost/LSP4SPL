@@ -32,6 +32,7 @@ impl GlobalTable {
                 name,
                 local_table: LocalTable::default(),
                 parameters,
+                range: 0..0,
                 doc: Some(documentation.to_string()),
             })
         }
@@ -42,22 +43,22 @@ impl GlobalTable {
                 (
                     INT.to_string(),
                     GlobalEntry::Type(TypeEntry {
-                        name: Identifier::new(INT.to_string(), &[]),
+                        name: Identifier::new(INT.to_string(), 0..0),
                         data_type: Some(DataType::Int),
-                        doc: None,
+                        range: 0..0,doc: None,
                     }),
                 ),
                 // printi(i: int)
                 (
                     PRINTI.to_string(),
                     procedure_entry(
-                        Identifier::new(PRINTI.to_string(), &[]),
+                        Identifier::new(PRINTI.to_string(), 0..0),
                         "Gibt den Wert von i auf dem Textbildschirm aus.",
                         vec![VariableEntry {
-                            name: Identifier::new("i".to_string(), &[]),
+                            name: Identifier::new("i".to_string(), 0..0),
                             is_ref: false,
                             data_type: Some(DataType::Int),
-                            doc: None,
+                            range: 0..0,doc: None,
                         }],
                     ),
                 ),
@@ -65,13 +66,13 @@ impl GlobalTable {
                 (
                    PRINTC.to_string(),
                     procedure_entry(
-                        Identifier::new(PRINTC.to_string(), &[]),
+                        Identifier::new(PRINTC.to_string(), 0..0),
                         "Gibt das Zeichen mit dem ASCII-Code i auf dem Textbildschirm aus.",
                         vec![VariableEntry {
-                            name: Identifier::new("i".to_string(), &[]),
+                            name: Identifier::new("i".to_string(), 0..0),
                             is_ref: false,
                             data_type: Some(DataType::Int),
-                            doc: None,
+                            range: 0..0,doc: None,
                         }],
                 ),
                 ),
@@ -79,14 +80,14 @@ impl GlobalTable {
                 (
                     READI.to_string(),
                     procedure_entry(
-                        Identifier::new(READI.to_string(), &[]),
+                        Identifier::new(READI.to_string(), 0..0),
                         "Liest eine ganze Zahl von der Tastatur ein und speichert sie in i.
 Die Eingabe erfolgt zeilenweise gepuffert mit Echo.",
                         vec![VariableEntry {
-                            name: Identifier::new("i".to_string(), &[]),
+                            name: Identifier::new("i".to_string(), 0..0),
                             is_ref: true,
                             data_type: Some(DataType::Int),
-                            doc: None,
+                            range: 0..0,doc: None,
                         }],
                     ),
                 ),
@@ -94,14 +95,14 @@ Die Eingabe erfolgt zeilenweise gepuffert mit Echo.",
                 (
                     READC.to_string(),
                     procedure_entry(
-                        Identifier::new(READC.to_string(), &[]),
+                        Identifier::new(READC.to_string(), 0..0),
                         "Liest ein Zeichen von der Tastatur ein und speichert seinen ASCII-Code in i.
 Die Eingabe erfolgt ungepuffert und ohne Echo.",
                         vec![VariableEntry {
-                            name: Identifier::new("i".to_string(), &[]),
+                            name: Identifier::new("i".to_string(), 0..0),
                             is_ref: true,
                             data_type: Some(DataType::Int),
-                            doc: None,
+                            range: 0..0,doc: None,
                         }],
                     ),
                 ),
@@ -109,7 +110,7 @@ Die Eingabe erfolgt ungepuffert und ohne Echo.",
                 (
                     EXIT.to_string(),
                     procedure_entry(
-                        Identifier::new(EXIT.to_string(), &[]),
+                        Identifier::new(EXIT.to_string(), 0..0),
 "Beendet das laufende Programm und kehrt nicht zum Aufrufer zurück.",
                         vec![]),
                 ),
@@ -117,13 +118,13 @@ Die Eingabe erfolgt ungepuffert und ohne Echo.",
                 (
                     TIME.to_string(),
                     procedure_entry(
-                        Identifier::new(TIME.to_string(), &[]),
+                        Identifier::new(TIME.to_string(), 0..0),
                         "Gibt in i die seit dem Start des Programms vergangene Zeit in Sekun- den zurück.",
                         vec![VariableEntry {
-                            name: Identifier::new("i".to_string(), &[]),
+                            name: Identifier::new("i".to_string(), 0..0),
                             is_ref: true,
                             data_type: Some(DataType::Int),
-                            doc: None,
+                            range: 0..0,doc: None,
                         }],
                     ),
                 ),
@@ -131,15 +132,15 @@ Die Eingabe erfolgt ungepuffert und ohne Echo.",
                 (
                     CLEARALL.to_string(),
                     procedure_entry(
-                        Identifier::new(CLEARALL.to_string(), &[]),
+                        Identifier::new(CLEARALL.to_string(), 0..0),
                         "Löscht den Graphikbildschirm mit der Farbe color.
 Farben werden durch Angabe der R-, G- und B-Komponenten nach dem Muster 0x00RRGGBB gebildet.
 Es stehen also für jede Komponente die Werte 0..255 zur Verfügung.",
                         vec![VariableEntry {
-                            name: Identifier::new("color".to_string(), &[]),
+                            name: Identifier::new("color".to_string(), 0..0),
                             is_ref: false,
                             data_type: Some(DataType::Int),
-                            doc: None,
+                            range: 0..0,doc: None,
                         }],
                     ),
                 ),
@@ -147,27 +148,27 @@ Es stehen also für jede Komponente die Werte 0..255 zur Verfügung.",
                 (
                   SETPIXEL.to_string(),
                     procedure_entry(
-                        Identifier::new(SETPIXEL.to_string(), &[]),
+                        Identifier::new(SETPIXEL.to_string(), 0..0),
                         "Setzt den Pixel mit den Koordinaten x und y auf die Farbe color.
 Grenzen: 0<= x <640, 0 <= y < 480.",
                         vec![
                             VariableEntry {
-                                name: Identifier::new("x".to_string(), &[]),
+                                name: Identifier::new("x".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("y".to_string(), &[]),
+                                name: Identifier::new("y".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("z".to_string(), &[]),
+                                name: Identifier::new("z".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                         ],
                     ),
@@ -176,39 +177,39 @@ Grenzen: 0<= x <640, 0 <= y < 480.",
                 (
                    DRAWLINE.to_string(),
                     procedure_entry(
-                        Identifier::new(DRAWLINE.to_string(), &[]),
+                        Identifier::new(DRAWLINE.to_string(), 0..0),
                         "Zeichnet eine gerade Linie von (x1|y1) nach (x2|y2) mit der Farbe color.
 Grenzen wie bei setPixel.",
                         vec![
                             VariableEntry {
-                                name: Identifier::new("x1".to_string(), &[]),
+                                name: Identifier::new("x1".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("y1".to_string(), &[]),
+                                name: Identifier::new("y1".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("x2".to_string(), &[]),
+                                name: Identifier::new("x2".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("y2".to_string(), &[]),
+                                name: Identifier::new("y2".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("color".to_string(), &[]),
+                                name: Identifier::new("color".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                         ],
                     ),
@@ -217,32 +218,32 @@ Grenzen wie bei setPixel.",
                 (
                   DRAWCIRCLE.to_string(),
                     procedure_entry(
-                        Identifier::new(DRAWCIRCLE.to_string(), &[]),
+                        Identifier::new(DRAWCIRCLE.to_string(), 0..0),
                         "Zeichnet einen Kreis um den Mittelpunkt (x0|y0) mit dem Radius radius und der Farbe color.",
                         vec![
                             VariableEntry {
-                                name: Identifier::new("x0".to_string(), &[]),
+                                name: Identifier::new("x0".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("y0".to_string(), &[]),
+                                name: Identifier::new("y0".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("radius".to_string(), &[]),
+                                name: Identifier::new("radius".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                             VariableEntry {
-                                name: Identifier::new("color".to_string(), &[]),
+                                name: Identifier::new("color".to_string(), 0..0),
                                 is_ref: false,
                                 data_type: Some(DataType::Int),
-                                doc: None,
+                                range: 0..0,doc: None,
                             },
                         ],
                     ),

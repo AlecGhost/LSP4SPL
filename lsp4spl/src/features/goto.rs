@@ -7,7 +7,7 @@ use lsp_types::{
 };
 use spl_frontend::{
     table::{DataType, Entry, GlobalEntry, LookupTable, SymbolTable},
-    ToRange,
+    ToRange, ToTextRange,
 };
 use tokio::sync::mpsc::Sender;
 
@@ -24,11 +24,16 @@ pub async fn declaration(
             } = cursor;
             if let Some(entry) = context {
                 match &entry {
-                    GlobalEntry::Type(_) => {
+                    GlobalEntry::Type(t) => {
+                        // early return for int;
+                        if &ident.value == "int" {
+                            return Ok(None);
+                        }
                         if let Some(entry) = doc_info.table.lookup(&ident.value) {
+                            let tokens = &doc_info.tokens[t.to_range()];
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(&entry.to_range(), &doc_info.text),
+                                range: convert_range(&entry.to_text_range(tokens), &doc_info.text),
                             }));
                         }
                     }
@@ -43,9 +48,18 @@ pub async fn declaration(
                                     return Ok(None);
                                 }
                             }
+                            let tokens = match entry {
+                                Entry::Procedure(param_dec) => {
+                                    &doc_info.tokens[param_dec.to_range()]
+                                }
+                                Entry::Type(type_dec) => &doc_info.tokens[type_dec.to_range()],
+                                Entry::Variable(var) | Entry::Parameter(var) => {
+                                    &doc_info.tokens[p.to_range()][var.to_range()]
+                                }
+                            };
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(&entry.to_range(), &doc_info.text),
+                                range: convert_range(&entry.to_text_range(tokens), &doc_info.text),
                             }));
                         }
                     }
@@ -79,12 +93,20 @@ pub async fn type_definition(
             if let Some(entry) = context {
                 match &entry {
                     GlobalEntry::Type(_) => {
+                        // early return for int;
+                        if &ident.value == "int" {
+                            return Ok(None);
+                        }
                         if let Some(entry) = doc_info.table.lookup(&ident.value) {
                             match &entry {
-                                GlobalEntry::Type(_) => {
+                                GlobalEntry::Type(t) => {
+                                    let tokens = &doc_info.tokens[t.to_range()];
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(&entry.to_range(), &doc_info.text),
+                                        range: convert_range(
+                                            &entry.to_text_range(tokens),
+                                            &doc_info.text,
+                                        ),
                                     }));
                                 }
                                 GlobalEntry::Procedure(_) => { /* no type definition */ }
@@ -98,22 +120,41 @@ pub async fn type_definition(
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
                             match &entry {
-                                Entry::Type(_) => {
+                                Entry::Type(t) => {
+                                    // early return for int;
+                                    if &ident.value == "int" {
+                                        return Ok(None);
+                                    }
+                                    let tokens = &doc_info.tokens[t.to_range()];
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(&entry.to_range(), &doc_info.text),
+                                        range: convert_range(
+                                            &entry.to_text_range(tokens),
+                                            &doc_info.text,
+                                        ),
                                     }));
                                 }
                                 Entry::Procedure(_) => { /* no type definition */ }
                                 Entry::Variable(v) | Entry::Parameter(v) => {
                                     if let Some(DataType::Array { creator, .. }) = &v.data_type {
-                                        return Ok(Some(Location {
-                                            uri,
-                                            range: convert_range(
-                                                &creator.to_range(),
-                                                &doc_info.text,
-                                            ),
-                                        }));
+                                        let entry = doc_info
+                                            .table
+                                            .lookup(&creator)
+                                            .expect("Invalid creator");
+                                        match entry {
+                                            GlobalEntry::Type(t) => {
+                                                return Ok(Some(Location {
+                                                    uri,
+                                                    range: convert_range(
+                                                        &entry.to_text_range(
+                                                            &doc_info.tokens[t.to_range()],
+                                                        ),
+                                                        &doc_info.text,
+                                                    ),
+                                                }));
+                                            }
+                                            _ => panic!("Creator must be a type"),
+                                        }
                                     }
                                     /* cannot look up primitive types */
                                 }
@@ -147,10 +188,14 @@ pub async fn implementation(
                             local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
+                            let tokens = &doc_info.tokens[p.to_range()];
                             if let Entry::Procedure(_) = entry {
                                 return Ok(Some(Location {
                                     uri,
-                                    range: convert_range(&entry.to_range(), &doc_info.text),
+                                    range: convert_range(
+                                        &entry.to_text_range(tokens),
+                                        &doc_info.text,
+                                    ),
                                 }));
                             }
                             /* no implementation for types and variables */

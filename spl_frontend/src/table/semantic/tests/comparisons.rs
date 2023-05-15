@@ -18,7 +18,7 @@ fn if_not_boolean() {
     eq!(
         errors,
         vec![SplError(
-            17..18,
+            7..8,
             SemanticErrorMessage::IfConditionMustBeBoolean.to_string()
         )]
     );
@@ -30,7 +30,7 @@ fn while_not_boolean() {
     eq!(
         errors,
         vec![SplError(
-            20..21,
+            7..8,
             SemanticErrorMessage::WhileConditionMustBeBoolean.to_string()
         )]
     );

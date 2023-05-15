@@ -2,12 +2,12 @@ use crate::document::DocumentRequest;
 use color_eyre::eyre::Result;
 use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, Documentation, MarkupKind};
 use spl_frontend::{
-    ast::{GlobalDeclaration, ProcedureDeclaration, Statement, TypeDeclaration},
+    ast::{GlobalDeclaration, ProcedureDeclaration, Reference, Statement},
     table::{
         GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, SymbolTable, TableEntry,
     },
     token::{Token, TokenList, TokenType},
-    ToRange,
+    ToTextRange,
 };
 use tokio::sync::mpsc::Sender;
 
@@ -19,26 +19,38 @@ pub async fn propose(
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         let table = &cursor.doc_info.table;
         let program = &cursor.doc_info.ast;
+        let tokens = &cursor.doc_info.tokens;
         let position = correct_index(cursor.index);
 
         if let Some(gd) = program
             .global_declarations
             .iter()
-            .find(|gd| gd.to_range().contains(&position))
+            .find(|gd| gd.to_text_range(&tokens[gd.offset..]).contains(&position))
         {
+            let tokens = &tokens[gd.offset..];
             use GlobalDeclaration::*;
-            match gd {
-                Type(td) => Ok(complete_type(td, position, table)),
-                Procedure(pd) => Ok(complete_procedure(pd, position, table)),
+            match gd.as_ref() {
+                Type(td) => Ok(complete_type(position, td.info.slice(tokens), table)),
+                Procedure(pd) => Ok(complete_procedure(
+                    pd,
+                    position,
+                    pd.info.slice(tokens),
+                    table,
+                )),
                 Error(_) => Ok(Some(new_global_declaration(table))),
             }
         } else {
             // fixes, that a cursor at the end of an unfinished type declaration at the end of the
             // file is still recognized as part of the declaration
-            if let Some(GlobalDeclaration::Type(td)) = program.global_declarations.last() {
-                if let Some(last_token) = td.info.tokens.last() {
+            if let Some(Reference {
+                reference: GlobalDeclaration::Type(td),
+                offset,
+            }) = program.global_declarations.last()
+            {
+                let tokens = &tokens[*offset..];
+                if let Some(last_token) = td.info.slice(tokens).last() {
                     if !matches!(last_token.token_type, TokenType::Semic) {
-                        return Ok(complete_type(td, position, table));
+                        return Ok(complete_type(position, tokens, table));
                     }
                 }
             }
@@ -53,123 +65,143 @@ pub async fn propose(
 }
 
 fn complete_type(
-    td: &TypeDeclaration,
     position: usize,
+    tokens: &[Token],
     table: &GlobalTable,
 ) -> Option<Vec<CompletionItem>> {
-    td.info
-        .tokens
-        .token_before(position)
-        .and_then(|last_token| {
-            use TokenType::*;
-            match last_token.token_type {
-                Eq => Some(vec![snippets::array(), items::array(), items::int()]),
-                RBracket => Some(vec![items::of()]),
-                Of => {
-                    let completions =
-                        vec![vec![snippets::array(), items::array()], search_types(table)].concat();
-                    Some(completions)
-                }
-                _ => None,
+    tokens.token_before(position).and_then(|last_token| {
+        use TokenType::*;
+        match last_token.token_type {
+            Eq => Some(vec![snippets::array(), items::array(), items::int()]),
+            RBracket => Some(vec![items::of()]),
+            Of => {
+                let completions =
+                    vec![vec![snippets::array(), items::array()], search_types(table)].concat();
+                Some(completions)
             }
-        })
+            _ => None,
+        }
+    })
 }
 
 fn complete_procedure(
     pd: &ProcedureDeclaration,
     position: usize,
+    tokens: &[Token],
     table: &GlobalTable,
 ) -> Option<Vec<CompletionItem>> {
-    pd.info
-        .tokens
-        .token_before(position)
-        .and_then(|last_token| {
-            let in_signature = pd
-                .info
-                .tokens
+    tokens.token_before(position).and_then(|last_token| {
+        let in_signature = tokens
+            .iter()
+            .find(|token| matches!(token.token_type, TokenType::RParen | TokenType::LCurly))
+            .map_or(true, |procedure_end_token| {
+                position < procedure_end_token.range.start
+            });
+
+        if in_signature {
+            match last_token.token_type {
+                TokenType::LParen | TokenType::Comma => Some(vec![items::r#ref()]),
+                TokenType::Colon => Some(search_types(table)),
+                _ => None,
+            }
+        } else {
+            // handle procedure body
+            let lookup_table = LookupTable {
+                local_table: super::get_local_table(pd, table),
+                global_table: Some(table),
+            };
+            let in_statements = pd
+                .statements
                 .iter()
-                .find(|token| matches!(token.token_type, TokenType::RParen | TokenType::LCurly))
-                .map_or(true, |procedure_end_token| {
-                    position < procedure_end_token.range.start
+                .find(|stmt| {
+                    // prevent that error or empty statements disturb the calculation of
+                    // the first real statement
+                    !matches!(stmt.as_ref(), Statement::Error(_) | Statement::Empty(_))
+                })
+                .map_or(false, |first_stmt| {
+                    // no slice because only start is tested
+                    let tokens = &tokens[first_stmt.offset..];
+                    position >= first_stmt.to_text_range(tokens).start
                 });
 
-            if in_signature {
+            if in_statements {
+                complete_statements(&pd.statements, position, tokens, last_token, &lookup_table)
+            } else {
+                // in variable declarations
                 match last_token.token_type {
-                    TokenType::LParen | TokenType::Comma => Some(vec![items::r#ref()]),
                     TokenType::Colon => Some(search_types(table)),
+                    TokenType::Semic | TokenType::LCurly => {
+                        let completions =
+                            vec![vec![snippets::var(), items::var()], new_stmt(&lookup_table)]
+                                .concat();
+                        Some(completions)
+                    }
                     _ => None,
                 }
-            } else {
-                // handle procedure body
-                let lookup_table = LookupTable {
-                    local_table: super::get_local_table(pd, table),
-                    global_table: Some(table),
-                };
-                let in_statements = pd
-                    .statements
-                    .iter()
-                    .find(|stmt| {
-                        // prevent that error or empty statements disturb the calculation of
-                        // the first real statement
-                        !matches!(stmt, Statement::Error(_) | Statement::Empty(_))
-                    })
-                    .map_or(false, |first_stmt| position >= first_stmt.to_range().start);
-
-                if in_statements {
-                    complete_statements(&pd.statements, position, last_token, &lookup_table)
-                } else {
-                    // in variable declarations
-                    match last_token.token_type {
-                        TokenType::Colon => Some(search_types(table)),
-                        TokenType::Semic | TokenType::LCurly => {
-                            let completions =
-                                vec![vec![snippets::var(), items::var()], new_stmt(&lookup_table)]
-                                    .concat();
-                            Some(completions)
-                        }
-                        _ => None,
-                    }
-                }
             }
-        })
+        }
+    })
 }
 
 fn complete_statements(
-    stmts: &[Statement],
+    stmts: &[Reference<Statement>],
     position: usize,
+    tokens: &[Token],
     last_token: &Token,
     lookup_table: &LookupTable,
 ) -> Option<Vec<CompletionItem>> {
     let mut last_stmt_is_if = false;
     stmts
         .iter()
-        .find(|stmt| {
-            if stmt.to_range().contains(&position) {
+        .map(|stmt| {
+            let tokens = stmt.info().slice(&tokens[stmt.offset..]);
+            (stmt, tokens)
+        })
+        .find(|(stmt, tokens)| {
+            if stmt.to_text_range(tokens).contains(&position) {
                 true
             } else {
-                last_stmt_is_if = matches!(stmt, Statement::If(_));
+                last_stmt_is_if = matches!(stmt.as_ref(), Statement::If(_));
                 false
             }
         })
         .map_or_else(
             || Some(new_stmt(lookup_table)),
-            |stmt| complete_statement(stmt, position, last_token, last_stmt_is_if, lookup_table),
+            |(stmt, tokens)| {
+                complete_statement(
+                    stmt,
+                    position,
+                    tokens,
+                    last_token,
+                    last_stmt_is_if,
+                    lookup_table,
+                )
+            },
         )
 }
 
 macro_rules! complete_branch {
-    ($branch:expr, $position:expr, $last_token:expr, $lookup_table:expr) => {
+    ($branch:expr, $position:expr, $tokens:expr, $last_token:expr, $lookup_table:expr) => {
         if let Some(stmt) = $branch {
-            if stmt.to_range().contains(&$position) {
-                return complete_statement(stmt, $position, $last_token, false, $lookup_table);
+            let tokens = stmt.info().slice(&$tokens[stmt.offset..]);
+            if stmt.to_text_range(tokens).contains(&$position) {
+                return complete_statement(
+                    stmt,
+                    $position,
+                    tokens,
+                    $last_token,
+                    false,
+                    $lookup_table,
+                );
             }
         }
     };
 }
 
 fn complete_statement(
-    stmt: &Statement,
+    stmt: &Reference<Statement>,
     position: usize,
+    tokens: &[Token],
     last_token: &Token,
     last_stmt_is_if: bool,
     lookup_table: &LookupTable,
@@ -184,27 +216,27 @@ fn complete_statement(
         return Some(completions);
     }
 
-    match stmt {
-        Statement::Assignment(a) => {
-            // before assign is only an arbitrary identifier
-            complete_vars(&a.info.tokens, position, lookup_table, TokenType::Assign)
-        }
+    match stmt.as_ref() {
         Statement::Block(b) => {
-            complete_statements(&b.statements, position, last_token, lookup_table)
+            complete_statements(&b.statements, position, tokens, last_token, lookup_table)
         }
-        Statement::Call(c) => {
+        Statement::Assignment(_) => {
+            // before assign is only an arbitrary identifier
+            complete_vars(tokens, position, lookup_table, TokenType::Assign)
+        }
+        Statement::Call(_) => {
             // procedure name completion is already provided by the
             // context based completions
-            complete_vars(&c.info.tokens, position, lookup_table, TokenType::LParen)
+            complete_vars(tokens, position, lookup_table, TokenType::LParen)
         }
         Statement::If(i) => {
-            complete_branch!(&i.if_branch, position, last_token, lookup_table);
-            complete_branch!(&i.else_branch, position, last_token, lookup_table);
-            complete_vars(&i.info.tokens, position, lookup_table, TokenType::LParen)
+            complete_branch!(&i.if_branch, position, tokens, last_token, lookup_table);
+            complete_branch!(&i.else_branch, position, tokens, last_token, lookup_table);
+            complete_vars(tokens, position, lookup_table, TokenType::LParen)
         }
         Statement::While(w) => {
-            complete_branch!(&w.statement, position, last_token, lookup_table);
-            complete_vars(&w.info.tokens, position, lookup_table, TokenType::LParen)
+            complete_branch!(&w.statement, position, tokens, last_token, lookup_table);
+            complete_vars(tokens, position, lookup_table, TokenType::LParen)
         }
         Statement::Error(_) | Statement::Empty(_) => Some(new_stmt(lookup_table)),
     }

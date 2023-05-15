@@ -1,0 +1,23 @@
+---
+source: lsp4spl/src/features/tests/completion.rs
+expression: result
+---
+[
+    "keyword: else",
+    "keyword: if",
+    "keyword: while",
+    "proc: clearAll",
+    "proc: drawCircle",
+    "proc: drawLine",
+    "proc: exit",
+    "proc: main",
+    "proc: printc",
+    "proc: printi",
+    "proc: readc",
+    "proc: readi",
+    "proc: setPixel",
+    "proc: time",
+    "snippet: else",
+    "snippet: if",
+    "snippet: while",
+]

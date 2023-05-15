@@ -1,12 +1,31 @@
-use crate::ast::Identifier;
-use crate::lexer::token::TokenType;
+use crate::Shiftable;
+use crate::{ast::Identifier, ToRange};
 use std::fmt::{Debug, Display};
 use std::ops::Range;
 use thiserror::Error;
 
-#[derive(Clone, Debug, Error, PartialEq, Eq)]
+// TODO: Remove Hash?
+#[derive(Clone, Debug, Error, Hash, PartialEq, Eq)]
 #[error("{1}")]
 pub struct SplError(pub Range<usize>, pub String);
+
+impl ToRange for SplError {
+    fn to_range(&self) -> Range<usize> {
+        self.0.clone()
+    }
+}
+
+impl Shiftable for SplError {
+    fn shift(self, offset: usize) -> Self {
+        Self(self.0.shift(offset), self.1)
+    }
+}
+
+impl Shiftable for Vec<SplError> {
+    fn shift(self, offset: usize) -> Self {
+        self.into_iter().map(|err| err.shift(offset)).collect()
+    }
+}
 
 impl Identifier {
     pub fn to_error<M, T>(&self, msg: M) -> SplError
@@ -14,16 +33,11 @@ impl Identifier {
         M: Fn(String) -> T,
         T: ToString,
     {
-        SplError(
-            self.info
-                .tokens
-                .iter()
-                .find(|token| matches!(token.token_type, TokenType::Ident(_)))
-                .expect("Identifier must contain ident token")
-                .range
-                .clone(),
-            msg(self.value.clone()).to_string(),
-        )
+        // Identifier position is the last in the range (which might contain comments)
+        let end_pos = self.to_range().end;
+        assert!(end_pos > 0, "Identifier must contain at least one token");
+        let start_pos = end_pos - 1;
+        SplError(start_pos..end_pos, msg(self.value.clone()).to_string())
     }
 }
 

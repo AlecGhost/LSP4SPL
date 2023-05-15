@@ -62,6 +62,7 @@ pub async fn semantic_tokens(
         ast,
         text,
         table: global_table,
+        tokens,
         ..
     }) = super::get_doc_info(uri, doctx).await?
     {
@@ -74,12 +75,13 @@ pub async fn semantic_tokens(
             .iter()
             .flat_map(|gd| {
                 use GlobalDeclaration::*;
-                match gd {
+                let tokens = &tokens[gd.offset..];
+                match gd.as_ref() {
                     Procedure(pd) => {
-                        collect_proc_dec(pd, &global_table, &text, &mut previous_token_pos)
+                        collect_proc_dec(pd, &global_table, &text, tokens, &mut previous_token_pos)
                     }
-                    Type(td) => collect_type_dec(td, &text, &mut previous_token_pos),
-                    Error(info) => collect_error(info, &text, &mut previous_token_pos),
+                    Type(td) => collect_type_dec(td, &text, tokens, &mut previous_token_pos),
+                    Error(info) => collect_error(info, &text, tokens, &mut previous_token_pos),
                 }
             })
             .collect();
@@ -95,10 +97,11 @@ pub async fn semantic_tokens(
 fn collect_type_dec(
     td: &TypeDeclaration,
     text: &str,
+    tokens: &[Token],
     previous_token_pos: &mut Position,
 ) -> Vec<SemanticToken> {
     td.info
-        .tokens
+        .slice(tokens)
         .iter()
         .filter_map(|token| {
             let semantic_token = if matches!(&td.name, Some(name) if name.to_range() == token.range)
@@ -133,6 +136,7 @@ fn collect_proc_dec(
     pd: &ProcedureDeclaration,
     global_table: &GlobalTable,
     text: &str,
+    tokens: &[Token],
     previous_token_pos: &mut Position,
 ) -> Vec<SemanticToken> {
     let lookup_table = LookupTable {
@@ -140,7 +144,7 @@ fn collect_proc_dec(
         global_table: Some(global_table),
     };
     pd.info
-        .tokens
+        .slice(tokens)
         .iter()
         .filter_map(|token| {
             let semantic_token = if matches!(&pd.name, Some(name) if name.to_range() == token.range)
@@ -211,9 +215,10 @@ fn collect_proc_dec(
 fn collect_error(
     info: &AstInfo,
     text: &str,
+    tokens: &[Token],
     previous_token_pos: &mut Position,
 ) -> Vec<SemanticToken> {
-    info.tokens
+    info.slice(tokens)
         .iter()
         .filter_map(|token| {
             let semantic_token = map_token(token, *previous_token_pos, text);
