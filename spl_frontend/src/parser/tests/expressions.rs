@@ -5,8 +5,7 @@ type E = Expression;
 #[test]
 fn one() {
     let expr = "1";
-    let broker = LocalBroker::default();
-    let tokens = lex(expr, broker);
+    let tokens = lex(expr);
     eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -20,8 +19,7 @@ fn one() {
 #[test]
 fn addition() {
     let expr = "1 + 2";
-    let broker = LocalBroker::default();
-    let tokens = lex(expr, broker);
+    let tokens = lex(expr);
     eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -40,8 +38,7 @@ fn addition() {
 #[test]
 fn multiplication_before_addition() {
     let expr = "1 + 2 * 3";
-    let broker = LocalBroker::default();
-    let tokens = lex(expr, broker);
+    let tokens = lex(expr);
     eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -65,8 +62,7 @@ fn multiplication_before_addition() {
 #[test]
 fn division_before_addition() {
     let expr = "1 / 2 + 3";
-    let broker = LocalBroker::default();
-    let tokens = lex(expr, broker);
+    let tokens = lex(expr);
     eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -90,8 +86,7 @@ fn division_before_addition() {
 #[test]
 fn left_associativity_in_multiplication() {
     let expr = "1 * 2 / 3 * 4";
-    let broker = LocalBroker::default();
-    let tokens = lex(expr, broker);
+    let tokens = lex(expr);
     eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -120,8 +115,7 @@ fn left_associativity_in_multiplication() {
 #[test]
 fn left_associativity_in_addition() {
     let expr = "1 - 2 + 3 - 4";
-    let broker = LocalBroker::default();
-    let tokens = lex(expr, broker);
+    let tokens = lex(expr);
     eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -150,8 +144,7 @@ fn left_associativity_in_addition() {
 #[test]
 fn complex_comparison() {
     let expr = "(1 + 2) * 3 = 4 + 5 * 6 / 6";
-    let broker = LocalBroker::default();
-    let tokens = lex(expr, broker);
+    let tokens = lex(expr);
     eq!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -198,8 +191,7 @@ fn complex_comparison() {
 #[test]
 fn no_double_comparison() {
     let expr = "a < b > c";
-    let broker = LocalBroker::default();
-    let tokens = lex(expr, broker);
+    let tokens = lex(expr);
     assert!(
         all_consuming(terminated(E::parse, eof))(tokens.to_tokens()).is_err(),
         "Expression: {}",

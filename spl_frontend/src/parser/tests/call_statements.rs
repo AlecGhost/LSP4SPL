@@ -2,10 +2,9 @@ use super::*;
 
 #[test]
 fn simple() {
-    let broker = LocalBroker::default();
     let stmt = "a();";
-    let tokens = lex(stmt, broker);
-    let (input, cs) =
+    let tokens = lex(stmt);
+    let (_, cs) =
         all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         cs,
@@ -17,14 +16,12 @@ fn simple() {
         "CallStatement: {}",
         stmt
     );
-    assert!(input.broker.errors().is_empty(), "CallStatement: {}", stmt);
 }
 
 #[test]
 fn with_args() {
     let stmt = "a(1, 2, 3);";
-    let broker = LocalBroker::default();
-    let tokens = lex(stmt, broker);
+    let tokens = lex(stmt);
     let (_, cs) = all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         cs,
@@ -45,8 +42,7 @@ fn with_args() {
 #[test]
 fn trailing_comma() {
     let stmt = "a(1,)";
-    let broker = LocalBroker::default();
-    let tokens = lex(stmt, broker);
+    let tokens = lex(stmt);
     let (_, cs) = all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         cs,

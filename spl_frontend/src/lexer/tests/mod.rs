@@ -1,9 +1,6 @@
-use crate::{
-    lexer::{
-        lex,
-        token::{IntResult, Token, TokenType},
-    },
-    LocalBroker,
+use crate::lexer::{
+    lex,
+    token::{IntResult, Token, TokenType},
 };
 #[cfg(test)]
 use pretty_assertions::assert_eq;
@@ -11,8 +8,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn type_declaration() {
     let input = "type a = int;";
-    let broker = LocalBroker::default();
-    let tokens = lex(input, broker);
+    let tokens = lex(input);
     assert_eq!(
         tokens,
         vec![
@@ -31,8 +27,7 @@ fn type_declaration() {
 #[test]
 fn call_statement() {
     let input = "a(); ";
-    let broker = LocalBroker::default();
-    let tokens = lex(input, broker);
+    let tokens = lex(input);
     assert_eq!(
         tokens,
         vec![
@@ -50,8 +45,7 @@ fn call_statement() {
 #[test]
 fn if_statement() {
     let input = "if (1 = 2) {}";
-    let broker = LocalBroker::default();
-    let tokens = lex(input, broker);
+    let tokens = lex(input);
     assert_eq!(
         tokens,
         vec![
@@ -73,8 +67,7 @@ fn if_statement() {
 #[test]
 fn comment() {
     let input = "//";
-    let broker = LocalBroker::default();
-    let tokens = lex(input, broker);
+    let tokens = lex(input);
     assert_eq!(
         tokens,
         vec![

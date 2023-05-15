@@ -3,8 +3,7 @@ use super::*;
 #[test]
 fn correct_alphanumeric() {
     let i = "ab1";
-    let broker = LocalBroker::default();
-    let tokens = lex(i, broker);
+    let tokens = lex(i);
     eq!(
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -18,8 +17,7 @@ fn correct_alphanumeric() {
 #[test]
 fn underscore_in_middle() {
     let i = "test_ident";
-    let broker = LocalBroker::default();
-    let tokens = lex(i, broker);
+    let tokens = lex(i);
     eq!(
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -33,8 +31,7 @@ fn underscore_in_middle() {
 #[test]
 fn underscore_in_front() {
     let i = "_a";
-    let broker = LocalBroker::default();
-    let tokens = lex(i, broker);
+    let tokens = lex(i);
     eq!(
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -48,8 +45,7 @@ fn underscore_in_front() {
 #[test]
 fn invalid_number_in_front() {
     let i = "1a";
-    let broker = LocalBroker::default();
-    let tokens = lex(i, broker);
+    let tokens = lex(i);
     assert!(
         all_consuming(terminated(Identifier::parse, eof))(tokens.to_tokens()).is_err(),
         "Identifier: {}",

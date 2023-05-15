@@ -4,10 +4,9 @@ use super::*;
 
 #[test]
 fn simple() {
-    let broker = LocalBroker::default();
     let asgn = "a := 1;";
-    let tokens = lex(asgn, broker);
-    let (input, assignment) =
+    let tokens = lex(asgn);
+    let (_, assignment) =
         all_consuming(terminated(Assignment::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         assignment,
@@ -19,14 +18,12 @@ fn simple() {
         "Assignment: {}",
         asgn
     );
-    assert!(input.broker.errors().is_empty(), "Assignment: {}", asgn);
 }
 
 #[test]
 fn invalid_equals_symbol() {
     let asgn = "a = 1;";
-    let broker = LocalBroker::default();
-    let tokens = lex(asgn, broker);
+    let tokens = lex(asgn);
     let (_, assignment) =
         all_consuming(terminated(Assignment::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(

@@ -1,5 +1,5 @@
 use crate::error::{LexErrorMessage, SplError};
-use crate::{DiagnosticsBroker, ToRange};
+use crate::ToRange;
 use nom::combinator::{eof, peek};
 use nom::sequence::{pair, terminated};
 use nom::{
@@ -23,10 +23,9 @@ mod utility;
 
 /// Type alias for nom_locate::LocatedSpan.
 /// Tracks range inside source code during lexical analysis.
-/// Holds DiagnosticsBroker to report errors during lexing.
-pub type Span<'a, B> = nom_locate::LocatedSpan<&'a str, B>;
+pub type Span<'a> = nom_locate::LocatedSpan<&'a str>;
 
-impl<B: DiagnosticsBroker> ToRange for Span<'_, B> {
+impl ToRange for Span<'_> {
     fn to_range(&self) -> Range<usize> {
         let start = self.location_offset();
         let end = start + self.fragment().len();
@@ -34,16 +33,15 @@ impl<B: DiagnosticsBroker> ToRange for Span<'_, B> {
     }
 }
 
-type IResult<'a, B> = nom::IResult<Span<'a, B>, Token>;
+type IResult<'a> = nom::IResult<Span<'a>, Token>;
 
 /// Tokenizes the given source code.
-/// Errors are reported by the specified broker.
 ///
 /// # Panics
 ///
 /// Panics if lexing fails.
-pub(crate) fn lex<B: DiagnosticsBroker>(src: &str, broker: B) -> Vec<Token> {
-    let input = Span::new_extra(src, broker);
+pub(crate) fn lex(src: &str) -> Vec<Token> {
+    let input = Span::new(src);
     let (_, (mut tokens, eof_token)) = pair(
         many0(preceded(multispace0, Token::lex)),
         preceded(multispace0, Eof::lex),
@@ -54,8 +52,8 @@ pub(crate) fn lex<B: DiagnosticsBroker>(src: &str, broker: B) -> Vec<Token> {
 }
 
 /// Try to parse `Span` into `Token`
-trait Lexer<B>: Sized {
-    fn lex(input: Span<B>) -> IResult<B>;
+trait Lexer: Sized {
+    fn lex(input: Span) -> IResult;
 }
 
 /// Recognize symbol and map to `Token`
@@ -65,7 +63,7 @@ macro_rules! lex_symbol {
             tag($token_type
                 .as_static_str()
                 .expect("No static representation available")),
-            |span: Span<B>| -> Token { Token::new($token_type, span.to_range()) },
+            |span: Span| -> Token { Token::new($token_type, span.to_range()) },
         )
     }};
 }
@@ -79,7 +77,7 @@ macro_rules! lex_keyword {
                 tag($token_type
                     .as_static_str()
                     .expect("No static representation available")),
-                |span: Span<B>| -> Token { Token::new($token_type, span.to_range()) },
+                |span: Span| -> Token { Token::new($token_type, span.to_range()) },
             ),
             peek(alt((
                 eof,
@@ -89,8 +87,8 @@ macro_rules! lex_keyword {
     }};
 }
 
-impl<B: DiagnosticsBroker> Lexer<B> for Token {
-    fn lex(input: Span<B>) -> IResult<B> {
+impl Lexer for Token {
+    fn lex(input: Span) -> IResult {
         alt((
             Comment::lex,
             alt((
@@ -133,8 +131,8 @@ impl<B: DiagnosticsBroker> Lexer<B> for Token {
 }
 
 struct Ident;
-impl<B: DiagnosticsBroker> Lexer<B> for Ident {
-    fn lex(input: Span<B>) -> IResult<B> {
+impl Lexer for Ident {
+    fn lex(input: Span) -> IResult {
         let start = input.location_offset();
         let (input, first_letter) = alt((alpha1, tag("_")))(input)?;
         let (input, rest) = alpha_numeric0(input)?;
@@ -145,21 +143,27 @@ impl<B: DiagnosticsBroker> Lexer<B> for Ident {
 }
 
 struct Char;
-impl<B: DiagnosticsBroker> Lexer<B> for Char {
-    fn lex(input: Span<B>) -> IResult<B> {
+impl Lexer for Char {
+    fn lex(input: Span) -> IResult {
         let start = input.location_offset();
         let (input, _) = tag("'")(input)?;
         let (input, c) = alt((map(tag("\\n"), |_| '\n'), anychar))(input)?;
         let pos = input.location_offset();
-        let (input, _) = expect(tag("'"), LexErrorMessage::MissingClosingTick, pos)(input)?;
+        let (input, closing_tick) = expect(tag("'"), LexErrorMessage::MissingClosingTick, pos)(input)?;
         let end = input.location_offset();
-        Ok((input, Token::new(TokenType::Char(c), start..end)))
+        match closing_tick {
+            Ok(_) => Ok((input, Token::new(TokenType::Char(c), start..end))),
+            Err(err) => Ok((
+                input,
+                Token::new_with_errors(TokenType::Char(c), start..end, vec![err]),
+            )),
+        }
     }
 }
 
 struct Int;
-impl<B: DiagnosticsBroker> Lexer<B> for Int {
-    fn lex(input: Span<B>) -> IResult<B> {
+impl Lexer for Int {
+    fn lex(input: Span) -> IResult {
         let (input, int_span) = digit1(input)?;
         match int_span.parse() {
             Ok(value) => Ok((
@@ -185,34 +189,41 @@ impl<B: DiagnosticsBroker> Lexer<B> for Int {
 }
 
 struct Hex;
-impl<B: DiagnosticsBroker> Lexer<B> for Hex {
-    fn lex(input: Span<B>) -> IResult<B> {
+impl Lexer for Hex {
+    fn lex(input: Span) -> IResult {
         let start = input.location_offset();
         let (input, _) = tag("0x")(input)?;
         let pos = input.location_offset();
         let (input, opt_hex) = expect(hex_digit1, LexErrorMessage::ExpectedHexNumber, pos)(input)?;
-        let result = if let Some(hex_span) = opt_hex {
-            match u32::from_str_radix(&hex_span, 16) {
+        let mut errors = Vec::new();
+        let result = match opt_hex {
+            Ok(hex_span) => match u32::from_str_radix(&hex_span, 16) {
                 Ok(value) => IntResult::Int(value),
                 Err(_) => {
-                    input.extra.report_error(SplError(
+                    let err = SplError(
                         hex_span.to_range(),
                         LexErrorMessage::InvalidIntLit("0x".to_string() + &hex_span).to_string(),
-                    ));
+                    );
+                    errors.push(err);
                     IntResult::Err(hex_span.to_string())
                 }
+            },
+            Err(err) => {
+                errors.push(err);
+                IntResult::Err(String::new())
             }
-        } else {
-            IntResult::Err(String::new())
         };
         let end = input.location_offset();
-        Ok((input, Token::new(TokenType::Hex(result), start..end)))
+        Ok((
+            input,
+            Token::new_with_errors(TokenType::Hex(result), start..end, errors),
+        ))
     }
 }
 
 struct Comment;
-impl<B: DiagnosticsBroker> Lexer<B> for Comment {
-    fn lex(input: Span<B>) -> IResult<B> {
+impl Lexer for Comment {
+    fn lex(input: Span) -> IResult {
         let start = input.location_offset();
         let (input, comment) = preceded(tag("//"), take_till(|c| c == '\n'))(input)?;
         let end = input.location_offset();
@@ -224,18 +235,18 @@ impl<B: DiagnosticsBroker> Lexer<B> for Comment {
 }
 
 struct Unknown;
-impl<B: DiagnosticsBroker> Lexer<B> for Unknown {
-    fn lex(input: Span<B>) -> IResult<B> {
-        map(take(1u8), |span: Span<B>| {
+impl Lexer for Unknown {
+    fn lex(input: Span) -> IResult {
+        map(take(1u8), |span: Span| {
             Token::new(TokenType::Unknown(span.to_string()), span.to_range())
         })(input)
     }
 }
 
 struct Eof;
-impl<B: DiagnosticsBroker> Lexer<B> for Eof {
-    fn lex(input: Span<B>) -> IResult<B> {
-        map(eof, |span: Span<B>| {
+impl Lexer for Eof {
+    fn lex(input: Span) -> IResult {
+        map(eof, |span: Span| {
             Token::new(TokenType::Eof, span.to_range())
         })(input)
     }

@@ -6,18 +6,14 @@ use crate::{
     ast::*,
     error::{BuildErrorMessage, SplError},
     table::Entry,
-    DiagnosticsBroker, Shiftable, ToRange,
+    Shiftable, ToRange,
 };
 
 #[cfg(test)]
 mod tests;
 
 /// Builds a `GlobalTable` for the given program.
-/// Errors are reported by the specified broker.
-pub(crate) fn build<B>(program: &mut Program, _: &B) -> GlobalTable
-where
-    B: Clone + std::fmt::Debug + DiagnosticsBroker,
-{
+pub(crate) fn build(program: &mut Program) -> GlobalTable {
     let mut table = GlobalTable::initialized();
     program.build(&mut table, 0);
     table

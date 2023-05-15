@@ -6,8 +6,7 @@ type TE = TypeExpression;
 #[test]
 fn simple() {
     let dec = "type a = int;";
-    let broker = LocalBroker::default();
-    let tokens = lex(dec, broker);
+    let tokens = lex(dec);
     eq!(
         all_consuming(terminated(TD::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -29,8 +28,7 @@ fn simple() {
 #[test]
 fn nested_arrays() {
     let dec = "type a = array [2] of array [3] of int;";
-    let broker = LocalBroker::default();
-    let tokens = lex(dec, broker);
+    let tokens = lex(dec);
     eq!(
         all_consuming(terminated(TD::parse, eof))(tokens.to_tokens())
             .unwrap()
@@ -72,8 +70,7 @@ fn nested_arrays() {
 #[test]
 fn missing_array_index() {
     let dec = "type = array [] of array [] of;";
-    let broker = LocalBroker::default();
-    let tokens = lex(dec, broker);
+    let tokens = lex(dec);
     let (_, td) = all_consuming(terminated(TD::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         td,

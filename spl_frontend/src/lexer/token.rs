@@ -270,9 +270,8 @@ impl std::fmt::Display for TokenType {
 }
 
 #[derive(Clone, Debug)]
-pub struct TokenStream<'a, B> {
+pub struct TokenStream<'a> {
     tokens: &'a [Token],
-    pub broker: B,
     first_ptr: *const Token,
     pub error_buffer: Vec<SplError>,
     pub reference_pos: usize,
@@ -280,7 +279,7 @@ pub struct TokenStream<'a, B> {
 
 /// source: [Stackoverflow](https://stackoverflow.com/a/57203324)
 /// enables indexing and slicing
-impl<'a, B, Idx> std::ops::Index<Idx> for TokenStream<'a, B>
+impl<'a, Idx> std::ops::Index<Idx> for TokenStream<'a>
 where
     Idx: std::slice::SliceIndex<[Token]>,
 {
@@ -291,11 +290,10 @@ where
     }
 }
 
-impl<'a, B: Clone> TokenStream<'a, B> {
-    pub const fn new(tokens: &'a [Token], broker: B) -> Self {
+impl<'a> TokenStream<'a> {
+    pub const fn new(tokens: &'a [Token]) -> Self {
         Self {
             tokens,
-            broker,
             first_ptr: tokens.as_ptr(),
             error_buffer: Vec::new(),
             reference_pos: 0,
@@ -312,7 +310,7 @@ impl<'a, B: Clone> TokenStream<'a, B> {
     }
 }
 
-impl<B> TokenStream<'_, B> {
+impl TokenStream<'_> {
     fn distance(first: *const Token, second: *const Token) -> usize {
         // because we do pointer arithmetic, the size of `Token` in memory is needed,
         // to calculate the offset.
@@ -322,7 +320,7 @@ impl<B> TokenStream<'_, B> {
     }
 
     pub fn location_offset(&self) -> usize {
-        TokenStream::<B>::distance(self.first_ptr, self.tokens.as_ptr())
+        TokenStream::distance(self.first_ptr, self.tokens.as_ptr())
     }
 
     pub fn tokens(&self) -> Vec<Token> {
@@ -330,19 +328,19 @@ impl<B> TokenStream<'_, B> {
     }
 }
 
-impl<'a, B: Clone> ToRange for TokenStream<'a, B> {
+impl<'a> ToRange for TokenStream<'a> {
     fn to_range(&self) -> Range<usize> {
         self.fragment().map_or(0..0, |token| token.range.clone())
     }
 }
 
-impl<'a, B: Clone> nom::InputLength for TokenStream<'a, B> {
+impl<'a> nom::InputLength for TokenStream<'a> {
     fn input_len(&self) -> usize {
         self.tokens.len()
     }
 }
 
-impl<'a, B: Clone> nom::InputTake for TokenStream<'a, B> {
+impl<'a> nom::InputTake for TokenStream<'a> {
     fn take(&self, count: usize) -> Self {
         Self {
             tokens: &self.tokens[0..count],
@@ -365,15 +363,15 @@ impl<'a, B: Clone> nom::InputTake for TokenStream<'a, B> {
 }
 
 /// source: [nom traits](https://docs.rs/nom/latest/src/nom/traits.rs.html#62-69)
-impl<'a, B> nom::Offset for TokenStream<'a, B> {
+impl<'a> nom::Offset for TokenStream<'a> {
     fn offset(&self, second: &Self) -> usize {
         let fst = self.tokens.as_ptr();
         let snd = second.tokens.as_ptr();
-        TokenStream::<B>::distance(fst, snd)
+        TokenStream::distance(fst, snd)
     }
 }
 
-impl<'a, B: Clone> nom::Slice<RangeTo<usize>> for TokenStream<'a, B> {
+impl<'a> nom::Slice<RangeTo<usize>> for TokenStream<'a> {
     fn slice(&self, range: RangeTo<usize>) -> Self {
         Self {
             tokens: &self.tokens[range],
@@ -383,7 +381,7 @@ impl<'a, B: Clone> nom::Slice<RangeTo<usize>> for TokenStream<'a, B> {
 }
 
 /// source: [Monkey Rust lexer](https://github.com/Rydgel/monkey-rust/blob/master/lib/lexer/token.rs)
-impl<'a, B: Clone> nom::InputIter for TokenStream<'a, B> {
+impl<'a> nom::InputIter for TokenStream<'a> {
     type Item = &'a Token;
     type Iter = Enumerate<::std::slice::Iter<'a, Token>>;
     type IterElem = ::std::slice::Iter<'a, Token>;

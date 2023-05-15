@@ -3,9 +3,8 @@ use super::*;
 #[test]
 fn acker() {
     let acker = std::fs::read_to_string("tests/parser/acker.spl").unwrap();
-    let broker = LocalBroker::default();
-    let tokens = lex(&acker, broker);
-    let (input, program) = all_consuming(Program::parse)(tokens.to_tokens()).unwrap();
+    let tokens = lex(&acker);
+    let (_, program) = all_consuming(Program::parse)(tokens.to_tokens()).unwrap();
 
     // variables for use in assertion
     let int_type = |tokens, offset| {
@@ -401,5 +400,4 @@ fn acker() {
         // "Acker: {}",
         // acker
     );
-    assert!(input.broker.errors().is_empty(), "Acker: {}", acker);
 }

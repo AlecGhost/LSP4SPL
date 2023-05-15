@@ -3,10 +3,8 @@ use super::*;
 #[test]
 fn simple() {
     let stmt = "if (1 = 2) {}";
-    let broker = LocalBroker::default();
-    let tokens = lex(stmt, broker);
-    let (input, is) =
-        all_consuming(terminated(IfStatement::parse, eof))(tokens.to_tokens()).unwrap();
+    let tokens = lex(stmt);
+    let (_, is) = all_consuming(terminated(IfStatement::parse, eof))(tokens.to_tokens()).unwrap();
     eq!(
         is,
         IfStatement {
@@ -32,5 +30,4 @@ fn simple() {
         "IfStatement: {}",
         stmt
     );
-    assert!(input.broker.errors().is_empty(), "IfStatement: {}", stmt);
 }

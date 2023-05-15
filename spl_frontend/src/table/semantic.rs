@@ -5,7 +5,7 @@ use crate::{
         GlobalDeclaration, IfStatement, Program, Statement, Variable, WhileStatement,
     },
     error::{SemanticErrorMessage, SplError},
-    DiagnosticsBroker, ToRange,
+    ToRange,
 };
 use std::cmp::Ordering;
 
@@ -13,12 +13,8 @@ use std::cmp::Ordering;
 mod tests;
 
 /// Analyzes the given program for semantic errors.
-/// Errors are reported by the specified broker.
-pub(crate) fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker>(
-    program: &mut Program,
-    table: &GlobalTable,
-    broker: &B,
-) {
+/// Errors are reported by the specifie.
+pub(crate) fn analyze(program: &mut Program, table: &GlobalTable) {
     program
         .global_declarations
         .iter_mut()
@@ -39,38 +35,38 @@ pub(crate) fn analyze<B: Clone + std::fmt::Debug + DiagnosticsBroker>(
                     };
                     proc.statements
                         .iter_mut()
-                        .for_each(|stmt| stmt.analyze(lookup_table, broker));
+                        .for_each(|stmt| stmt.analyze(lookup_table));
                 }
             }
         });
 }
 
-trait AnalyzeStatement<B> {
-    fn analyze(&mut self, table: &LookupTable, broker: &B);
+trait AnalyzeStatement {
+    fn analyze(&mut self, table: &LookupTable);
 }
 
-trait AnalyzeExpression<B> {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) -> Option<DataType>;
+trait AnalyzeExpression {
+    fn analyze(&mut self, table: &LookupTable) -> Option<DataType>;
 }
 
-impl<B: DiagnosticsBroker> AnalyzeStatement<B> for Statement {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) {
+impl AnalyzeStatement for Statement {
+    fn analyze(&mut self, table: &LookupTable) {
         match self {
-            Self::Assignment(stmt) => stmt.analyze(table, broker),
-            Self::Block(stmt) => stmt.analyze(table, broker),
-            Self::Call(stmt) => stmt.analyze(table, broker),
-            Self::If(stmt) => stmt.analyze(table, broker),
-            Self::While(stmt) => stmt.analyze(table, broker),
+            Self::Assignment(stmt) => stmt.analyze(table),
+            Self::Block(stmt) => stmt.analyze(table),
+            Self::Call(stmt) => stmt.analyze(table),
+            Self::If(stmt) => stmt.analyze(table),
+            Self::While(stmt) => stmt.analyze(table),
             Self::Empty(_) | Self::Error(_) => {}
         };
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeStatement<B> for Assignment {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) {
+impl AnalyzeStatement for Assignment {
+    fn analyze(&mut self, table: &LookupTable) {
         if let Some(expr) = &mut self.expr {
-            let left = self.variable.analyze(table, broker);
-            let right = expr.analyze(table, broker);
+            let left = self.variable.analyze(table);
+            let right = expr.analyze(table);
             // only analyze further if type information for both sides is available
             if let (Some(left), Some(right)) = (left, right) {
                 if left != right {
@@ -89,16 +85,16 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for Assignment {
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeStatement<B> for BlockStatement {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) {
+impl AnalyzeStatement for BlockStatement {
+    fn analyze(&mut self, table: &LookupTable) {
         self.statements
             .iter_mut()
-            .for_each(|stmt| stmt.analyze(table, broker));
+            .for_each(|stmt| stmt.analyze(table));
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) {
+impl AnalyzeStatement for CallStatement {
+    fn analyze(&mut self, table: &LookupTable) {
         if let Some(entry) = table.lookup(&self.name.value) {
             if let Entry::Procedure(proc_entry) = &entry {
                 let arg_len = self.arguments.len();
@@ -139,7 +135,7 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
                             .to_string(),
                         ));
                     }
-                    let arg_type = arg.analyze(table, broker);
+                    let arg_type = arg.analyze(table);
                     // only analyze further if type information for both sides is available
                     if let (Some(arg_type), Some(param_type)) = (&arg_type, &param.data_type) {
                         if arg_type != param_type {
@@ -170,10 +166,10 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for CallStatement {
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeStatement<B> for IfStatement {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) {
+impl AnalyzeStatement for IfStatement {
+    fn analyze(&mut self, table: &LookupTable) {
         if let Some(condition) = &mut self.condition {
-            if let Some(condition_type) = condition.analyze(table, broker) {
+            if let Some(condition_type) = condition.analyze(table) {
                 if condition_type != DataType::Bool {
                     let range = condition.to_range();
                     condition.info_mut().append_error(SplError(
@@ -184,18 +180,18 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for IfStatement {
             }
         }
         if let Some(stmt) = &mut self.if_branch {
-            stmt.analyze(table, broker);
+            stmt.analyze(table);
         }
         if let Some(stmt) = &mut self.else_branch {
-            stmt.analyze(table, broker);
+            stmt.analyze(table);
         };
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeStatement<B> for WhileStatement {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) {
+impl AnalyzeStatement for WhileStatement {
+    fn analyze(&mut self, table: &LookupTable) {
         if let Some(condition) = &mut self.condition {
-            if let Some(condition_type) = condition.analyze(table, broker) {
+            if let Some(condition_type) = condition.analyze(table) {
                 if condition_type != DataType::Bool {
                     let range = condition.to_range();
                     condition.info_mut().append_error(SplError(
@@ -206,15 +202,15 @@ impl<B: DiagnosticsBroker> AnalyzeStatement<B> for WhileStatement {
             }
         }
         if let Some(stmt) = &mut self.statement {
-            stmt.analyze(table, broker);
+            stmt.analyze(table);
         }
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Variable {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) -> Option<DataType> {
+impl AnalyzeExpression for Variable {
+    fn analyze(&mut self, table: &LookupTable) -> Option<DataType> {
         match self {
-            Self::ArrayAccess(a) => a.analyze(table, broker),
+            Self::ArrayAccess(a) => a.analyze(table),
             Self::NamedVariable(named) => {
                 if let Some(entry) = table.lookup(&named.value) {
                     match &entry {
@@ -237,10 +233,10 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Variable {
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeExpression<B> for ArrayAccess {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) -> Option<DataType> {
+impl AnalyzeExpression for ArrayAccess {
+    fn analyze(&mut self, table: &LookupTable) -> Option<DataType> {
         if let Some(index) = &mut self.index {
-            let index_type = index.analyze(table, broker);
+            let index_type = index.analyze(table);
             match index_type {
                 Some(DataType::Int) => { /* happy path */ }
                 Some(_) => {
@@ -258,7 +254,7 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for ArrayAccess {
             }
         }
         self.array
-            .analyze(table, broker)
+            .analyze(table)
             .and_then(|array_type| match array_type {
                 DataType::Array { base_type, .. } => Some(*base_type),
                 _ => {
@@ -272,23 +268,23 @@ impl<B: DiagnosticsBroker> AnalyzeExpression<B> for ArrayAccess {
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeExpression<B> for Expression {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) -> Option<DataType> {
+impl AnalyzeExpression for Expression {
+    fn analyze(&mut self, table: &LookupTable) -> Option<DataType> {
         match self {
             Self::IntLiteral(_) => Some(DataType::Int),
-            Self::Variable(v) => v.analyze(table, broker),
-            Self::Binary(b) => b.analyze(table, broker),
-            Self::Unary(u) => u.expr.analyze(table, broker),
-            Self::Bracketed(b) => b.expr.analyze(table, broker),
+            Self::Variable(v) => v.analyze(table),
+            Self::Binary(b) => b.analyze(table),
+            Self::Unary(u) => u.expr.analyze(table),
+            Self::Bracketed(b) => b.expr.analyze(table),
             Self::Error(_) => None,
         }
     }
 }
 
-impl<B: DiagnosticsBroker> AnalyzeExpression<B> for BinaryExpression {
-    fn analyze(&mut self, table: &LookupTable, broker: &B) -> Option<DataType> {
-        let lhs_type = self.lhs.analyze(table, broker);
-        let rhs_type = self.rhs.analyze(table, broker);
+impl AnalyzeExpression for BinaryExpression {
+    fn analyze(&mut self, table: &LookupTable) -> Option<DataType> {
+        let lhs_type = self.lhs.analyze(table);
+        let rhs_type = self.rhs.analyze(table);
 
         match (lhs_type, rhs_type) {
             (Some(DataType::Int), Some(DataType::Int)) => { /* happy path */ }

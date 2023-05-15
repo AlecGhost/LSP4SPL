@@ -5,7 +5,7 @@ use crate::{
     parser::utility::{
         confusable, expect, ignore_until0, ignore_until1, info, parse_list, reference,
     },
-    token, DiagnosticsBroker, ToRange,
+    token, ToRange,
 };
 use nom::{
     branch::alt,
@@ -19,28 +19,27 @@ use nom::{
 mod tests;
 mod utility;
 
-type IResult<'a, T, B> = nom::IResult<TokenStream<'a, B>, T>;
+type IResult<'a, T> = nom::IResult<TokenStream<'a>, T>;
 
 /// Parses the given tokens and returns an AST.
-/// Errors are reported by the specified broker.
 ///
 /// # Panics
 ///
 /// Panics if parsing fails.
-pub(crate) fn parse<B: DiagnosticsBroker>(input: &[Token], broker: B) -> Program {
-    let input = TokenStream::new(input, broker);
+pub(crate) fn parse(input: &[Token]) -> Program {
+    let input = TokenStream::new(input);
     let (_, program) = all_consuming(Program::parse)(input).expect("Parser cannot fail");
     program
 }
 
 /// Try to parse token stream.
 /// Implemented by all AST nodes.
-trait Parser<B>: Sized {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B>;
+trait Parser: Sized {
+    fn parse(input: TokenStream) -> IResult<Self>;
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for IntLiteral {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, (value, info)) = info(alt((
             map(hex, |token| {
                 if let TokenType::Hex(hex_result) = token.token_type {
@@ -74,8 +73,8 @@ impl<B: DiagnosticsBroker> Parser<B> for IntLiteral {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for Identifier {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for Identifier {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, (ident, info)) = info(ident)(input)?;
         Ok((
             input,
@@ -87,8 +86,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Identifier {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for Variable {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for Variable {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, ((mut variable, variable_info), accesses)) = pair(
             info(map(Identifier::parse, Self::NamedVariable)),
             many0(info(delimited(
@@ -113,9 +112,9 @@ impl<B: DiagnosticsBroker> Parser<B> for Variable {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for Expression {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        fn parse_bracketed<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
+impl Parser for Expression {
+    fn parse(input: TokenStream) -> IResult<Self> {
+        fn parse_bracketed(input: TokenStream) -> IResult<Expression> {
             // Bracketed := "(" Expr ")"
             let (input, (((_, lparen_info), expr, _), info)) = info(tuple((
                 info(symbols::lparen),
@@ -135,7 +134,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, bracketed))
         }
 
-        fn parse_primary<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
+        fn parse_primary(input: TokenStream) -> IResult<Expression> {
             // Primary := IntLit | Variable | Bracketed
             alt((
                 map(IntLiteral::parse, Expression::IntLiteral),
@@ -144,7 +143,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             ))(input)
         }
 
-        fn parse_unary<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
+        fn parse_unary(input: TokenStream) -> IResult<Expression> {
             // Unary := "-" Primary
             let (input, (primary, info)) = info(preceded(symbols::minus, parse_factor))(input)?;
             let expr = Expression::Unary(UnaryExpression {
@@ -155,19 +154,19 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, expr))
         }
 
-        fn parse_factor<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
+        fn parse_factor(input: TokenStream) -> IResult<Expression> {
             // Factor := Primary | Unary
             alt((parse_primary, parse_unary))(input)
         }
 
-        fn parse_rhs<P, B: DiagnosticsBroker>(
-            input: TokenStream<B>,
+        fn parse_rhs<P>(
+            input: TokenStream,
             lhs: Expression,
             operator: Operator,
             parser: P,
-        ) -> IResult<Expression, B>
+        ) -> IResult<Expression>
         where
-            P: Fn(TokenStream<B>) -> IResult<Expression, B>,
+            P: Fn(TokenStream) -> IResult<Expression>,
         {
             let (input, rhs) = expect(
                 parser,
@@ -189,7 +188,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, exp))
         }
 
-        fn parse_mul<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
+        fn parse_mul(input: TokenStream) -> IResult<Expression> {
             // Mul := Factor (("*" | "/") Factor)*
             let (mut input, mut exp) = parse_factor(input)?;
             while let Ok((i, op)) = alt((symbols::times, symbols::divide))(input.clone()) {
@@ -205,7 +204,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, exp))
         }
 
-        fn parse_add<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
+        fn parse_add(input: TokenStream) -> IResult<Expression> {
             // Add := Mul (("+" | "-") Mul)*
             let (mut input, mut exp) = parse_mul(input)?;
             while let Ok((i, op)) = alt((symbols::plus, symbols::minus))(input.clone()) {
@@ -221,7 +220,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
             Ok((input, exp))
         }
 
-        fn parse_comparison<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Expression, B> {
+        fn parse_comparison(input: TokenStream) -> IResult<Expression> {
             // Comp := Add (("=" | "#" | "<" | "<=" | ">" | ">=") Add)?
             let (mut input, mut exp) = parse_add(input)?;
             if let Ok((i, op)) = alt((
@@ -250,11 +249,11 @@ impl<B: DiagnosticsBroker> Parser<B> for Expression {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        fn parse_array_type<B: DiagnosticsBroker>(
-            input: TokenStream<B>,
-        ) -> IResult<TypeExpression, B> {
+impl Parser for TypeExpression {
+    fn parse(input: TokenStream) -> IResult<Self> {
+        fn parse_array_type(
+            input: TokenStream,
+        ) -> IResult<TypeExpression> {
             let (input, ((_, _, size, _, _, type_expr), info)) = info(tuple((
                 keywords::array,
                 expect(
@@ -289,8 +288,8 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeExpression {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for TypeDeclaration {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, ((doc, _, name, _, type_expr, _), info)) = info(tuple((
             many0(comment),
             keywords::r#type,
@@ -336,11 +335,11 @@ impl<B: DiagnosticsBroker> Parser<B> for TypeDeclaration {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        fn parse_valid<B: DiagnosticsBroker>(
-            input: TokenStream<B>,
-        ) -> IResult<VariableDeclaration, B> {
+impl Parser for VariableDeclaration {
+    fn parse(input: TokenStream) -> IResult<Self> {
+        fn parse_valid(
+            input: TokenStream,
+        ) -> IResult<VariableDeclaration> {
             let (input, ((doc, _, name, _, type_expr, _), info)) = info(tuple((
                 many0(comment),
                 keywords::var,
@@ -385,9 +384,9 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
             ))
         }
 
-        fn parse_error<B: DiagnosticsBroker>(
-            input: TokenStream<B>,
-        ) -> IResult<VariableDeclaration, B> {
+        fn parse_error(
+            input: TokenStream,
+        ) -> IResult<VariableDeclaration> {
             let (input, (_, mut info)) = info(ignore_until1(peek(look_ahead::var_dec)))(input)?;
             let err = SplError(
                 info.to_range(),
@@ -401,11 +400,11 @@ impl<B: DiagnosticsBroker> Parser<B> for VariableDeclaration {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        fn parse_valid<B: DiagnosticsBroker>(
-            input: TokenStream<B>,
-        ) -> IResult<ParameterDeclaration, B> {
+impl Parser for ParameterDeclaration {
+    fn parse(input: TokenStream) -> IResult<Self> {
+        fn parse_valid(
+            input: TokenStream,
+        ) -> IResult<ParameterDeclaration> {
             let (input, ((doc, (ref_kw, name), _, type_expr, _), info)) = info(tuple((
                 many0(comment),
                 alt((
@@ -449,9 +448,9 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
             ))
         }
 
-        fn parse_error<B: DiagnosticsBroker>(
-            input: TokenStream<B>,
-        ) -> IResult<ParameterDeclaration, B> {
+        fn parse_error(
+            input: TokenStream,
+        ) -> IResult<ParameterDeclaration> {
             let (input, (_, mut info)) = info(ignore_until0(peek(alt((
                 recognize(symbols::rparen),
                 recognize(symbols::lcurly),
@@ -470,11 +469,11 @@ impl<B: DiagnosticsBroker> Parser<B> for ParameterDeclaration {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        fn parse_call_expression<B: DiagnosticsBroker>(
-            input: TokenStream<B>,
-        ) -> IResult<Expression, B> {
+impl Parser for CallStatement {
+    fn parse(input: TokenStream) -> IResult<Self> {
+        fn parse_call_expression(
+            input: TokenStream,
+        ) -> IResult<Expression> {
             alt((
                 terminated(
                     Expression::parse,
@@ -487,7 +486,7 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
                 ),
                 map(
                     info(ignore_until0(peek(alt((
-                        recognize(symbols::rparen::<B>),
+                        recognize(symbols::rparen),
                         recognize(symbols::semic),
                         recognize(symbols::comma),
                         recognize(eof),
@@ -530,8 +529,8 @@ impl<B: DiagnosticsBroker> Parser<B> for CallStatement {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for Assignment {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for Assignment {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, ((variable, expr, _), info)) = info(tuple((
             terminated(
                 Variable::parse,
@@ -563,8 +562,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Assignment {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for IfStatement {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, ((_, _, condition, _, if_branch, else_branch), info)) = info(tuple((
             keywords::r#if,
             expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
@@ -597,8 +596,8 @@ impl<B: DiagnosticsBroker> Parser<B> for IfStatement {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for WhileStatement {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, ((_, _, condition, _, stmt), info)) = info(tuple((
             keywords::r#while,
             expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
@@ -623,8 +622,8 @@ impl<B: DiagnosticsBroker> Parser<B> for WhileStatement {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for BlockStatement {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, (statements, info)) = info(delimited(
             symbols::lcurly,
             many0(reference(Statement::parse)),
@@ -634,9 +633,9 @@ impl<B: DiagnosticsBroker> Parser<B> for BlockStatement {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for Statement {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        fn parse_error<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<Statement, B> {
+impl Parser for Statement {
+    fn parse(input: TokenStream) -> IResult<Self> {
+        fn parse_error(input: TokenStream) -> IResult<Statement> {
             let (input, ((_, ignored), mut info)) = info(tuple((
                 many0(comment),
                 ignore_until1(peek(look_ahead::stmt)),
@@ -665,8 +664,8 @@ impl<B: DiagnosticsBroker> Parser<B> for Statement {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for ProcedureDeclaration {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (
             input,
             ((doc, _, name, _, parameters, _, _, variable_declarations, statements, _), info),
@@ -709,11 +708,11 @@ impl<B: DiagnosticsBroker> Parser<B> for ProcedureDeclaration {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
-        fn parse_error<B: DiagnosticsBroker>(
-            input: TokenStream<B>,
-        ) -> IResult<GlobalDeclaration, B> {
+impl Parser for GlobalDeclaration {
+    fn parse(input: TokenStream) -> IResult<Self> {
+        fn parse_error(
+            input: TokenStream,
+        ) -> IResult<GlobalDeclaration> {
             let (input, (ignored, mut info)) = info(ignore_until1(peek(alt((
                 recognize(keywords::r#type),
                 recognize(keywords::proc),
@@ -739,8 +738,8 @@ impl<B: DiagnosticsBroker> Parser<B> for GlobalDeclaration {
     }
 }
 
-impl<B: DiagnosticsBroker> Parser<B> for Program {
-    fn parse(input: TokenStream<B>) -> IResult<Self, B> {
+impl Parser for Program {
+    fn parse(input: TokenStream) -> IResult<Self> {
         let (input, (global_declarations, info)) =
             info(many0(reference(GlobalDeclaration::parse)))(input)?;
         let (input, _) = eof(input)?;
@@ -756,7 +755,7 @@ impl<B: DiagnosticsBroker> Parser<B> for Program {
 
 // Comment parser is separated from the other token parsers,
 // because it is used in the `tag_parser` macro
-fn comment<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<String, B> {
+fn comment(input: TokenStream) -> IResult<String> {
     let err = Err(nom::Err::Error(nom::error::ParseError::from_error_kind(
         input.clone(),
         nom::error::ErrorKind::Tag,
@@ -775,9 +774,9 @@ fn comment<B: DiagnosticsBroker>(input: TokenStream<B>) -> IResult<String, B> {
 
 macro_rules! tag_parser {
     ($name:ident, $token_type:pat) => {
-        pub(super) fn $name<B: crate::DiagnosticsBroker>(
-            input: crate::lexer::token::TokenStream<B>,
-        ) -> crate::parser::IResult<crate::lexer::token::Token, B> {
+        pub(super) fn $name(
+            input: crate::lexer::token::TokenStream,
+        ) -> crate::parser::IResult<crate::lexer::token::Token> {
             use crate::{lexer::token::TokenType, parser::comment};
             use nom::{bytes::complete::take, multi::many0};
             let err = Err(nom::Err::Error(nom::error::ParseError::from_error_kind(
@@ -843,9 +842,9 @@ mod symbols {
 
 macro_rules! look_ahead_parser {
     ($name:ident, $($parser:expr, )+) => {
-    pub(super) fn $name<B: crate::DiagnosticsBroker>(
-        input: crate::token::TokenStream<B>,
-    ) -> crate::parser::IResult<crate::token::TokenStream<B>, B> {
+    pub(super) fn $name(
+        input: crate::token::TokenStream,
+    ) -> crate::parser::IResult<crate::token::TokenStream> {
         nom::branch::alt((
             $(
                 nom::combinator::recognize($parser),

@@ -6,20 +6,19 @@ use crate::{
         token::{Token, TokenStream},
     },
     parser::{eof, Parser},
-    LocalBroker,
 };
 use nom::{combinator::all_consuming, sequence::terminated};
 #[cfg(test)]
 use pretty_assertions::assert_eq as eq;
 use std::ops::Range;
 
-trait ToTokens<B> {
-    fn to_tokens(&self) -> TokenStream<B>;
+trait ToTokens {
+    fn to_tokens(&self) -> TokenStream;
 }
 
-impl ToTokens<LocalBroker> for Vec<Token> {
-    fn to_tokens(&self) -> TokenStream<LocalBroker> {
-        TokenStream::new(self, LocalBroker::default())
+impl ToTokens for Vec<Token> {
+    fn to_tokens(&self) -> TokenStream {
+        TokenStream::new(self)
     }
 }
 

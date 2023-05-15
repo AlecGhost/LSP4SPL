@@ -3,7 +3,7 @@
 use ast::Program;
 use error::SplError;
 use lexer::token::Token;
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use std::ops::Range;
 use table::GlobalTable;
 
 pub mod ast;
@@ -12,10 +12,6 @@ mod lexer;
 mod parser;
 pub use lexer::token;
 pub mod table;
-
-trait DiagnosticsBroker: Clone + std::fmt::Debug {
-    fn report_error(&self, error: SplError);
-}
 
 pub trait ToRange {
     fn to_range(&self) -> Range<usize>;
@@ -50,11 +46,10 @@ pub struct AnalyzedSource {
 
 impl AnalyzedSource {
     pub fn new(text: String) -> Self {
-        let broker = LocalBroker::default();
-        let tokens = lexer::lex(&text, broker.clone());
-        let mut program = parser::parse(&tokens, broker.clone());
-        let table = table::build(&mut program, &broker);
-        table::analyze(&mut program, &table, &broker);
+        let tokens = lexer::lex(&text);
+        let mut program = parser::parse(&tokens);
+        let table = table::build(&mut program);
+        table::analyze(&mut program, &table);
         Self {
             text,
             tokens,
@@ -83,26 +78,5 @@ impl ErrorContainer for AnalyzedSource {
                 }
             })
             .collect()
-    }
-}
-
-#[derive(Debug, Default)]
-struct LocalBroker(Rc<RefCell<Vec<SplError>>>);
-
-impl Clone for LocalBroker {
-    fn clone(&self) -> Self {
-        Self(Rc::clone(&self.0))
-    }
-}
-
-impl LocalBroker {
-    pub fn errors(&self) -> Vec<SplError> {
-        self.0.borrow().clone()
-    }
-}
-
-impl DiagnosticsBroker for LocalBroker {
-    fn report_error(&self, error: SplError) {
-        self.0.borrow_mut().push(error);
     }
 }
