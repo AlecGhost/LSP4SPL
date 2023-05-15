@@ -1,16 +1,19 @@
+use crate::io::{self, Message, ToValue};
 use color_eyre::eyre::{Context, Result};
 use lsp_types::{
     notification::{Notification, PublishDiagnostics},
-    *,
+    Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, Position, PublishDiagnosticsParams, Range as PosRange,
+    TextDocumentContentChangeEvent, Url,
 };
-use spl_frontend::{error::SplError, AnalyzedSource, ErrorContainer};
+use spl_frontend::{error::SplError, AnalyzedSource, Change, ErrorContainer};
 use std::collections::HashMap;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
     oneshot,
 };
 
-use crate::io::{self, Message, ToValue};
+type TextRange = std::ops::Range<usize>;
 
 #[derive(Debug)]
 pub enum DocumentRequest {
@@ -64,75 +67,81 @@ pub async fn broker(
     iotx: Sender<Message>,
     send_diagnostics: bool,
 ) {
-    use DocumentRequest::*;
     let mut docs = HashMap::new();
     while let Some(request) = rx.recv().await {
         match request {
-            Open(uri, text) => {
-                let doc_info = AnalyzedSource::new(text);
+            DocumentRequest::Open(uri, text) => {
+                let doc = AnalyzedSource::new(text);
                 if send_diagnostics {
-                    let notification = io::Notification::new(
-                        PublishDiagnostics::METHOD.to_string(),
-                        PublishDiagnosticsParams {
-                            uri: uri.clone(),
-                            diagnostics: doc_info
-                                .errors()
-                                .iter()
-                                .map(|err| create_diagnostic(err, &doc_info.text))
-                                .collect(),
-                            version: None,
-                        }
-                        .to_value(),
-                    );
-                    iotx.send(Message::Notification(notification))
-                        .await
-                        .expect("Cannot send messages");
+                    notify(iotx.clone(), uri.clone(), &doc).await;
                 }
-                docs.insert(uri.path().to_string(), doc_info);
+                docs.insert(uri.path().to_string(), doc);
             }
-            Change(uri, changes) => {
-                // currently no incremental changes, so there should only be one change
-                if let Some(change) = changes.into_iter().next() {
-                    // currently no incremental changes, so range should be None
-                    if change.range.is_none() {
-                        let doc_info = AnalyzedSource::new(change.text);
-                        if send_diagnostics {
-                            let notification = io::Notification::new(
-                                PublishDiagnostics::METHOD.to_string(),
-                                PublishDiagnosticsParams {
-                                    uri: uri.clone(),
-                                    diagnostics: doc_info
-                                        .errors()
-                                        .iter()
-                                        .map(|err| create_diagnostic(err, &doc_info.text))
-                                        .collect(),
-                                    version: None,
+            DocumentRequest::Change(uri, changes) => {
+                use std::collections::hash_map::Entry;
+                match docs.entry(uri.path().to_string()) {
+                    Entry::Occupied(mut entry) => {
+                        let doc = entry.get_mut();
+                        let changes = changes
+                            .into_iter()
+                            .filter_map(|change| {
+                                if let TextDocumentContentChangeEvent {
+                                    range: Some(range),
+                                    text,
+                                    ..
+                                } = change
+                                {
+                                    Some(Change {
+                                        range: as_index_range(&range, &doc.text),
+                                        text,
+                                    })
+                                } else {
+                                    None
                                 }
-                                .to_value(),
-                            );
-                            iotx.send(Message::Notification(notification))
-                                .await
-                                .expect("Cannot send messages");
+                            })
+                            .collect();
+                        doc.update(changes);
+                        if send_diagnostics {
+                            notify(iotx.clone(), uri.clone(), &doc).await;
                         }
-                        docs.insert(uri.path().to_string(), doc_info);
                     }
-                }
+                    Entry::Vacant(_) => { /* This should not happen. Ignoring it. */ }
+                };
             }
-            Close(uri) => {
+            DocumentRequest::Close(uri) => {
                 docs.remove(uri.path());
             }
-            GetInfo(uri, tx) => {
-                let doc_info = docs.get(uri.path()).cloned();
-                tx.send(doc_info).expect("Cannot send messages");
+            DocumentRequest::GetInfo(uri, tx) => {
+                let doc = docs.get(uri.path()).cloned();
+                tx.send(doc).expect("Cannot send messages");
             }
         }
     }
 }
 
+async fn notify(iotx: Sender<Message>, uri: Url, doc: &AnalyzedSource) {
+    let notification = io::Notification::new(
+        PublishDiagnostics::METHOD.to_string(),
+        PublishDiagnosticsParams {
+            uri: uri.clone(),
+            diagnostics: doc
+                .errors()
+                .iter()
+                .map(|err| create_diagnostic(err, &doc.text))
+                .collect(),
+            version: None,
+        }
+        .to_value(),
+    );
+    iotx.send(Message::Notification(notification))
+        .await
+        .expect("Cannot send messages");
+}
+
 fn create_diagnostic(err: &SplError, text: &str) -> Diagnostic {
     let SplError(range, message) = err;
     Diagnostic {
-        range: convert_range(range, text),
+        range: as_pos_range(range, text),
         severity: Some(DiagnosticSeverity::ERROR),
         code: None,
         code_description: None,
@@ -144,7 +153,9 @@ fn create_diagnostic(err: &SplError, text: &str) -> Diagnostic {
     }
 }
 
-pub fn get_position(index: usize, text: &str) -> Position {
+/// Converts a string index to a `Position`.
+/// If the index is out of bounds, the last possible position is returned.
+pub fn as_position(index: usize, text: &str) -> Position {
     let mut line = 0;
     let mut character = 0;
     for (i, c) in text.char_indices() {
@@ -161,11 +172,18 @@ pub fn get_position(index: usize, text: &str) -> Position {
     Position { line, character }
 }
 
-pub fn convert_range(range: &std::ops::Range<usize>, text: &str) -> Range {
-    Range {
-        start: get_position(range.start, text),
-        end: get_position(range.end, text),
+pub fn as_pos_range(range: &TextRange, text: &str) -> PosRange {
+    PosRange {
+        start: as_position(range.start, text),
+        end: as_position(range.end, text),
     }
+}
+
+fn as_index_range(pos_range: &PosRange, text: &str) -> TextRange {
+    let PosRange { start, end } = pos_range;
+    let start = get_insertion_index(start, text).expect("Invalid start position");
+    let end = get_insertion_index(end, text).expect("Invalid end position");
+    start..end
 }
 
 /// Tries to convert a text `Position` to an index.
@@ -173,7 +191,7 @@ pub fn convert_range(range: &std::ops::Range<usize>, text: &str) -> Range {
 /// Note: This is the insertion index,
 /// so it can be after the last character.
 /// Therefore the text slice should not be indexed with this index
-pub fn get_insertion_index(position: Position, text: &str) -> Option<usize> {
+pub fn get_insertion_index(position: &Position, text: &str) -> Option<usize> {
     let mut line = 0;
     let mut character = 0;
     let pos = (position.line, position.character);

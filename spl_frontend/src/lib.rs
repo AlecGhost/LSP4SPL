@@ -35,6 +35,15 @@ impl Shiftable for Range<usize> {
     }
 }
 
+/// Change in source code.
+/// `range` is the text range in the original source code.
+/// `text` is the replacement text.
+#[derive(Clone, Debug)]
+pub struct Change {
+    pub range: Range<usize>,
+    pub text: String,
+}
+
 /// Contains all information extracted from a given SPL source file.
 #[derive(Clone, Debug)]
 pub struct AnalyzedSource {
@@ -56,6 +65,15 @@ impl AnalyzedSource {
             ast: program,
             table,
         }
+    }
+
+    pub fn update(&mut self, changes: Vec<Change>) {
+        // Temporary implementation
+        let mut new_text = self.text.clone();
+        changes
+            .into_iter()
+            .for_each(|change| new_text.replace_range(change.range, &change.text));
+        *self = AnalyzedSource::new(new_text);
     }
 }
 

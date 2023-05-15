@@ -1,5 +1,5 @@
 use super::DocumentCursor;
-use crate::document::{convert_range, DocumentRequest};
+use crate::document::{as_pos_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{
     request::{GotoDeclarationParams, GotoImplementationParams, GotoTypeDefinitionParams},
@@ -20,7 +20,7 @@ pub async fn declaration(
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
             let DocumentCursor {
-                doc_info, context, ..
+                doc, context, ..
             } = cursor;
             if let Some(entry) = context {
                 match &entry {
@@ -29,17 +29,17 @@ pub async fn declaration(
                         if &ident.value == "int" {
                             return Ok(None);
                         }
-                        if let Some(entry) = doc_info.table.lookup(&ident.value) {
-                            let tokens = &doc_info.tokens[t.to_range()];
+                        if let Some(entry) = doc.table.lookup(&ident.value) {
+                            let tokens = &doc.tokens[t.to_range()];
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(&entry.to_text_range(tokens), &doc_info.text),
+                                range: as_pos_range(&entry.to_text_range(tokens), &doc.text),
                             }));
                         }
                     }
                     GlobalEntry::Procedure(p) => {
                         let lookup_table = LookupTable {
-                            global_table: Some(&doc_info.table),
+                            global_table: Some(&doc.table),
                             local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
@@ -50,16 +50,16 @@ pub async fn declaration(
                             }
                             let tokens = match entry {
                                 Entry::Procedure(param_dec) => {
-                                    &doc_info.tokens[param_dec.to_range()]
+                                    &doc.tokens[param_dec.to_range()]
                                 }
-                                Entry::Type(type_dec) => &doc_info.tokens[type_dec.to_range()],
+                                Entry::Type(type_dec) => &doc.tokens[type_dec.to_range()],
                                 Entry::Variable(var) | Entry::Parameter(var) => {
-                                    &doc_info.tokens[p.to_range()][var.to_range()]
+                                    &doc.tokens[p.to_range()][var.to_range()]
                                 }
                             };
                             return Ok(Some(Location {
                                 uri,
-                                range: convert_range(&entry.to_text_range(tokens), &doc_info.text),
+                                range: as_pos_range(&entry.to_text_range(tokens), &doc.text),
                             }));
                         }
                     }
@@ -88,7 +88,7 @@ pub async fn type_definition(
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
             let DocumentCursor {
-                doc_info, context, ..
+                doc, context, ..
             } = cursor;
             if let Some(entry) = context {
                 match &entry {
@@ -97,15 +97,15 @@ pub async fn type_definition(
                         if &ident.value == "int" {
                             return Ok(None);
                         }
-                        if let Some(entry) = doc_info.table.lookup(&ident.value) {
+                        if let Some(entry) = doc.table.lookup(&ident.value) {
                             match &entry {
                                 GlobalEntry::Type(t) => {
-                                    let tokens = &doc_info.tokens[t.to_range()];
+                                    let tokens = &doc.tokens[t.to_range()];
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(
+                                        range: as_pos_range(
                                             &entry.to_text_range(tokens),
-                                            &doc_info.text,
+                                            &doc.text,
                                         ),
                                     }));
                                 }
@@ -115,7 +115,7 @@ pub async fn type_definition(
                     }
                     GlobalEntry::Procedure(p) => {
                         let lookup_table = LookupTable {
-                            global_table: Some(&doc_info.table),
+                            global_table: Some(&doc.table),
                             local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
@@ -125,19 +125,19 @@ pub async fn type_definition(
                                     if &ident.value == "int" {
                                         return Ok(None);
                                     }
-                                    let tokens = &doc_info.tokens[t.to_range()];
+                                    let tokens = &doc.tokens[t.to_range()];
                                     return Ok(Some(Location {
                                         uri,
-                                        range: convert_range(
+                                        range: as_pos_range(
                                             &entry.to_text_range(tokens),
-                                            &doc_info.text,
+                                            &doc.text,
                                         ),
                                     }));
                                 }
                                 Entry::Procedure(_) => { /* no type definition */ }
                                 Entry::Variable(v) | Entry::Parameter(v) => {
                                     if let Some(DataType::Array { creator, .. }) = &v.data_type {
-                                        let entry = doc_info
+                                        let entry = doc
                                             .table
                                             .lookup(&creator)
                                             .expect("Invalid creator");
@@ -145,11 +145,11 @@ pub async fn type_definition(
                                             GlobalEntry::Type(t) => {
                                                 return Ok(Some(Location {
                                                     uri,
-                                                    range: convert_range(
+                                                    range: as_pos_range(
                                                         &entry.to_text_range(
-                                                            &doc_info.tokens[t.to_range()],
+                                                            &doc.tokens[t.to_range()],
                                                         ),
-                                                        &doc_info.text,
+                                                        &doc.text,
                                                     ),
                                                 }));
                                             }
@@ -178,23 +178,23 @@ pub async fn implementation(
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
             let DocumentCursor {
-                doc_info, context, ..
+                doc, context, ..
             } = cursor;
             if let Some(entry) = context {
                 match &entry {
                     GlobalEntry::Procedure(p) => {
                         let lookup_table = LookupTable {
-                            global_table: Some(&doc_info.table),
+                            global_table: Some(&doc.table),
                             local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
-                            let tokens = &doc_info.tokens[p.to_range()];
+                            let tokens = &doc.tokens[p.to_range()];
                             if let Entry::Procedure(_) = entry {
                                 return Ok(Some(Location {
                                     uri,
-                                    range: convert_range(
+                                    range: as_pos_range(
                                         &entry.to_text_range(tokens),
-                                        &doc_info.text,
+                                        &doc.text,
                                     ),
                                 }));
                             }

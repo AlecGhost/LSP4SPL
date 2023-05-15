@@ -53,7 +53,7 @@ impl ToRange for Ident {
 }
 
 struct DocumentCursor {
-    doc_info: AnalyzedSource,
+    doc: AnalyzedSource,
     index: usize,
     context: Option<GlobalEntry>,
 }
@@ -61,7 +61,7 @@ struct DocumentCursor {
 impl DocumentCursor {
     fn ident(&self) -> Option<Ident> {
         let token = self
-            .doc_info
+            .doc
             .tokens
             .iter()
             .find(|token| token.range.contains(&self.index))?;
@@ -76,14 +76,14 @@ impl DocumentCursor {
     }
 }
 
-async fn get_doc_info(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option<AnalyzedSource>> {
+async fn get_doc(uri: Url, doctx: Sender<DocumentRequest>) -> Result<Option<AnalyzedSource>> {
     let (tx, rx) = oneshot::channel();
     doctx
         .send(DocumentRequest::GetInfo(uri, tx))
         .await
         .wrap_err("Cannot send document request")?;
-    let doc_info = rx.await.wrap_err("Cannot recieve document request")?;
-    Ok(doc_info)
+    let doc = rx.await.wrap_err("Cannot recieve document request")?;
+    Ok(doc)
 }
 
 async fn doc_cursor(
@@ -92,14 +92,14 @@ async fn doc_cursor(
 ) -> Result<Option<DocumentCursor>> {
     let pos = doc_params.position;
     let uri = doc_params.text_document.uri;
-    if let Some(doc_info) = get_doc_info(uri, doctx).await? {
-        if let Some(index) = document::get_insertion_index(pos, &doc_info.text) {
-            let context = doc_info
+    if let Some(doc) = get_doc(uri, doctx).await? {
+        if let Some(index) = document::get_insertion_index(&pos, &doc.text) {
+            let context = doc
                 .ast
                 .global_declarations
                 .iter()
                 .find(|gd| {
-                    gd.to_text_range(&doc_info.tokens[gd.offset..])
+                    gd.to_text_range(&doc.tokens[gd.offset..])
                         .contains(&index)
                 })
                 .and_then(|gd| {
@@ -110,13 +110,13 @@ async fn doc_cursor(
                         Error(_) => None,
                     };
                     if let Some(name) = &name {
-                        doc_info.table.lookup(&name.value).cloned()
+                        doc.table.lookup(&name.value).cloned()
                     } else {
                         None
                     }
                 });
             return Ok(Some(DocumentCursor {
-                doc_info,
+                doc,
                 index,
                 context,
             }));

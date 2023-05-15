@@ -1,4 +1,4 @@
-use crate::document::{convert_range, DocumentRequest};
+use crate::document::{as_pos_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use fmt::Format;
 use lsp_types::{DocumentFormattingParams, TextEdit};
@@ -13,7 +13,7 @@ pub async fn format(
     let options = params.options;
     if let Some(AnalyzedSource {
         ast, text, tokens, ..
-    }) = super::get_doc_info(uri, doctx).await?
+    }) = super::get_doc(uri, doctx).await?
     {
         let formatting_options = if options.insert_spaces {
             fmt::FormattingOptions::new(' ', options.tab_size as usize)
@@ -24,7 +24,7 @@ pub async fn format(
         if new_text == text {
             Ok(None)
         } else {
-            let range = convert_range(&(0..text.len()), &text);
+            let range = as_pos_range(&(0..text.len()), &text);
             Ok(Some(vec![TextEdit { range, new_text }]))
         }
     } else {

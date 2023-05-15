@@ -1,4 +1,4 @@
-use crate::document::{get_position, DocumentRequest};
+use crate::document::{as_position, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{Position, SemanticToken, SemanticTokens, SemanticTokensParams};
 use spl_frontend::{
@@ -64,7 +64,7 @@ pub async fn semantic_tokens(
         table: global_table,
         tokens,
         ..
-    }) = super::get_doc_info(uri, doctx).await?
+    }) = super::get_doc(uri, doctx).await?
     {
         let mut previous_token_pos = Position {
             line: 0,
@@ -125,7 +125,7 @@ fn collect_type_dec(
                 map_token(token, *previous_token_pos, text)
             };
             if semantic_token.is_some() {
-                *previous_token_pos = get_position(token.range.start, text);
+                *previous_token_pos = as_position(token.range.start, text);
             }
             semantic_token
         })
@@ -205,7 +205,7 @@ fn collect_proc_dec(
                 map_token(token, *previous_token_pos, text)
             };
             if semantic_token.is_some() {
-                *previous_token_pos = get_position(token.range.start, text);
+                *previous_token_pos = as_position(token.range.start, text);
             }
             semantic_token
         })
@@ -223,7 +223,7 @@ fn collect_error(
         .filter_map(|token| {
             let semantic_token = map_token(token, *previous_token_pos, text);
             if semantic_token.is_some() {
-                *previous_token_pos = get_position(token.range.start, text);
+                *previous_token_pos = as_position(token.range.start, text);
             }
             semantic_token
         })
@@ -266,7 +266,7 @@ fn create_semantic_token(
     token_type: u32,
     token_modifier: u32,
 ) -> SemanticToken {
-    let Position { line, character } = get_position(token.range.start, text);
+    let Position { line, character } = as_position(token.range.start, text);
     let length = token
         .range
         .len()

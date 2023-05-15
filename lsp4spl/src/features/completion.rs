@@ -17,9 +17,9 @@ pub async fn propose(
 ) -> Result<Option<Vec<CompletionItem>>> {
     let doc_params = params.text_document_position;
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
-        let table = &cursor.doc_info.table;
-        let program = &cursor.doc_info.ast;
-        let tokens = &cursor.doc_info.tokens;
+        let table = &cursor.doc.table;
+        let program = &cursor.doc.ast;
+        let tokens = &cursor.doc.tokens;
         let position = correct_index(cursor.index);
 
         if let Some(gd) = program

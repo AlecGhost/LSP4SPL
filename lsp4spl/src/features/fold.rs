@@ -1,4 +1,4 @@
-use crate::document::{convert_range, DocumentRequest};
+use crate::document::{as_pos_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{FoldingRange, FoldingRangeKind, FoldingRangeParams};
 use spl_frontend::{
@@ -13,8 +13,8 @@ pub async fn fold(
     params: FoldingRangeParams,
 ) -> Result<Vec<FoldingRange>> {
     let doc_params = params.text_document;
-    if let Some(doc_info) = super::get_doc_info(doc_params.uri, doctx).await? {
-        let folding_ranges = doc_info
+    if let Some(doc) = super::get_doc(doc_params.uri, doctx).await? {
+        let folding_ranges = doc
             .ast
             .global_declarations
             .iter()
@@ -23,7 +23,7 @@ pub async fn fold(
                 _ => None,
             })
             .map(|(p, offset)| {
-                let proc_tokens = &doc_info.tokens[p.to_range().shift(offset)];
+                let proc_tokens = &doc.tokens[p.to_range().shift(offset)];
                 let tokens = skip_leading_comments(proc_tokens);
                 let text_range = if let (Some(first), Some(last)) = (tokens.first(), tokens.last())
                 {
@@ -31,7 +31,7 @@ pub async fn fold(
                 } else {
                     0..0
                 };
-                let range = convert_range(&text_range, &doc_info.text);
+                let range = as_pos_range(&text_range, &doc.text);
                 FoldingRange {
                     start_line: range.start.line,
                     end_line: range.end.line,

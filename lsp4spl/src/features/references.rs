@@ -1,8 +1,8 @@
 use super::{DocumentCursor, Ident};
-use crate::document::{convert_range, DocumentRequest};
+use crate::document::{as_pos_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{
-    Location, Range, ReferenceParams, RenameParams, TextDocumentPositionParams, TextEdit,
+    Location, Range as PosRange, ReferenceParams, RenameParams, TextDocumentPositionParams, TextEdit,
     WorkspaceEdit,
 };
 use spl_frontend::{
@@ -26,7 +26,7 @@ pub async fn rename(
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
             let DocumentCursor {
-                doc_info, context, ..
+                doc, context, ..
             } = cursor;
             if let Some(entry) = context {
                 // Early return for int
@@ -34,7 +34,7 @@ pub async fn rename(
                     return Ok(None);
                 }
                 let idents =
-                    find_referenced_identifiers(ident, &entry, &doc_info.ast, &doc_info.table);
+                    find_referenced_identifiers(ident, &entry, &doc.ast, &doc.table);
                 // it seems like the original identifier is changed automatically,
                 // so it does not need to be added to `idents`
                 let text_edits = idents
@@ -42,11 +42,11 @@ pub async fn rename(
                     .map(|identifier| {
                         Ident::from_identifier(
                             &identifier,
-                            identifier.to_text_range(&doc_info.tokens),
+                            identifier.to_text_range(&doc.tokens),
                         )
                     })
                     .map(|ident| TextEdit {
-                        range: convert_range(&ident.to_range(), &doc_info.text),
+                        range: as_pos_range(&ident.to_range(), &doc.text),
                         new_text: new_name.clone(),
                     })
                     .collect();
@@ -64,15 +64,15 @@ pub async fn rename(
 pub async fn prepare_rename(
     doctx: Sender<DocumentRequest>,
     params: TextDocumentPositionParams,
-) -> Result<Option<Range>> {
+) -> Result<Option<PosRange>> {
     if let Some(cursor) = super::doc_cursor(params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
             // Early return for int
             if &ident.value == "int" {
                 return Ok(None);
             }
-            let text = cursor.doc_info.text;
-            return Ok(Some(convert_range(&ident.to_range(), &text)));
+            let text = cursor.doc.text;
+            return Ok(Some(as_pos_range(&ident.to_range(), &text)));
         }
     }
     Ok(None)
@@ -87,23 +87,23 @@ pub async fn find(
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
             let DocumentCursor {
-                doc_info, context, ..
+                doc, context, ..
             } = cursor;
             if let Some(entry) = context {
                 let identifiers =
-                    find_referenced_identifiers(ident, &entry, &doc_info.ast, &doc_info.table);
+                    find_referenced_identifiers(ident, &entry, &doc.ast, &doc.table);
                 let references = identifiers
                     .into_iter()
                     .map(|identifier| {
                         Ident::from_identifier(
                             &identifier,
-                            identifier.to_text_range(&doc_info.tokens),
+                            identifier.to_text_range(&doc.tokens),
                         )
                     })
                     .filter(|i| i != ident)
                     .map(|i| Location {
                         uri: uri.clone(),
-                        range: convert_range(&i.to_range(), &doc_info.text),
+                        range: as_pos_range(&i.to_range(), &doc.text),
                     })
                     .collect();
                 return Ok(Some(references));

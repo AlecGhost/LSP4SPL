@@ -19,7 +19,7 @@ pub async fn signature_help(
     let doc_params = params.text_document_position_params;
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some((call_stmt, offset)) = cursor
-            .doc_info
+            .doc
             .ast
             .global_declarations
             .iter()
@@ -35,7 +35,7 @@ pub async fn signature_help(
             })
         {
             if let Some(GlobalEntry::Procedure(proc_entry)) =
-                &cursor.doc_info.table.lookup(&call_stmt.name.value)
+                &cursor.doc.table.lookup(&call_stmt.name.value)
             {
                 let parameters: Vec<ParameterInformation> = proc_entry
                     .parameters
@@ -51,7 +51,7 @@ pub async fn signature_help(
                         value: doc.clone(),
                     })
                 });
-                let tokens = &cursor.doc_info.tokens[offset..];
+                let tokens = &cursor.doc.tokens[offset..];
                 let active_parameter =
                     get_active_param(call_stmt.info.slice(tokens), &parameters, &cursor.index);
                 let help = SignatureInformation {
