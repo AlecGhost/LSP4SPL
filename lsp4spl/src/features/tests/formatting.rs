@@ -60,14 +60,14 @@ async fn proc_dec_no_body() {
 
 #[tokio::test]
 async fn acker() {
-    let acker = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
-    let result = test_formatting(&acker).await;
+    let program = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
+    let result = test_formatting(&program).await;
     assert_snapshot!(result);
 }
 
 #[tokio::test]
 async fn big_test() {
-    let big_test = std::fs::read_to_string("tests/programs/bigtest.spl").unwrap();
-    let result = test_formatting(&big_test).await;
+    let program = std::fs::read_to_string("tests/programs/bigtest.spl").unwrap();
+    let result = test_formatting(&program).await;
     assert_snapshot!(result);
 }

@@ -3,26 +3,22 @@ use crate::{
     io::Message,
 };
 use color_eyre::eyre::Result;
-use lsp_types::{DidOpenTextDocumentParams, TextDocumentItem, Url, Position};
+use lsp_types::{DidOpenTextDocumentParams, Position, TextDocumentItem, Url};
 use tokio::sync::mpsc::{self, Sender};
 
 mod completion;
+mod fold;
 mod formatting;
 mod goto;
-mod fold;
+mod references;
 
-pub async fn test_feature<P, F, R, E>(
-    f: F,
-    uri: Url,
-    text: &str,
-    params: P,
-) -> Result<E>
+pub async fn test_feature<F, P, R, E>(f: F, uri: Url, text: &str, params: P) -> Result<E>
 where
     F: Fn(Sender<DocumentRequest>, P) -> R,
     R: std::future::Future<Output = Result<E>>,
     E: std::fmt::Debug + std::cmp::PartialEq,
 {
-    let (iotx, iorx) = tokio::sync::mpsc::channel(32);
+    let (iotx, iorx) = mpsc::channel(32);
     let doctx = start_document_broker(iotx);
     open_document(doctx.clone(), uri, text.to_string()).await;
     let result = f(doctx, params).await?;

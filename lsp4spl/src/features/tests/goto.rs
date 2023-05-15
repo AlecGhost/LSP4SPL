@@ -6,17 +6,16 @@ use lsp_types::{
 };
 use pretty_assertions::assert_eq;
 
-async fn test_goto<F, R>(f: F, text: &str, pos: Position, goal: Option<(Position, Position)>)
+async fn test_goto<F, R>(f: F, text: &str, pos: Position, expected: Option<(Position, Position)>)
 where
     F: Fn(Sender<DocumentRequest>, GotoDefinitionParams) -> R,
     R: std::future::Future<Output = Result<Option<Location>>>,
 {
     let uri = Url::parse("file:///test.spl").unwrap();
-    let expected = goal.map(|(start, end)| location(uri.clone(), start, end));
     let result = test_feature(f, uri.clone(), text, goto_def_params(uri.clone(), pos))
         .await
         .unwrap();
-    assert_eq!(map_location(result), map_location(expected));
+    assert_eq!(map_location(result), expected);
 }
 
 fn map_location(location: Option<Location>) -> Option<(Position, Position)> {
@@ -25,13 +24,6 @@ fn map_location(location: Option<Location>) -> Option<(Position, Position)> {
         ..
     } = location?;
     Some((start, end))
-}
-
-fn location(uri: Url, start: Position, end: Position) -> Location {
-    Location {
-        uri,
-        range: Range { start, end },
-    }
 }
 
 fn goto_def_params(uri: Url, pos: Position) -> GotoDefinitionParams {
