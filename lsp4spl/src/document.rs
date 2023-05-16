@@ -6,7 +6,7 @@ use lsp_types::{
     DidOpenTextDocumentParams, Position, PublishDiagnosticsParams, Range as PosRange,
     TextDocumentContentChangeEvent, Url,
 };
-use spl_frontend::{error::SplError, AnalyzedSource, Change, ErrorContainer};
+use spl_frontend::{error::SplError, AnalyzedSource, ErrorContainer, TextChange};
 use std::collections::HashMap;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
@@ -81,29 +81,13 @@ pub async fn broker(
                 use std::collections::hash_map::Entry;
                 match docs.entry(uri.path().to_string()) {
                     Entry::Occupied(mut entry) => {
-                        let doc = entry.get_mut();
-                        let changes = changes
-                            .into_iter()
-                            .filter_map(|change| {
-                                if let TextDocumentContentChangeEvent {
-                                    range: Some(range),
-                                    text,
-                                    ..
-                                } = change
-                                {
-                                    Some(Change {
-                                        range: as_index_range(&range, &doc.text),
-                                        text,
-                                    })
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-                        doc.update(changes);
+                        let doc = entry.get().clone();
+                        let text_changes = to_text_changes(changes, doc.text.clone());
+                        let new_doc = doc.update(text_changes);
                         if send_diagnostics {
-                            notify(iotx.clone(), uri.clone(), &doc).await;
+                            notify(iotx.clone(), uri.clone(), &new_doc).await;
                         }
+                        entry.insert(new_doc);
                     }
                     Entry::Vacant(_) => { /* This should not happen. Ignoring it. */ }
                 };
@@ -136,6 +120,36 @@ async fn notify(iotx: Sender<Message>, uri: Url, doc: &AnalyzedSource) {
     iotx.send(Message::Notification(notification))
         .await
         .expect("Cannot send messages");
+}
+
+fn to_text_changes(changes: Vec<TextDocumentContentChangeEvent>, text: String) -> Vec<TextChange> {
+    // Changes are always incremental,
+    // so they correlate to the document version modified by the last change.
+    // This means we need to update a temporary text here, to get the `TextChange`s,
+    // but of course keep the old text,
+    // so that the `TextChange`s can actually be applied to the tokens,
+    // AST and table in the `spl_frontend`.
+    let mut temp_text = text;
+    changes
+        .into_iter()
+        .filter_map(|change| {
+            if let TextDocumentContentChangeEvent {
+                range: Some(range),
+                text,
+                ..
+            } = change
+            {
+                let text_change = TextChange {
+                    range: as_index_range(&range, &temp_text),
+                    text,
+                };
+                temp_text.replace_range(text_change.range.clone(), &text_change.text);
+                Some(text_change)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn create_diagnostic(err: &SplError, text: &str) -> Diagnostic {

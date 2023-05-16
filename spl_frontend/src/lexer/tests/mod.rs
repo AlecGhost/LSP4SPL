@@ -2,8 +2,9 @@ use crate::lexer::{
     lex,
     token::{IntResult, Token, TokenType},
 };
-#[cfg(test)]
 use pretty_assertions::assert_eq;
+
+mod incremental;
 
 #[test]
 fn type_declaration() {
@@ -66,13 +67,13 @@ fn if_statement() {
 
 #[test]
 fn comment() {
-    let input = "//";
+    let input = "//\n";
     let tokens = lex(input);
     assert_eq!(
         tokens,
         vec![
-            Token::new(TokenType::Comment(String::new()), 0..2),
-            Token::new(TokenType::Eof, 2..2),
+            Token::new(TokenType::Comment(String::new()), 0..3),
+            Token::new(TokenType::Eof, 3..3),
         ],
         "{}",
         input

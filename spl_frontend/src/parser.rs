@@ -26,7 +26,7 @@ type IResult<'a, T> = nom::IResult<TokenStream<'a>, T>;
 /// # Panics
 ///
 /// Panics if parsing fails.
-pub(crate) fn parse(input: &[Token]) -> Program {
+pub fn parse(input: &[Token]) -> Program {
     let input = TokenStream::new(input);
     let (_, program) = all_consuming(Program::parse)(input).expect("Parser cannot fail");
     program

@@ -1,7 +1,7 @@
 use crate::error::{LexErrorMessage, SplError};
-use crate::ToRange;
-use nom::combinator::{eof, peek};
-use nom::sequence::{pair, terminated};
+use crate::{Shiftable, TextChange, ToRange};
+use nom::combinator::{eof, iterator, peek};
+use nom::sequence::{delimited, pair, terminated};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_till},
@@ -11,10 +11,8 @@ use nom::{
     sequence::preceded,
 };
 use std::ops::Range;
-use token::{Token, TokenType};
+use token::{IntResult, Token, TokenType};
 use utility::{alpha_numeric0, expect, is_alpha_numeric, verify};
-
-use self::token::IntResult;
 
 #[cfg(test)]
 mod tests;
@@ -40,7 +38,7 @@ type IResult<'a> = nom::IResult<Span<'a>, Token>;
 /// # Panics
 ///
 /// Panics if lexing fails.
-pub(crate) fn lex(src: &str) -> Vec<Token> {
+pub fn lex(src: &str) -> Vec<Token> {
     let input = Span::new(src);
     let (_, (mut tokens, eof_token)) = pair(
         many0(preceded(multispace0, Token::lex)),
@@ -49,6 +47,82 @@ pub(crate) fn lex(src: &str) -> Vec<Token> {
     .expect("Lexing must not fail.");
     tokens.push(eof_token);
     tokens
+}
+
+pub fn update(new_text: &str, mut tokens: Vec<Token>, change: &TextChange) -> Vec<Token> {
+    /// This can also shift in negative direction, unlike `Shiftable::shift`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if ranges cannot be converted to `isize`
+    /// or if the resulting range does not fit into `usize`.
+    fn shift_token(token: Token, offset: isize) -> Token {
+        let start: isize = token.range.start.try_into().expect("Range is too big");
+        let end: isize = token.range.end.try_into().expect("Range is too big");
+        let new_start: usize = (start + offset).try_into().expect("Range is too big");
+        let new_end: usize = (end + offset).try_into().expect("Range is too big");
+        Token {
+            range: new_start..new_end,
+            ..token
+        }
+    }
+
+    let offset: isize = {
+        let insertion_len: isize = change.text.len().try_into().expect("Insertion is too big");
+        let deletion_len: isize = change.range.len().try_into().expect("Deletion is too big");
+        insertion_len - deletion_len
+    };
+
+    // pop EOF token, so that the rest of the logic doesn't need to care.
+    let eof = match tokens.pop() {
+        Some(eof) if matches!(eof.token_type, TokenType::Eof) => shift_token(eof, offset),
+        _ => panic!("Must contain EOF token"),
+    };
+
+    let unaffected_head: Vec<_> = tokens
+        .clone()
+        .into_iter()
+        .take_while(|token| !token.is_affected_by(change.range.start))
+        .collect();
+    let reusable_tokens: Vec<_> = tokens
+        .into_iter()
+        .skip_while(|token| token.range.start < change.range.end)
+        .map(|token| shift_token(token, offset))
+        .collect();
+    // Alternative implementation:
+    // let (unaffected_head, tokens): (Vec<Token>, Vec<Token>) = tokens
+    //     .into_iter()
+    //     .partition(|token| !token.is_affected_by(change.range.start));
+    // let (_, reusable_tokens): (Vec<Token>, Vec<Token>) = tokens
+    //     .into_iter()
+    //     .partition(|token| token.range.start < change.range.end);
+    // let reusable_tokens: Vec<Token> = reusable_tokens
+    //     .into_iter()
+    //     .map(|token| shift_token(token, offset))
+    //     .collect();
+
+    let reanalysis_start = unaffected_head
+        .last()
+        .map(|token| token.range.end)
+        .unwrap_or(0);
+    let reanalysis_text = &new_text[reanalysis_start..];
+
+    let input = Span::new(reanalysis_text);
+    let new_tokens: Vec<_> = iterator(input, preceded(multispace0, Token::lex))
+        .map(|token| token.shift(reanalysis_start))
+        .take_while(|token| !reusable_tokens.contains(token))
+        .collect();
+
+    let unaffected_tail = if let Some(last_new_token) = new_tokens.last() {
+        reusable_tokens
+            .into_iter()
+            .skip_while(|token| token.range.start < last_new_token.range.end)
+            .collect()
+    } else {
+        reusable_tokens
+    };
+
+    vec![unaffected_head, new_tokens, unaffected_tail, vec![eof]].concat()
 }
 
 /// Try to parse `Span` into `Token`
@@ -149,7 +223,8 @@ impl Lexer for Char {
         let (input, _) = tag("'")(input)?;
         let (input, c) = alt((map(tag("\\n"), |_| '\n'), anychar))(input)?;
         let pos = input.location_offset();
-        let (input, closing_tick) = expect(tag("'"), LexErrorMessage::MissingClosingTick, pos)(input)?;
+        let (input, closing_tick) =
+            expect(tag("'"), LexErrorMessage::MissingClosingTick, pos)(input)?;
         let end = input.location_offset();
         match closing_tick {
             Ok(_) => Ok((input, Token::new(TokenType::Char(c), start..end))),
@@ -225,7 +300,7 @@ struct Comment;
 impl Lexer for Comment {
     fn lex(input: Span) -> IResult {
         let start = input.location_offset();
-        let (input, comment) = preceded(tag("//"), take_till(|c| c == '\n'))(input)?;
+        let (input, comment) = delimited(tag("//"), take_till(|c| c == '\n'), tag("\n"))(input)?;
         let end = input.location_offset();
         Ok((
             input,

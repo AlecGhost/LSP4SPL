@@ -1,4 +1,4 @@
-use crate::{error::SplError, ErrorContainer, ToRange};
+use crate::{error::SplError, ErrorContainer, Shiftable, ToRange};
 use nom::Needed;
 use std::{
     iter::Enumerate,
@@ -39,7 +39,7 @@ pub const VAR: &str = "var";
 pub struct Token {
     pub token_type: TokenType,
     pub range: Range<usize>,
-    errors: Vec<SplError>,
+    pub errors: Vec<SplError>,
 }
 
 impl Token {
@@ -62,6 +62,10 @@ impl Token {
             errors,
         }
     }
+
+    pub(super) fn is_affected_by(&self, index: usize) -> bool {
+        self.range.end + usize::from(self.token_type.look_ahead()) > index
+    }
 }
 
 impl ToRange for Token {
@@ -73,6 +77,15 @@ impl ToRange for Token {
 impl ErrorContainer for Token {
     fn errors(&self) -> Vec<SplError> {
         self.errors.clone()
+    }
+}
+
+impl Shiftable for Token {
+    fn shift(self, offset: usize) -> Self {
+        Self {
+            range: self.range.shift(offset),
+            ..self
+        }
     }
 }
 
@@ -175,6 +188,7 @@ impl TokenType {
                 | RParen
                 | LBracket
                 | RBracket
+                | LCurly
                 | RCurly
                 | Eq
                 | Neq
@@ -199,6 +213,19 @@ impl TokenType {
             self,
             If | Else | While | Array | Of | Proc | Ref | Type | Var
         )
+    }
+
+    const fn look_ahead(&self) -> u8 {
+        use TokenType::*;
+        match self {
+            If | Else | While | Array | Of | Proc | Ref | Type | Var | Colon | Divide | Lt | Gt
+            | Int(_) | Ident(_) | Hex(_) => 1,
+            LParen | RParen | LBracket | RBracket | LCurly | RCurly | Eq | Neq | Le | Ge
+            | Assign | Comma | Semic | Plus | Minus | Times | Comment(_) | Unknown(_) | Eof => 0,
+            Char(_) => {
+                1 // this is a worst case look ahead.
+            }
+        }
     }
 
     pub(super) const fn as_static_str(&self) -> Option<&'static str> {

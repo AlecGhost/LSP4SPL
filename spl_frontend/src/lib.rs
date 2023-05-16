@@ -39,9 +39,15 @@ impl Shiftable for Range<usize> {
 /// `range` is the text range in the original source code.
 /// `text` is the replacement text.
 #[derive(Clone, Debug)]
-pub struct Change {
+pub struct TextChange {
     pub range: Range<usize>,
     pub text: String,
+}
+
+impl ToRange for TextChange {
+    fn to_range(&self) -> Range<usize> {
+        self.range.clone()
+    }
 }
 
 /// Contains all information extracted from a given SPL source file.
@@ -67,13 +73,17 @@ impl AnalyzedSource {
         }
     }
 
-    pub fn update(&mut self, changes: Vec<Change>) {
-        // Temporary implementation
-        let mut new_text = self.text.clone();
-        changes
-            .into_iter()
-            .for_each(|change| new_text.replace_range(change.range, &change.text));
-        *self = AnalyzedSource::new(new_text);
+    pub fn update(self, changes: Vec<TextChange>) -> Self {
+        let mut analysed_source = changes.into_iter().fold(self, |mut acc, change| {
+            acc.text.replace_range(change.to_range(), &change.text);
+            acc.tokens = lexer::update(&acc.text, acc.tokens, &change);
+            acc
+        });
+        // Currently no update implemented
+        analysed_source.ast = parser::parse(&analysed_source.tokens);
+        analysed_source.table = table::build(&mut analysed_source.ast);
+        table::analyze(&mut analysed_source.ast, &analysed_source.table);
+        analysed_source
     }
 }
 
