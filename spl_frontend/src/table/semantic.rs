@@ -14,7 +14,7 @@ mod tests;
 
 /// Analyzes the given program for semantic errors.
 /// Errors are reported by the specifie.
-pub(crate) fn analyze(program: &mut Program, table: &GlobalTable) {
+pub fn analyze(program: &mut Program, table: &GlobalTable) {
     program
         .global_declarations
         .iter_mut()

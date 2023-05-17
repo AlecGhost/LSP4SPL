@@ -23,7 +23,7 @@ fn no_change() {
 #[test]
 fn remove_comment() {
     let text = "// a if c 123\n";
-    let tokens = lexer::lex(&text);
+    let tokens = lexer::lex(text);
     assert_eq!(
         tokens,
         vec![
@@ -33,8 +33,8 @@ fn remove_comment() {
     );
     let new_text = "a if c 123\n";
     let new_tokens = lexer::update(
-        &new_text,
-        tokens.clone(),
+        new_text,
+        tokens,
         &TextChange {
             range: 0..3,
             text: "".to_string(),
@@ -55,7 +55,7 @@ fn remove_comment() {
 #[test]
 fn insert_middle() {
     let text = "a if else 0x1";
-    let tokens = lexer::lex(&text);
+    let tokens = lexer::lex(text);
     assert_eq!(
         vec![
             Token::new(TokenType::Ident("a".to_string()), 0..1),
@@ -68,8 +68,8 @@ fn insert_middle() {
     );
     let new_text = "a if insertion else 0x1";
     let new_tokens = lexer::update(
-        &new_text,
-        tokens.clone(),
+        new_text,
+        tokens,
         &TextChange {
             range: 5..5,
             text: "insertion ".to_string(),
@@ -91,7 +91,7 @@ fn insert_middle() {
 #[test]
 fn merge_keywords() {
     let text = "a if else 0x1";
-    let tokens = lexer::lex(&text);
+    let tokens = lexer::lex(text);
     assert_eq!(
         vec![
             Token::new(TokenType::Ident("a".to_string()), 0..1),
@@ -104,8 +104,8 @@ fn merge_keywords() {
     );
     let new_text = "a ifxelse 0x1";
     let new_tokens = lexer::update(
-        &new_text,
-        tokens.clone(),
+        new_text,
+        tokens,
         &TextChange {
             range: 4..5,
             text: "x".to_string(),
@@ -125,7 +125,7 @@ fn merge_keywords() {
 #[test]
 fn replace_token() {
     let text = "a if else 0x1";
-    let tokens = lexer::lex(&text);
+    let tokens = lexer::lex(text);
     assert_eq!(
         vec![
             Token::new(TokenType::Ident("a".to_string()), 0..1),
@@ -138,8 +138,8 @@ fn replace_token() {
     );
     let new_text = "0 if else 0x1";
     let new_tokens = lexer::update(
-        &new_text,
-        tokens.clone(),
+        new_text,
+        tokens,
         &TextChange {
             range: 0..1,
             text: "0".to_string(),
@@ -160,7 +160,7 @@ fn replace_token() {
 #[test]
 fn delete_from_end() {
     let text = "a if else 0x1";
-    let tokens = lexer::lex(&text);
+    let tokens = lexer::lex(text);
     assert_eq!(
         vec![
             Token::new(TokenType::Ident("a".to_string()), 0..1),
@@ -173,8 +173,8 @@ fn delete_from_end() {
     );
     let new_text = "a if else";
     let new_tokens = lexer::update(
-        &new_text,
-        tokens.clone(),
+        new_text,
+        tokens,
         &TextChange {
             range: 9..13,
             text: "".to_string(),

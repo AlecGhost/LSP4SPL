@@ -127,8 +127,8 @@ mod fmt {
                     add_all_comments(
                         param.fmt(tokens, f),
                         match param.as_ref() {
-                            ParameterDeclaration::Valid { info, .. } => &info.slice(tokens),
-                            ParameterDeclaration::Error(info) => &info.slice(tokens),
+                            ParameterDeclaration::Valid { info, .. } => info.slice(tokens),
+                            ParameterDeclaration::Error(info) => info.slice(tokens),
                         },
                     )
                 })

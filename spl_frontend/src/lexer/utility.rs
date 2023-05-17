@@ -51,7 +51,7 @@ pub(super) fn expect<'a, O, F>(
 where
     F: FnMut(Span<'a>) -> IResult<'a, O>,
 {
-    move |input: Span| match inner(input.clone()) {
+    move |input: Span| match inner(input) {
         Ok((input, out)) => Ok((input, Ok(out))),
         Err(_) => {
             let err = crate::error::SplError(error_pos..error_pos, error_msg.to_string());

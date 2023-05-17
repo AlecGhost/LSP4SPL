@@ -396,7 +396,7 @@ impl Parser for VariableDeclaration {
             Ok((input, VariableDeclaration::Error(info)))
         }
 
-        alt((|input| parse_valid(input), |input| parse_error(input)))(input)
+        alt((parse_valid, parse_error))(input)
     }
 }
 
@@ -465,7 +465,7 @@ impl Parser for ParameterDeclaration {
             Ok((input, ParameterDeclaration::Error(info)))
         }
 
-        alt((|input| parse_valid(input), |input| parse_error(input)))(input)
+        alt((parse_valid, parse_error))(input)
     }
 }
 
@@ -774,7 +774,7 @@ fn comment(input: TokenStream) -> IResult<String> {
 
 macro_rules! tag_parser {
     ($name:ident, $token_type:pat) => {
-        pub(super) fn $name(
+        pub fn $name(
             input: crate::lexer::token::TokenStream,
         ) -> crate::parser::IResult<crate::lexer::token::Token> {
             use crate::{lexer::token::TokenType, parser::comment};

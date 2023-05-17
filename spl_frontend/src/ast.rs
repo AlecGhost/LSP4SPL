@@ -54,7 +54,7 @@ impl ToRange for AstInfo {
 impl ToTextRange for AstInfo {
     fn to_text_range(&self, tokens: &[Token]) -> Range<usize> {
         match self.to_range() {
-            range if range.len() == 0 => {
+            range if range.is_empty() => {
                 let token = &tokens[range.end];
                 let end_pos = token.range.end;
                 end_pos..end_pos
@@ -581,7 +581,7 @@ pub enum Statement {
 }
 
 impl Statement {
-    pub fn info(&self) -> &AstInfo {
+    pub const fn info(&self) -> &AstInfo {
         match self {
             Self::Empty(info) => info,
             Self::If(i) => &i.info,

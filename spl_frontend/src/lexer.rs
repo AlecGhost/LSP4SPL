@@ -240,12 +240,8 @@ struct Int;
 impl Lexer for Int {
     fn lex(input: Span) -> IResult {
         let (input, int_span) = digit1(input)?;
-        match int_span.parse() {
-            Ok(value) => Ok((
-                input,
-                Token::new(TokenType::Int(IntResult::Int(value)), int_span.to_range()),
-            )),
-            Err(_) => {
+        int_span.parse().map_or_else(
+            |_| {
                 let err = SplError(
                     int_span.to_range(),
                     LexErrorMessage::InvalidIntLit(int_span.to_string()).to_string(),
@@ -258,8 +254,14 @@ impl Lexer for Int {
                         vec![err],
                     ),
                 ))
-            }
-        }
+            },
+            |value| {
+                Ok((
+                    input,
+                    Token::new(TokenType::Int(IntResult::Int(value)), int_span.to_range()),
+                ))
+            },
+        )
     }
 }
 
@@ -272,17 +274,17 @@ impl Lexer for Hex {
         let (input, opt_hex) = expect(hex_digit1, LexErrorMessage::ExpectedHexNumber, pos)(input)?;
         let mut errors = Vec::new();
         let result = match opt_hex {
-            Ok(hex_span) => match u32::from_str_radix(&hex_span, 16) {
-                Ok(value) => IntResult::Int(value),
-                Err(_) => {
+            Ok(hex_span) => u32::from_str_radix(&hex_span, 16).map_or_else(
+                |_| {
                     let err = SplError(
                         hex_span.to_range(),
                         LexErrorMessage::InvalidIntLit("0x".to_string() + &hex_span).to_string(),
                     );
                     errors.push(err);
                     IntResult::Err(hex_span.to_string())
-                }
-            },
+                },
+                IntResult::Int,
+            ),
             Err(err) => {
                 errors.push(err);
                 IntResult::Err(String::new())

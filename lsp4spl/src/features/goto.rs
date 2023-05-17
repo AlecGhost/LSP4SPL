@@ -139,7 +139,7 @@ pub async fn type_definition(
                                     if let Some(DataType::Array { creator, .. }) = &v.data_type {
                                         let entry = doc
                                             .table
-                                            .lookup(&creator)
+                                            .lookup(creator)
                                             .expect("Invalid creator");
                                         match entry {
                                             GlobalEntry::Type(t) => {

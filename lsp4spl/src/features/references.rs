@@ -2,8 +2,8 @@ use super::{DocumentCursor, Ident};
 use crate::document::{as_pos_range, DocumentRequest};
 use color_eyre::eyre::Result;
 use lsp_types::{
-    Location, Range as PosRange, ReferenceParams, RenameParams, TextDocumentPositionParams, TextEdit,
-    WorkspaceEdit,
+    Location, Range as PosRange, ReferenceParams, RenameParams, TextDocumentPositionParams,
+    TextEdit, WorkspaceEdit,
 };
 use spl_frontend::{
     ast::{
@@ -25,25 +25,19 @@ pub async fn rename(
     let new_name = params.new_name;
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
-            let DocumentCursor {
-                doc, context, ..
-            } = cursor;
+            let DocumentCursor { doc, context, .. } = cursor;
             if let Some(entry) = context {
                 // Early return for int
                 if &ident.value == "int" {
                     return Ok(None);
                 }
-                let idents =
-                    find_referenced_identifiers(ident, &entry, &doc.ast, &doc.table);
+                let idents = find_referenced_identifiers(ident, &entry, &doc.ast, &doc.table);
                 // it seems like the original identifier is changed automatically,
                 // so it does not need to be added to `idents`
                 let text_edits = idents
                     .into_iter()
                     .map(|identifier| {
-                        Ident::from_identifier(
-                            &identifier,
-                            identifier.to_text_range(&doc.tokens),
-                        )
+                        Ident::from_identifier(&identifier, identifier.to_text_range(&doc.tokens))
                     })
                     .map(|ident| TextEdit {
                         range: as_pos_range(&ident.to_range(), &doc.text),
@@ -86,19 +80,13 @@ pub async fn find(
     let uri = doc_params.text_document.uri.clone();
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
-            let DocumentCursor {
-                doc, context, ..
-            } = cursor;
+            let DocumentCursor { doc, context, .. } = cursor;
             if let Some(entry) = context {
-                let identifiers =
-                    find_referenced_identifiers(ident, &entry, &doc.ast, &doc.table);
+                let identifiers = find_referenced_identifiers(ident, &entry, &doc.ast, &doc.table);
                 let references = identifiers
                     .into_iter()
                     .map(|identifier| {
-                        Ident::from_identifier(
-                            &identifier,
-                            identifier.to_text_range(&doc.tokens),
-                        )
+                        Ident::from_identifier(&identifier, identifier.to_text_range(&doc.tokens))
                     })
                     .filter(|i| i != ident)
                     .map(|i| Location {
@@ -121,7 +109,7 @@ fn find_referenced_identifiers(
 ) -> Vec<Identifier> {
     match entry {
         GlobalEntry::Procedure(p) => {
-            if &p.name.value == &ident.value {
+            if p.name.value == ident.value {
                 find_procs(&ident.value, program)
             } else {
                 let lookup_table = LookupTable {
@@ -183,7 +171,7 @@ fn find_procs(name: &str, program: &Program) -> Vec<Identifier> {
             Procedure(pd) => Some((pd, gd.offset)),
             _ => None,
         })
-        .map(|(pd, offset)| {
+        .flat_map(|(pd, offset)| {
             let mut idents = Vec::new();
             if let Some(ident) = &pd.name {
                 if ident.value == name {
@@ -198,7 +186,6 @@ fn find_procs(name: &str, program: &Program) -> Vec<Identifier> {
             idents.extend(new_idents);
             idents.shift(offset)
         })
-        .flatten()
         .collect()
 }
 
@@ -218,7 +205,7 @@ fn find_types(name: &str, program: &Program) -> Vec<Identifier> {
     program
         .global_declarations
         .iter()
-        .map(|gd| {
+        .flat_map(|gd| {
             match gd.as_ref() {
                 Type(td) => {
                     let mut idents = Vec::new();
@@ -272,7 +259,6 @@ fn find_types(name: &str, program: &Program) -> Vec<Identifier> {
             }
             .shift(gd.offset)
         })
-        .flatten()
         .collect()
 }
 

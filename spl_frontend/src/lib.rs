@@ -1,5 +1,4 @@
 #![warn(clippy::nursery)]
-#![allow(clippy::redundant_pub_crate)]
 use ast::Program;
 use error::SplError;
 use lexer::token::Token;
@@ -93,7 +92,7 @@ impl ErrorContainer for AnalyzedSource {
         token_ranged_errors
             .into_iter()
             .map(|error| match error.to_range() {
-                range if range.len() == 0 => {
+                range if range.is_empty() => {
                     let token = &self.tokens[range.end];
                     let end_pos = token.range.end;
                     SplError(end_pos..end_pos, error.1)

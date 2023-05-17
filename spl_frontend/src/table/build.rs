@@ -13,7 +13,7 @@ use crate::{
 mod tests;
 
 /// Builds a `GlobalTable` for the given program.
-pub(crate) fn build(program: &mut Program) -> GlobalTable {
+pub fn build(program: &mut Program) -> GlobalTable {
     let mut table = GlobalTable::initialized();
     program.build(&mut table, 0);
     table
