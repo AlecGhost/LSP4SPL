@@ -251,9 +251,7 @@ impl Parser for Expression {
 
 impl Parser for TypeExpression {
     fn parse(input: TokenStream) -> IResult<Self> {
-        fn parse_array_type(
-            input: TokenStream,
-        ) -> IResult<TypeExpression> {
+        fn parse_array_type(input: TokenStream) -> IResult<TypeExpression> {
             let (input, ((_, _, size, _, _, type_expr), info)) = info(tuple((
                 keywords::array,
                 expect(
@@ -337,9 +335,7 @@ impl Parser for TypeDeclaration {
 
 impl Parser for VariableDeclaration {
     fn parse(input: TokenStream) -> IResult<Self> {
-        fn parse_valid(
-            input: TokenStream,
-        ) -> IResult<VariableDeclaration> {
+        fn parse_valid(input: TokenStream) -> IResult<VariableDeclaration> {
             let (input, ((doc, _, name, _, type_expr, _), info)) = info(tuple((
                 many0(comment),
                 keywords::var,
@@ -384,9 +380,7 @@ impl Parser for VariableDeclaration {
             ))
         }
 
-        fn parse_error(
-            input: TokenStream,
-        ) -> IResult<VariableDeclaration> {
+        fn parse_error(input: TokenStream) -> IResult<VariableDeclaration> {
             let (input, (_, mut info)) = info(ignore_until1(peek(look_ahead::var_dec)))(input)?;
             let err = SplError(
                 info.to_range(),
@@ -402,9 +396,7 @@ impl Parser for VariableDeclaration {
 
 impl Parser for ParameterDeclaration {
     fn parse(input: TokenStream) -> IResult<Self> {
-        fn parse_valid(
-            input: TokenStream,
-        ) -> IResult<ParameterDeclaration> {
+        fn parse_valid(input: TokenStream) -> IResult<ParameterDeclaration> {
             let (input, ((doc, (ref_kw, name), _, type_expr, _), info)) = info(tuple((
                 many0(comment),
                 alt((
@@ -448,9 +440,7 @@ impl Parser for ParameterDeclaration {
             ))
         }
 
-        fn parse_error(
-            input: TokenStream,
-        ) -> IResult<ParameterDeclaration> {
+        fn parse_error(input: TokenStream) -> IResult<ParameterDeclaration> {
             let (input, (_, mut info)) = info(ignore_until0(peek(alt((
                 recognize(symbols::rparen),
                 recognize(symbols::lcurly),
@@ -471,9 +461,7 @@ impl Parser for ParameterDeclaration {
 
 impl Parser for CallStatement {
     fn parse(input: TokenStream) -> IResult<Self> {
-        fn parse_call_expression(
-            input: TokenStream,
-        ) -> IResult<Expression> {
+        fn parse_call_expression(input: TokenStream) -> IResult<Expression> {
             alt((
                 terminated(
                     Expression::parse,
@@ -710,9 +698,7 @@ impl Parser for ProcedureDeclaration {
 
 impl Parser for GlobalDeclaration {
     fn parse(input: TokenStream) -> IResult<Self> {
-        fn parse_error(
-            input: TokenStream,
-        ) -> IResult<GlobalDeclaration> {
+        fn parse_error(input: TokenStream) -> IResult<GlobalDeclaration> {
             let (input, (ignored, mut info)) = info(ignore_until1(peek(alt((
                 recognize(keywords::r#type),
                 recognize(keywords::proc),
@@ -840,24 +826,24 @@ mod symbols {
     tag_parser!(divide, TokenType::Divide);
 }
 
-macro_rules! look_ahead_parser {
-    ($name:ident, $($parser:expr, )+) => {
-    pub(super) fn $name(
-        input: crate::token::TokenStream,
-    ) -> crate::parser::IResult<crate::token::TokenStream> {
-        nom::branch::alt((
-            $(
-                nom::combinator::recognize($parser),
-            )+
-        ))(input)
-    }
-    };
-}
-
 mod look_ahead {
     use super::{eof, keywords, symbols, Parser};
     use crate::ast::Identifier;
     use nom::{branch::alt, sequence::pair};
+
+    macro_rules! look_ahead_parser {
+        ($name:ident, $($parser:expr, )+) => {
+        pub fn $name(
+            input: crate::token::TokenStream,
+        ) -> crate::parser::IResult<crate::token::TokenStream> {
+            nom::branch::alt((
+                $(
+                    nom::combinator::recognize($parser),
+                )+
+            ))(input)
+        }
+        };
+    }
 
     look_ahead_parser!(
         stmt,

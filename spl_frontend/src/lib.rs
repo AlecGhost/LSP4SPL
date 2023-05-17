@@ -7,8 +7,8 @@ use table::GlobalTable;
 
 pub mod ast;
 pub mod error;
-mod lexer;
-mod parser;
+pub mod lexer;
+pub mod parser;
 pub use lexer::token;
 pub mod table;
 

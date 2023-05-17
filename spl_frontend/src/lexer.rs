@@ -21,7 +21,7 @@ mod utility;
 
 /// Type alias for nom_locate::LocatedSpan.
 /// Tracks range inside source code during lexical analysis.
-pub type Span<'a> = nom_locate::LocatedSpan<&'a str>;
+type Span<'a> = nom_locate::LocatedSpan<&'a str>;
 
 impl ToRange for Span<'_> {
     fn to_range(&self) -> Range<usize> {
