@@ -79,27 +79,17 @@ pub fn update(new_text: &str, mut tokens: Vec<Token>, change: &TextChange) -> Ve
         _ => panic!("Must contain EOF token"),
     };
 
-    let unaffected_head: Vec<_> = tokens
-        .clone()
+    // Alternative implementation:
+    let (unaffected_head, tokens): (Vec<Token>, Vec<Token>) = tokens
         .into_iter()
-        .take_while(|token| !token.is_affected_by(change.range.start))
-        .collect();
-    let reusable_tokens: Vec<_> = tokens
+        .partition(|token| !token.is_affected_by(change.range.start));
+    let (_, reusable_tokens): (Vec<Token>, Vec<Token>) = tokens
         .into_iter()
-        .skip_while(|token| token.range.start < change.range.end)
+        .partition(|token| token.range.start < change.range.end);
+    let reusable_tokens: Vec<Token> = reusable_tokens
+        .into_iter()
         .map(|token| shift_token(token, offset))
         .collect();
-    // Alternative implementation:
-    // let (unaffected_head, tokens): (Vec<Token>, Vec<Token>) = tokens
-    //     .into_iter()
-    //     .partition(|token| !token.is_affected_by(change.range.start));
-    // let (_, reusable_tokens): (Vec<Token>, Vec<Token>) = tokens
-    //     .into_iter()
-    //     .partition(|token| token.range.start < change.range.end);
-    // let reusable_tokens: Vec<Token> = reusable_tokens
-    //     .into_iter()
-    //     .map(|token| shift_token(token, offset))
-    //     .collect();
 
     let reanalysis_start = unaffected_head
         .last()
