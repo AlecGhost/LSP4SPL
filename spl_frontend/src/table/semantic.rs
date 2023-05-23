@@ -171,7 +171,7 @@ impl AnalyzeStatement for IfStatement {
         if let Some(condition) = &mut self.condition {
             if let Some(condition_type) = condition.analyze(table) {
                 if condition_type != DataType::Bool {
-                    let range = condition.to_range();
+                    let range = condition.as_ref().to_range();
                     condition.info_mut().append_error(SplError(
                         range,
                         SemanticErrorMessage::IfConditionMustBeBoolean.to_string(),
@@ -193,7 +193,7 @@ impl AnalyzeStatement for WhileStatement {
         if let Some(condition) = &mut self.condition {
             if let Some(condition_type) = condition.analyze(table) {
                 if condition_type != DataType::Bool {
-                    let range = condition.to_range();
+                    let range = condition.as_ref().to_range();
                     condition.info_mut().append_error(SplError(
                         range,
                         SemanticErrorMessage::WhileConditionMustBeBoolean.to_string(),
@@ -240,7 +240,7 @@ impl AnalyzeExpression for ArrayAccess {
             match index_type {
                 Some(DataType::Int) => { /* happy path */ }
                 Some(_) => {
-                    let range = index.to_range();
+                    let range = index.as_ref().as_ref().to_range();
                     index.info_mut().append_error(SplError(
                         range,
                         SemanticErrorMessage::IndexingWithNonInteger.to_string(),

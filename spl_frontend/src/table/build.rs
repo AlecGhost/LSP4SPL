@@ -104,11 +104,11 @@ impl TableBuilder for ProcedureDeclaration {
             let parameters = self
                 .parameters
                 .iter_mut()
-                .filter_map(|param| build_parameter(param, table, &mut local_table, param.offset))
+                .filter_map(|param| build_parameter(param, table, &mut local_table))
                 .collect();
             self.variable_declarations
                 .iter_mut()
-                .for_each(|dec| build_variable(dec, table, &mut local_table, dec.offset));
+                .for_each(|dec| build_variable(dec, table, &mut local_table));
             let entry = ProcedureEntry {
                 name: name.clone(),
                 local_table,
@@ -131,9 +131,8 @@ fn build_parameter(
     param: &mut Reference<ParameterDeclaration>,
     global_table: &GlobalTable,
     local_table: &mut LocalTable,
-    offset: usize,
 ) -> Option<VariableEntry> {
-    let range = param.to_range().shift(offset);
+    let range = param.to_range();
     if let ParameterDeclaration::Valid {
         doc,
         is_ref,
@@ -179,9 +178,8 @@ fn build_variable(
     var: &mut Reference<VariableDeclaration>,
     global_table: &GlobalTable,
     local_table: &mut LocalTable,
-    offset: usize,
 ) {
-    let range = var.to_range().shift(offset);
+    let range = var.to_range();
     if let VariableDeclaration::Valid {
         doc,
         name: Some(name),
