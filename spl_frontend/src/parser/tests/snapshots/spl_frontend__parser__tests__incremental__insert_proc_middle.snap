@@ -1,0 +1,84 @@
+---
+source: spl_frontend/src/parser/tests/incremental.rs
+expression: ast
+---
+Program {
+    global_declarations: [
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "a",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [],
+                    variable_declarations: [],
+                    statements: [],
+                    info: AstInfo {
+                        range: 0..6,
+                        errors: [],
+                    },
+                },
+            ),
+            offset: 0,
+        },
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "main",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [],
+                    variable_declarations: [],
+                    statements: [],
+                    info: AstInfo {
+                        range: 0..6,
+                        errors: [],
+                    },
+                },
+            ),
+            offset: 6,
+        },
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "b",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [],
+                    variable_declarations: [],
+                    statements: [],
+                    info: AstInfo {
+                        range: 0..6,
+                        errors: [],
+                    },
+                },
+            ),
+            offset: 12,
+        },
+    ],
+    info: AstInfo {
+        range: 0..18,
+        errors: [],
+    },
+}

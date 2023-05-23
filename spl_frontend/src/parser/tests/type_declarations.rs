@@ -1,3 +1,5 @@
+use crate::parser::inc;
+
 use super::*;
 
 type TD = TypeDeclaration;
@@ -8,7 +10,7 @@ fn simple() {
     let dec = "type a = int;";
     let tokens = lex(dec);
     eq!(
-        all_consuming(terminated(TD::parse, eof))(tokens.to_tokens())
+        all_consuming(terminated(inc::<TD>(None), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         TD {
@@ -30,7 +32,7 @@ fn nested_arrays() {
     let dec = "type a = array [2] of array [3] of int;";
     let tokens = lex(dec);
     eq!(
-        all_consuming(terminated(TD::parse, eof))(tokens.to_tokens())
+        all_consuming(terminated(inc::<TD>(None), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         TD {
@@ -71,7 +73,7 @@ fn nested_arrays() {
 fn missing_array_index() {
     let dec = "type = array [] of array [] of;";
     let tokens = lex(dec);
-    let (_, td) = all_consuming(terminated(TD::parse, eof))(tokens.to_tokens()).unwrap();
+    let (_, td) = all_consuming(terminated(inc::<TD>(None), eof))(tokens.to_tokens()).unwrap();
     eq!(
         td,
         TD {

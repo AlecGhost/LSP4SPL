@@ -11,7 +11,7 @@ use nom::{
     sequence::preceded,
 };
 use std::ops::Range;
-use token::{IntResult, Token, TokenType};
+use token::{IntResult, Token, TokenChange, TokenType};
 use utility::{alpha_numeric0, expect, is_alpha_numeric, verify};
 
 #[cfg(test)]
@@ -49,7 +49,11 @@ pub fn lex(src: &str) -> Vec<Token> {
     tokens
 }
 
-pub fn update(new_text: &str, mut tokens: Vec<Token>, change: &TextChange) -> Vec<Token> {
+pub fn update(
+    new_text: &str,
+    mut tokens: Vec<Token>,
+    change: &TextChange,
+) -> (Vec<Token>, TokenChange) {
     /// This can also shift in negative direction, unlike `Shiftable::shift`.
     ///
     /// # Panics
@@ -79,6 +83,7 @@ pub fn update(new_text: &str, mut tokens: Vec<Token>, change: &TextChange) -> Ve
         _ => panic!("Must contain EOF token"),
     };
 
+    let token_length = tokens.len();
     // Alternative implementation:
     let (unaffected_head, tokens): (Vec<Token>, Vec<Token>) = tokens
         .into_iter()
@@ -112,7 +117,14 @@ pub fn update(new_text: &str, mut tokens: Vec<Token>, change: &TextChange) -> Ve
         reusable_tokens
     };
 
-    vec![unaffected_head, new_tokens, unaffected_tail, vec![eof]].concat()
+    let start = unaffected_head.len();
+    let end = token_length - unaffected_tail.len();
+    let deletion_range = start..end;
+    let insertion_len = new_tokens.len();
+    let token_change = TokenChange::new(deletion_range, insertion_len);
+
+    let new_tokens = vec![unaffected_head, new_tokens, unaffected_tail, vec![eof]].concat();
+    (new_tokens, token_change)
 }
 
 /// Try to parse `Span` into `Token`

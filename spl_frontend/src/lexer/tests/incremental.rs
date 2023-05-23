@@ -1,6 +1,6 @@
 use crate::{
     lexer,
-    token::{IntResult, Token, TokenType},
+    token::{IntResult, Token, TokenChange, TokenType},
     TextChange,
 };
 use pretty_assertions::assert_eq;
@@ -9,7 +9,7 @@ use pretty_assertions::assert_eq;
 fn no_change() {
     let text = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
     let tokens = lexer::lex(&text);
-    let new_tokens = lexer::update(
+    let (new_tokens, token_change) = lexer::update(
         &text,
         tokens.clone(),
         &TextChange {
@@ -17,7 +17,8 @@ fn no_change() {
             text: "".to_string(),
         },
     );
-    assert_eq!(tokens, new_tokens);
+    assert_eq!(new_tokens, tokens);
+    assert_eq!(token_change, TokenChange::new(0..0, 0));
 }
 
 #[test]
@@ -32,7 +33,7 @@ fn remove_comment() {
         ],
     );
     let new_text = "a if c 123\n";
-    let new_tokens = lexer::update(
+    let (new_tokens, token_change) = lexer::update(
         new_text,
         tokens,
         &TextChange {
@@ -50,6 +51,7 @@ fn remove_comment() {
             Token::new(TokenType::Eof, 11..11),
         ],
     );
+    assert_eq!(token_change, TokenChange::new(0..1, 4));
 }
 
 #[test]
@@ -67,7 +69,7 @@ fn insert_middle() {
         tokens
     );
     let new_text = "a if insertion else 0x1";
-    let new_tokens = lexer::update(
+    let (new_tokens, token_change) = lexer::update(
         new_text,
         tokens,
         &TextChange {
@@ -86,6 +88,7 @@ fn insert_middle() {
             Token::new(TokenType::Eof, 23..23),
         ],
     );
+    assert_eq!(token_change, TokenChange::new(2..2, 1));
 }
 
 #[test]
@@ -103,7 +106,7 @@ fn merge_keywords() {
         tokens
     );
     let new_text = "a ifxelse 0x1";
-    let new_tokens = lexer::update(
+    let (new_tokens, token_change) = lexer::update(
         new_text,
         tokens,
         &TextChange {
@@ -120,6 +123,7 @@ fn merge_keywords() {
             Token::new(TokenType::Eof, 13..13),
         ],
     );
+    assert_eq!(token_change, TokenChange::new(1..3, 1));
 }
 
 #[test]
@@ -137,7 +141,7 @@ fn replace_token() {
         tokens
     );
     let new_text = "0 if else 0x1";
-    let new_tokens = lexer::update(
+    let (new_tokens, token_change) = lexer::update(
         new_text,
         tokens,
         &TextChange {
@@ -155,6 +159,7 @@ fn replace_token() {
             Token::new(TokenType::Eof, 13..13),
         ],
     );
+    assert_eq!(token_change, TokenChange::new(0..1, 1));
 }
 
 #[test]
@@ -172,7 +177,7 @@ fn delete_from_end() {
         tokens
     );
     let new_text = "a if else";
-    let new_tokens = lexer::update(
+    let (new_tokens, token_change) = lexer::update(
         new_text,
         tokens,
         &TextChange {
@@ -189,4 +194,6 @@ fn delete_from_end() {
             Token::new(TokenType::Eof, 9..9),
         ],
     );
+    // insertion length 1 because `Else` gets reevaluated
+    assert_eq!(token_change, TokenChange::new(2..4, 1));
 }

@@ -1,4 +1,4 @@
-use crate::token;
+use crate::{token, parser::inc};
 
 use super::*;
 
@@ -7,7 +7,7 @@ fn simple() {
     let asgn = "a := 1;";
     let tokens = lex(asgn);
     let (_, assignment) =
-        all_consuming(terminated(Assignment::parse, eof))(tokens.to_tokens()).unwrap();
+        all_consuming(terminated(inc::<Assignment>(None), eof))(tokens.to_tokens()).unwrap();
     eq!(
         assignment,
         Assignment {
@@ -25,7 +25,7 @@ fn invalid_equals_symbol() {
     let asgn = "a = 1;";
     let tokens = lex(asgn);
     let (_, assignment) =
-        all_consuming(terminated(Assignment::parse, eof))(tokens.to_tokens()).unwrap();
+        all_consuming(terminated(inc::<Assignment>(None), eof))(tokens.to_tokens()).unwrap();
     eq!(
         assignment,
         Assignment {

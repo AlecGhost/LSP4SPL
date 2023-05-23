@@ -1,7 +1,7 @@
 #![warn(clippy::nursery)]
 use ast::Program;
 use error::SplError;
-use lexer::token::Token;
+use lexer::token::{Token, TokenStream};
 use std::ops::Range;
 use table::GlobalTable;
 
@@ -75,11 +75,15 @@ impl AnalyzedSource {
     pub fn update(self, changes: Vec<TextChange>) -> Self {
         let mut analysed_source = changes.into_iter().fold(self, |mut acc, change| {
             acc.text.replace_range(change.to_range(), &change.text);
-            acc.tokens = lexer::update(&acc.text, acc.tokens, &change);
+            let (new_tokens, token_change) = lexer::update(&acc.text, acc.tokens, &change);
+            acc.tokens = new_tokens;
+            acc.ast = parser::update(
+                acc.ast,
+                TokenStream::new_with_change(&acc.tokens, token_change),
+            );
             acc
         });
         // Currently no update implemented
-        analysed_source.ast = parser::parse(&analysed_source.tokens);
         analysed_source.table = table::build(&mut analysed_source.ast);
         table::analyze(&mut analysed_source.ast, &analysed_source.table);
         analysed_source

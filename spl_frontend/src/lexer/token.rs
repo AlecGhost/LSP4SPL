@@ -296,42 +296,89 @@ impl std::fmt::Display for TokenType {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TokenChange {
+    pub deletion_range: Range<usize>,
+    pub insertion_len: usize,
+}
+
+impl TokenChange {
+    pub fn new(deletion_range: Range<usize>, insertion_len: usize) -> Self {
+        Self {
+            deletion_range,
+            insertion_len,
+        }
+    }
+
+    /// Returns true, if this range and the other range overlap.
+    /// Empty changes count as overlapping,
+    /// if they are inside the other range,
+    /// except at the very start.
+    pub fn overlaps(&self, other_range: &Range<usize>) -> bool {
+        let this_range = &self.deletion_range;
+        if this_range.is_empty() {
+            if this_range.end == other_range.start {
+                // insertion at start does not affect nonterminal
+                // it should already be handled by a previous rule
+                false
+            } else {
+                other_range.contains(&this_range.start)
+            }
+        } else {
+            this_range.start.max(other_range.start) < this_range.end.min(other_range.end)
+        }
+    }
+
+    /// Returns true, if the tokens in the other range are completely deleted by this change.
+    pub fn deletes(&self, other_range: &Range<usize>) -> bool {
+        let this_range = &self.deletion_range;
+        this_range.start <= other_range.start && other_range.end <= this_range.end
+    }
+
+    /// Returns true, if the provided position is greater or equal
+    /// to the position of the first unchanged token in the new token stream.
+    pub fn out_of_range(&self, position: usize) -> bool {
+        let first_unchanged_token =
+            self.deletion_range.end + self.insertion_len - self.deletion_range.len();
+        position >= first_unchanged_token
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TokenStream<'a> {
     tokens: &'a [Token],
     first_ptr: *const Token,
+    pub token_change: TokenChange,
     pub error_buffer: Vec<SplError>,
+    pub old_reference_pos: usize,
     pub reference_pos: usize,
 }
 
-/// source: [Stackoverflow](https://stackoverflow.com/a/57203324)
-/// enables indexing and slicing
-impl<'a, Idx> std::ops::Index<Idx> for TokenStream<'a>
-where
-    Idx: std::slice::SliceIndex<[Token]>,
-{
-    type Output = Idx::Output;
-
-    fn index(&self, index: Idx) -> &Self::Output {
-        &self.tokens[index]
-    }
-}
-
 impl<'a> TokenStream<'a> {
-    pub const fn new(tokens: &'a [Token]) -> Self {
+    pub fn new(tokens: &'a [Token]) -> Self {
+        let token_change = TokenChange::new(0..0, tokens.len());
         Self {
             tokens,
             first_ptr: tokens.as_ptr(),
+            token_change,
             error_buffer: Vec::new(),
+            old_reference_pos: 0,
+            reference_pos: 0,
+        }
+    }
+
+    pub const fn new_with_change(tokens: &'a [Token], token_change: TokenChange) -> Self {
+        Self {
+            tokens,
+            first_ptr: tokens.as_ptr(),
+            token_change,
+            error_buffer: Vec::new(),
+            old_reference_pos: 0,
             reference_pos: 0,
         }
     }
 
     /// Access to first token
-    ///
-    /// # Panics
-    ///
-    /// Panics if underlying token array is empty.
     pub fn fragment(&self) -> Option<&Token> {
         self.tokens.get(0)
     }
@@ -353,11 +400,33 @@ impl TokenStream<'_> {
     pub fn tokens(&self) -> Vec<Token> {
         self.tokens.to_owned()
     }
+
+    /// Advances the token stream by the provided offset.
+    /// The other values do not change.
+    pub fn advance(self, offset: usize) -> Self {
+        Self {
+            tokens: &self.tokens[offset..],
+            ..self
+        }
+    }
 }
 
 impl<'a> ToRange for TokenStream<'a> {
     fn to_range(&self) -> Range<usize> {
         self.fragment().map_or(0..0, |token| token.range.clone())
+    }
+}
+
+/// source: [Stackoverflow](https://stackoverflow.com/a/57203324)
+/// enables indexing and slicing
+impl<'a, Idx> std::ops::Index<Idx> for TokenStream<'a>
+where
+    Idx: std::slice::SliceIndex<[Token]>,
+{
+    type Output = Idx::Output;
+
+    fn index(&self, index: Idx) -> &Self::Output {
+        &self.tokens[index]
     }
 }
 

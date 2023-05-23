@@ -1,3 +1,4 @@
+use crate::token::TokenStream;
 use crate::Shiftable;
 use crate::{ast::Identifier, ToRange};
 use std::fmt::{Debug, Display};
@@ -223,4 +224,29 @@ impl<T: Debug> Display for KeyAlreadyExistsError<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Key `{:?}` already exists", self.key)
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ParserError<'a> {
+    pub kind: ParserErrorKind,
+    pub input: TokenStream<'a>,
+}
+
+impl<'a> nom::error::ParseError<TokenStream<'a>> for ParserError<'a> {
+    fn append(_: TokenStream, _: nom::error::ErrorKind, other: Self) -> Self {
+        other
+    }
+
+    fn from_error_kind(input: TokenStream<'a>, kind: nom::error::ErrorKind) -> Self {
+        Self { kind: ParserErrorKind::Nom(kind), input }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ParserErrorKind {
+    Token,
+    Affected,
+    Expect,
+    IgnoreUntil,
+    Nom(nom::error::ErrorKind),
 }

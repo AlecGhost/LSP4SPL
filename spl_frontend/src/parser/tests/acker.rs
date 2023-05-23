@@ -4,7 +4,7 @@ use super::*;
 fn acker() {
     let acker = std::fs::read_to_string("tests/programs/acker.spl").unwrap();
     let tokens = lex(&acker);
-    let (_, program) = all_consuming(Program::parse)(tokens.to_tokens()).unwrap();
+    let (_, program) = Program::parse(None, tokens.to_tokens()).unwrap();
 
     // variables for use in assertion
     let int_type = |tokens, offset| {

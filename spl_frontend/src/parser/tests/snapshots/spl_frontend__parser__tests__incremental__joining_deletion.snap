@@ -1,0 +1,131 @@
+---
+source: spl_frontend/src/parser/tests/incremental.rs
+expression: ast
+---
+Program {
+    global_declarations: [
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "a",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [],
+                    variable_declarations: [
+                        Reference {
+                            reference: Valid {
+                                doc: [],
+                                name: Some(
+                                    Identifier {
+                                        value: "x",
+                                        info: AstInfo {
+                                            range: 1..2,
+                                            errors: [],
+                                        },
+                                    },
+                                ),
+                                type_expr: Some(
+                                    Reference {
+                                        reference: NamedType(
+                                            Identifier {
+                                                value: "int",
+                                                info: AstInfo {
+                                                    range: 0..1,
+                                                    errors: [],
+                                                },
+                                            },
+                                        ),
+                                        offset: 3,
+                                    },
+                                ),
+                                info: AstInfo {
+                                    range: 0..5,
+                                    errors: [],
+                                },
+                            },
+                            offset: 5,
+                        },
+                    ],
+                    statements: [
+                        Reference {
+                            reference: Assignment(
+                                Assignment {
+                                    variable: NamedVariable(
+                                        Identifier {
+                                            value: "x",
+                                            info: AstInfo {
+                                                range: 0..1,
+                                                errors: [],
+                                            },
+                                        },
+                                    ),
+                                    expr: Some(
+                                        Reference {
+                                            reference: IntLiteral(
+                                                IntLiteral {
+                                                    value: Some(
+                                                        1,
+                                                    ),
+                                                    info: AstInfo {
+                                                        range: 0..1,
+                                                        errors: [],
+                                                    },
+                                                },
+                                            ),
+                                            offset: 2,
+                                        },
+                                    ),
+                                    info: AstInfo {
+                                        range: 0..4,
+                                        errors: [],
+                                    },
+                                },
+                            ),
+                            offset: 10,
+                        },
+                    ],
+                    info: AstInfo {
+                        range: 0..15,
+                        errors: [],
+                    },
+                },
+            ),
+            offset: 0,
+        },
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "main",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [],
+                    variable_declarations: [],
+                    statements: [],
+                    info: AstInfo {
+                        range: 0..6,
+                        errors: [],
+                    },
+                },
+            ),
+            offset: 15,
+        },
+    ],
+    info: AstInfo {
+        range: 0..21,
+        errors: [],
+    },
+}

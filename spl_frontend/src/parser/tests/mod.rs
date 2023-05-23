@@ -35,5 +35,6 @@ mod call_statements;
 mod expressions;
 mod idents;
 mod if_statements;
+mod incremental;
 mod keywords;
 mod type_declarations;

@@ -1,3 +1,4 @@
+use crate::parser::inc;
 use super::*;
 
 #[test]
@@ -5,7 +6,7 @@ fn simple() {
     let stmt = "a();";
     let tokens = lex(stmt);
     let (_, cs) =
-        all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
+        all_consuming(terminated(inc::<CallStatement>(None), eof))(tokens.to_tokens()).unwrap();
     eq!(
         cs,
         CallStatement {
@@ -22,7 +23,7 @@ fn simple() {
 fn with_args() {
     let stmt = "a(1, 2, 3);";
     let tokens = lex(stmt);
-    let (_, cs) = all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
+    let (_, cs) = all_consuming(terminated(inc::<CallStatement>(None), eof))(tokens.to_tokens()).unwrap();
     eq!(
         cs,
         CallStatement {
@@ -43,7 +44,7 @@ fn with_args() {
 fn trailing_comma() {
     let stmt = "a(1,)";
     let tokens = lex(stmt);
-    let (_, cs) = all_consuming(terminated(CallStatement::parse, eof))(tokens.to_tokens()).unwrap();
+    let (_, cs) = all_consuming(terminated(inc::<CallStatement>(None), eof))(tokens.to_tokens()).unwrap();
     eq!(
         cs,
         CallStatement {
