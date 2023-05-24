@@ -223,6 +223,19 @@ where
     F: InnerParser<'a, O>,
     O: super::Parser + ToRange,
 {
+    fn is_partially_consumed(input: &TokenStream, parser_start: usize) -> bool {
+        let token_change = &input.token_change;
+        let location_offset = input.location_offset();
+
+        if token_change.out_of_range(location_offset) {
+            let new_start_pos = token_change.new_token_pos(parser_start);
+            if location_offset > new_start_pos {
+                return true;
+            }
+        }
+        false
+    }
+
     fn affected_error<'a, O>(input: TokenStream<'a>) -> IResult<O> {
         Err(nom::Err::Error(ParserError {
             input,
@@ -232,32 +245,27 @@ where
     move |this, input| {
         if let Some(this) = this {
             let this_range = this.to_range().shift(input.old_reference_pos);
+            if is_partially_consumed(&input, this_range.start) {
+                // Part of the tokens, that this node pointed to,
+                // were already consumed by previous parsers.
+                // So this node is no longer valid.
+                return affected_error(input);
+            }
             // TODO: maybe dynamic affection range
-            let affection_range = this_range.start..(this_range.end + 1);
-            let affected = input.token_change.overlaps(&affection_range);
-            if affected {
+            let affected_range = this_range.start..(this_range.end + 1);
+            if input.token_change.overlaps(&affected_range) {
                 if input.token_change.deletes(&this_range) {
-                    // do not need to try re-parsing if deleted completely
-                    // this also prohibits the possibility,
-                    // that the next nonterminal in a `many` parser is analyzed
+                    // If all tokens of this node were deleted by the change,
+                    // there is no need to try to re-parsing.
+                    // This also prevents parsing of the next node.
                     return affected_error(input);
                 }
-
                 match inner_parser.parse(input) {
                     Ok(result) => Ok(result),
                     Err(nom::Err::Failure(err) | nom::Err::Error(err)) => affected_error(err.input),
                     Err(_) => panic!("Incomplete data"),
                 }
             } else {
-                let location_offset = input.location_offset();
-                if input.token_change.out_of_range(location_offset) {
-                    let theoretical_start_pos = this_range.start + input.token_change.insertion_len
-                        - input.token_change.deletion_range.len();
-                    // unaffected by change, but part of tokens were consumed
-                    if input.location_offset() > theoretical_start_pos {
-                        return affected_error(input);
-                    }
-                }
                 Ok((input.advance(this_range.len()), this))
             }
         } else {
@@ -302,15 +310,11 @@ where
         if insertion_range.contains(&location_offset) {
             parse_insertion(input, insertion_range.end)
         } else {
-            if parser_start >= token_change.deletion_range.end
-                && token_change.out_of_range(parser_start)
-            {
-                let theoretical_start_pos =
-                    parser_start + token_change.insertion_len - token_change.deletion_range.len();
-                // unaffected by change, but part of tokens were consumed
-                if location_offset < theoretical_start_pos {
-                    return parse_insertion(input, theoretical_start_pos);
-                }
+            let new_start_pos = token_change.new_token_pos(parser_start);
+            if location_offset < new_start_pos {
+                // unaffected by change,
+                // but only part of the tokens of the previous parser were consumed
+                return parse_insertion(input, new_start_pos);
             }
             Ok((input, Vec::new()))
         }

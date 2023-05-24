@@ -342,6 +342,15 @@ impl TokenChange {
             self.deletion_range.end + self.insertion_len - self.deletion_range.len();
         position >= first_unchanged_token
     }
+
+    /// Calculates the (theoretical) position of a token based on this change.
+    pub fn new_token_pos(&self, old_token_pos: usize) -> usize {
+        if old_token_pos >= self.deletion_range.end {
+            old_token_pos + self.insertion_len - self.deletion_range.len()
+        } else {
+            old_token_pos
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
