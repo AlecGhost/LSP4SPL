@@ -1,7 +1,7 @@
 use super::IResult;
 use crate::{
-    ast::{AstInfo, Reference},
-    error::{ParseErrorMessage, ParserError, ParserErrorKind},
+    ast::{AstInfo, AstInfoTraverser, Reference},
+    error::{ErrorMessage, ParseErrorMessage, ParserError, ParserErrorKind},
     lexer::token::TokenStream,
     token::Token,
     Shiftable, ToRange,
@@ -220,7 +220,7 @@ pub(super) fn affected<'a, F, O>(
 ) -> impl FnMut(Option<O>, TokenStream<'a>) -> IResult<O>
 where
     F: InnerParser<'a, O>,
-    O: super::Parser + ToRange,
+    O: super::Parser + ToRange + AstInfoTraverser,
 {
     fn is_partially_consumed(input: &TokenStream, parser_start: usize) -> bool {
         let token_change = &input.token_change;
@@ -243,7 +243,7 @@ where
     }
 
     move |this, input| {
-        if let Some(this) = this {
+        if let Some(mut this) = this {
             let this_range = this.to_range().shift(input.get_old_reference());
             if is_partially_consumed(&input, this_range.start) {
                 // Part of the tokens, that this node pointed to,
@@ -266,6 +266,19 @@ where
                     Err(_) => panic!("Incomplete data"),
                 }
             } else {
+                fn remove_messages(info: &mut AstInfo) {
+                    info.errors.retain(|err| {
+                        !matches!(
+                            err.1,
+                            ErrorMessage::BuildErrorMessage(_)
+                                | ErrorMessage::SemanticErrorMessage(_)
+                        )
+                    });
+                }
+
+                // Delete build and semantic errors from unaffected node.
+                // If the error persists, it will be re-added in the next phase.
+                this.traverse_mut(remove_messages);
                 Ok((input.advance(this_range.len()), this))
             }
         } else {

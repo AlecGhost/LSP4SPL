@@ -12,11 +12,17 @@ use std::{
 };
 
 mod error_container;
+mod ast_info_traverser;
+
+pub(crate) trait AstInfoTraverser {
+    fn traverse(&self, f: fn(&AstInfo));
+    fn traverse_mut(&mut self, f: fn(&mut AstInfo));
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AstInfo {
-    range: Range<usize>,
-    errors: Vec<SplError>,
+    pub range: Range<usize>,
+    pub errors: Vec<SplError>,
 }
 
 impl AstInfo {
