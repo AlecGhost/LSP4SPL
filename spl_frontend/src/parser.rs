@@ -713,16 +713,12 @@ impl Parser for Statement {
 
         match this {
             Some(Self::If(stmt)) => map(inc::<IfStatement>(Some(stmt)), Self::If)(input),
-            Some(Self::While(stmt)) => {
-                map(inc::<WhileStatement>(Some(stmt)), Self::While)(input)
-            }
+            Some(Self::While(stmt)) => map(inc::<WhileStatement>(Some(stmt)), Self::While)(input),
             Some(Self::Assignment(stmt)) => {
                 map(inc::<Assignment>(Some(stmt)), Self::Assignment)(input)
             }
             Some(Self::Call(stmt)) => map(inc::<CallStatement>(Some(stmt)), Self::Call)(input),
-            Some(Self::Block(stmt)) => {
-                map(inc::<BlockStatement>(Some(stmt)), Self::Block)(input)
-            }
+            Some(Self::Block(stmt)) => map(inc::<BlockStatement>(Some(stmt)), Self::Block)(input),
             _ => affected(alt((
                 map(info(symbols::semic), |(_, info)| Self::Empty(info)),
                 map(inc::<IfStatement>(None), Self::If),
@@ -799,9 +795,7 @@ impl Parser for GlobalDeclaration {
         }
 
         match this {
-            Some(Self::Type(td)) => {
-                map(inc::<TypeDeclaration>(Some(td)), Self::Type)(input)
-            }
+            Some(Self::Type(td)) => map(inc::<TypeDeclaration>(Some(td)), Self::Type)(input),
             Some(Self::Procedure(pd)) => {
                 map(inc::<ProcedureDeclaration>(Some(pd)), Self::Procedure)(input)
             }
@@ -816,30 +810,16 @@ impl Parser for GlobalDeclaration {
 
 impl Parser for Program {
     fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        // early return on no change
-        if input.token_change.insertion_len == 0 && input.token_change.deletion_range.is_empty() {
-            return Ok((
-                input,
-                this.unwrap_or_else(|| Self {
-                    global_declarations: Vec::new(),
-                    info: AstInfo::new(0..0),
-                }),
-            ));
-        }
-
-        let result = map(
+        map(
             terminated(
-                info(many(
-                    this.map(|program| program.global_declarations),
-                )),
+                info(many(this.map(|program| program.global_declarations))),
                 all_consuming(eof),
             ),
             |(global_declarations, info)| Self {
                 global_declarations,
                 info,
             },
-        )(input);
-        result
+        )(input)
     }
 }
 
