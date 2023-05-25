@@ -35,7 +35,7 @@ pub const REF: &str = "ref";
 pub const TYPE: &str = "type";
 pub const VAR: &str = "var";
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Token {
     pub token_type: TokenType,
     pub range: Range<usize>,

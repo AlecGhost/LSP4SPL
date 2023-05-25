@@ -11,8 +11,7 @@ use std::{
     ops::{Deref, DerefMut, Range},
 };
 
-// TODO: Remove Hash
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AstInfo {
     range: Range<usize>,
     errors: Vec<SplError>,
@@ -148,7 +147,7 @@ impl ErrorContainer for IntLiteral {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, ToRange, ToTextRange)]
+#[derive(Clone, Debug, PartialEq, Eq, ToRange, ToTextRange)]
 pub struct Identifier {
     pub value: String,
     pub info: AstInfo,

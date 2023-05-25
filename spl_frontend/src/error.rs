@@ -5,8 +5,7 @@ use std::fmt::{Debug, Display};
 use std::ops::Range;
 use thiserror::Error;
 
-// TODO: Remove Hash?
-#[derive(Clone, Debug, Error, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("{1}")]
 pub struct SplError(pub Range<usize>, pub String);
 
