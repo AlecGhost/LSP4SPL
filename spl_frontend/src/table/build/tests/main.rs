@@ -25,7 +25,7 @@ fn empty() {
     eq!(table, GlobalTable::initialized());
     eq!(
         errors,
-        vec![SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())]
+        vec![SplError(0..0, BuildErrorMessage::MainIsMissing.into())]
     );
 }
 
@@ -36,8 +36,8 @@ fn is_type_declaration() {
     eq!(
         errors,
         vec![
-            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()),
-            SplError(1..2, BuildErrorMessage::MainIsNotAProcedure.to_string()),
+            SplError(0..0, BuildErrorMessage::MainIsMissing.into()),
+            SplError(1..2, BuildErrorMessage::MainIsNotAProcedure.into()),
         ]
     );
 }
@@ -62,7 +62,7 @@ fn redeclaration() {
         errors,
         vec![SplError(
             1..2,
-            BuildErrorMessage::MainIsNotAProcedure.to_string()
+            BuildErrorMessage::MainIsNotAProcedure.into()
         ),]
     );
 }
@@ -104,7 +104,7 @@ fn main_with_params() {
         errors,
         vec![SplError(
             1..2,
-            BuildErrorMessage::MainMustNotHaveParameters.to_string()
+            BuildErrorMessage::MainMustNotHaveParameters.into()
         )]
     );
 }

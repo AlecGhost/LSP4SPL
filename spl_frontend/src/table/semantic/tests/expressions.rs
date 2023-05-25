@@ -15,7 +15,7 @@ fn non_int() {
         errors,
         vec![SplError(
             27..30,
-            SemanticErrorMessage::ComparisonNonInteger.to_string()
+            SemanticErrorMessage::ComparisonNonInteger.into()
         )]
     );
 }
@@ -35,7 +35,7 @@ fn op_different_types() {
         errors,
         vec![SplError(
             27..30,
-            SemanticErrorMessage::OperatorDifferentTypes.to_string(),
+            SemanticErrorMessage::OperatorDifferentTypes.into(),
         )]
     );
 }
@@ -56,11 +56,11 @@ fn arithmetic_op_non_int() {
         vec![
             SplError(
                 25..31,
-                SemanticErrorMessage::AssignmentHasDifferentTypes.to_string()
+                SemanticErrorMessage::AssignmentHasDifferentTypes.into()
             ),
             SplError(
                 27..30,
-                SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
+                SemanticErrorMessage::ArithmeticOperatorNonInteger.into(),
             ),
         ]
     );

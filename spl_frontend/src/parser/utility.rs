@@ -109,7 +109,7 @@ where
         Err(nom::Err::Error(mut err)) => {
             let pos = err.input.location_offset() - err.input.reference_pos;
             let error_pos = if pos > 0 { pos - 1 } else { 0 };
-            let spl_error = crate::error::SplError(error_pos..error_pos, error_msg.to_string());
+            let spl_error = crate::error::SplError(error_pos..error_pos, error_msg.clone().into());
             err.input.error_buffer.push(spl_error);
             Ok((err.input, None))
         }
@@ -142,7 +142,7 @@ where
 {
     move |input: TokenStream| {
         let (mut input, (out, info)) = info(|input| parser.parse(input))(input)?;
-        let spl_error = crate::error::SplError(info.to_range(), error_msg.to_string());
+        let spl_error = crate::error::SplError(info.to_range(), error_msg.clone().into());
         input.error_buffer.push(spl_error);
         Ok((input, out))
     }

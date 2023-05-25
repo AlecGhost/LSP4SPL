@@ -160,7 +160,7 @@ fn create_diagnostic(err: &SplError, text: &str) -> Diagnostic {
         code: None,
         code_description: None,
         source: None,
-        message: message.clone(),
+        message: message.to_string(),
         related_information: None,
         tags: None,
         data: None,

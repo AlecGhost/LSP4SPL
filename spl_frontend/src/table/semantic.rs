@@ -72,12 +72,12 @@ impl AnalyzeStatement for Assignment {
                 if left != right {
                     self.info.append_error(SplError(
                         self.to_range(),
-                        SemanticErrorMessage::AssignmentHasDifferentTypes.to_string(),
+                        SemanticErrorMessage::AssignmentHasDifferentTypes.into(),
                     ));
                 } else if !matches!(left, DataType::Int) {
                     self.info.append_error(SplError(
                         self.to_range(),
-                        SemanticErrorMessage::AssignmentRequiresIntegers.to_string(),
+                        SemanticErrorMessage::AssignmentRequiresIntegers.into(),
                     ));
                 }
             }
@@ -105,14 +105,14 @@ impl AnalyzeStatement for CallStatement {
                         self.info.append_error(SplError(
                             self.to_range(),
                             SemanticErrorMessage::TooFewArguments(self.name.value.clone())
-                                .to_string(),
+                                .into(),
                         ));
                     }
                     Ordering::Greater => {
                         self.info.append_error(SplError(
                             self.to_range(),
                             SemanticErrorMessage::TooManyArguments(self.name.value.clone())
-                                .to_string(),
+                                .into(),
                         ));
                     }
                 };
@@ -132,7 +132,7 @@ impl AnalyzeStatement for CallStatement {
                                 // enumeration starts with 1
                                 i + 1,
                             )
-                            .to_string(),
+                            .into(),
                         ));
                     }
                     let arg_type = arg.analyze(table);
@@ -146,7 +146,7 @@ impl AnalyzeStatement for CallStatement {
                                     // enumeration starts with 1
                                     i + 1,
                                 )
-                                .to_string(),
+                                .into(),
                             ));
                         }
                     }
@@ -154,13 +154,13 @@ impl AnalyzeStatement for CallStatement {
             } else {
                 self.info.append_error(SplError(
                     self.to_range(),
-                    SemanticErrorMessage::CallOfNoneProcedure(self.name.value.clone()).to_string(),
+                    SemanticErrorMessage::CallOfNoneProcedure(self.name.value.clone()).into(),
                 ));
             }
         } else {
             self.info.append_error(SplError(
                 self.to_range(),
-                SemanticErrorMessage::UndefinedProcedure(self.name.value.clone()).to_string(),
+                SemanticErrorMessage::UndefinedProcedure(self.name.value.clone()).into(),
             ));
         }
     }
@@ -174,7 +174,7 @@ impl AnalyzeStatement for IfStatement {
                     let range = condition.as_ref().to_range();
                     condition.info_mut().append_error(SplError(
                         range,
-                        SemanticErrorMessage::IfConditionMustBeBoolean.to_string(),
+                        SemanticErrorMessage::IfConditionMustBeBoolean.into(),
                     ));
                 }
             }
@@ -196,7 +196,7 @@ impl AnalyzeStatement for WhileStatement {
                     let range = condition.as_ref().to_range();
                     condition.info_mut().append_error(SplError(
                         range,
-                        SemanticErrorMessage::WhileConditionMustBeBoolean.to_string(),
+                        SemanticErrorMessage::WhileConditionMustBeBoolean.into(),
                     ));
                 }
             }
@@ -243,7 +243,7 @@ impl AnalyzeExpression for ArrayAccess {
                     let range = index.as_ref().as_ref().to_range();
                     index.info_mut().append_error(SplError(
                         range,
-                        SemanticErrorMessage::IndexingWithNonInteger.to_string(),
+                        SemanticErrorMessage::IndexingWithNonInteger.into(),
                     ));
                 }
                 None => {
@@ -260,7 +260,7 @@ impl AnalyzeExpression for ArrayAccess {
                 _ => {
                     self.info.append_error(SplError(
                         self.to_range(),
-                        SemanticErrorMessage::IndexingNonArray.to_string(),
+                        SemanticErrorMessage::IndexingNonArray.into(),
                     ));
                     None
                 }
@@ -291,19 +291,19 @@ impl AnalyzeExpression for BinaryExpression {
             (Some(DataType::Int), Some(_)) | (Some(_), Some(DataType::Int)) => {
                 self.info.append_error(SplError(
                     self.to_range(),
-                    SemanticErrorMessage::OperatorDifferentTypes.to_string(),
+                    SemanticErrorMessage::OperatorDifferentTypes.into(),
                 ));
             }
             (Some(_), Some(_)) => {
                 if self.operator.is_arithmetic() {
                     self.info.append_error(SplError(
                         self.to_range(),
-                        SemanticErrorMessage::ArithmeticOperatorNonInteger.to_string(),
+                        SemanticErrorMessage::ArithmeticOperatorNonInteger.into(),
                     ));
                 } else {
                     self.info.append_error(SplError(
                         self.to_range(),
-                        SemanticErrorMessage::ComparisonNonInteger.to_string(),
+                        SemanticErrorMessage::ComparisonNonInteger.into(),
                     ));
                 }
             }

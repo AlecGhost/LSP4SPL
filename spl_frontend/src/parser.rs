@@ -420,7 +420,7 @@ impl Parser for VariableDeclaration {
             let (input, (_, mut info)) = info(ignore_until1(peek(look_ahead::var_dec)))(input)?;
             let err = SplError(
                 info.to_range(),
-                ParseErrorMessage::ExpectedToken("variable declaration".to_string()).to_string(),
+                ParseErrorMessage::ExpectedToken("variable declaration".to_string()).into(),
             );
             info.append_error(err);
             Ok((input, VariableDeclaration::Error(info)))
@@ -500,7 +500,7 @@ impl Parser for ParameterDeclaration {
             )))))(input)?;
             let err = SplError(
                 info.to_range(),
-                ParseErrorMessage::ExpectedToken("parameter declaration".to_string()).to_string(),
+                ParseErrorMessage::ExpectedToken("parameter declaration".to_string()).into(),
             );
             info.append_error(err);
             Ok((input, ParameterDeclaration::Error(info)))
@@ -536,7 +536,7 @@ impl Parser for CallStatement {
                     |(_, mut info)| {
                         let err = SplError(
                             info.to_range(),
-                            ParseErrorMessage::ExpectedToken("expression".to_string()).to_string(),
+                            ParseErrorMessage::ExpectedToken("expression".to_string()).into(),
                         );
                         info.append_error(err);
                         Expression::Error(info)
@@ -704,7 +704,7 @@ impl Parser for Statement {
                 ParseErrorMessage::UnexpectedCharacters(
                     ignored.iter().map(|token| token.to_string()).collect(),
                 )
-                .to_string(),
+                .into(),
             );
             info.append_error(err);
             let stmt = Statement::Error(info);
@@ -791,7 +791,7 @@ impl Parser for GlobalDeclaration {
                 ParseErrorMessage::UnexpectedCharacters(
                     ignored.iter().map(|token| token.to_string()).collect(),
                 )
-                .to_string(),
+                .into(),
             );
             info.append_error(err);
             let gd = GlobalDeclaration::Error(info);

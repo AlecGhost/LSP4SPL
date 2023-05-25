@@ -6,10 +6,10 @@ fn type_proc() {
     eq!(
         errors,
         vec![
-            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()),
+            SplError(0..0, BuildErrorMessage::MainIsMissing.into()),
             SplError(
                 6..7,
-                BuildErrorMessage::RedeclarationAsProcedure("a".to_string()).to_string()
+                BuildErrorMessage::RedeclarationAsProcedure("a".to_string()).into()
             ),
         ]
     );
@@ -21,10 +21,10 @@ fn proc_type() {
     eq!(
         errors,
         vec![
-            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()),
+            SplError(0..0, BuildErrorMessage::MainIsMissing.into()),
             SplError(
                 7..8,
-                BuildErrorMessage::RedeclarationAsType("a".to_string()).to_string()
+                BuildErrorMessage::RedeclarationAsType("a".to_string()).into()
             ),
         ]
     );
@@ -36,10 +36,10 @@ fn param() {
     eq!(
         errors,
         vec![
-            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()),
+            SplError(0..0, BuildErrorMessage::MainIsMissing.into()),
             SplError(
                 7..8,
-                BuildErrorMessage::RedeclarationAsParameter("i".to_string()).to_string()
+                BuildErrorMessage::RedeclarationAsParameter("i".to_string()).into()
             ),
         ]
     );
@@ -57,7 +57,7 @@ fn variable() {
         errors,
         vec![SplError(
             11..12,
-            BuildErrorMessage::RedeclarationAsVariable("i".to_string()).to_string()
+            BuildErrorMessage::RedeclarationAsVariable("i".to_string()).into()
         )]
     );
 }

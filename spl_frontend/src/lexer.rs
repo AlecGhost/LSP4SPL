@@ -246,7 +246,7 @@ impl Lexer for Int {
             |_| {
                 let err = SplError(
                     int_span.to_range(),
-                    LexErrorMessage::InvalidIntLit(int_span.to_string()).to_string(),
+                    LexErrorMessage::InvalidIntLit(int_span.to_string()).into(),
                 );
                 Ok((
                     input,
@@ -280,7 +280,7 @@ impl Lexer for Hex {
                 |_| {
                     let err = SplError(
                         hex_span.to_range(),
-                        LexErrorMessage::InvalidIntLit("0x".to_string() + &hex_span).to_string(),
+                        LexErrorMessage::InvalidIntLit("0x".to_string() + &hex_span).into(),
                     );
                     errors.push(err);
                     IntResult::Err(hex_span.to_string())

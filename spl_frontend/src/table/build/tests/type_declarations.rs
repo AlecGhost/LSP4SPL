@@ -17,7 +17,7 @@ fn simple() {
     );
     eq!(
         errors,
-        vec![SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())]
+        vec![SplError(0..0, BuildErrorMessage::MainIsMissing.into())]
     );
 }
 
@@ -42,7 +42,7 @@ fn array() {
     );
     eq!(
         errors,
-        vec![SplError(0..0, BuildErrorMessage::MainIsMissing.to_string())]
+        vec![SplError(0..0, BuildErrorMessage::MainIsMissing.into())]
     );
 }
 
@@ -64,10 +64,10 @@ fn invalid_bool() {
     eq!(
         errors,
         vec![
-            SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()),
+            SplError(0..0, BuildErrorMessage::MainIsMissing.into()),
             SplError(
                 3..4,
-                BuildErrorMessage::UndefinedType("bool".to_string()).to_string()
+                BuildErrorMessage::UndefinedType("bool".to_string()).into()
             ),
         ]
     );

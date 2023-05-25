@@ -54,7 +54,7 @@ where
     move |input: Span| match inner(input) {
         Ok((input, out)) => Ok((input, Ok(out))),
         Err(_) => {
-            let err = crate::error::SplError(error_pos..error_pos, error_msg.to_string());
+            let err = crate::error::SplError(error_pos..error_pos, error_msg.clone().into());
             Ok((input, Err(err)))
         }
     }

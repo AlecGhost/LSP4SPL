@@ -19,7 +19,7 @@ fn if_not_boolean() {
         errors,
         vec![SplError(
             7..8,
-            SemanticErrorMessage::IfConditionMustBeBoolean.to_string()
+            SemanticErrorMessage::IfConditionMustBeBoolean.into()
         )]
     );
 }
@@ -31,7 +31,7 @@ fn while_not_boolean() {
         errors,
         vec![SplError(
             7..8,
-            SemanticErrorMessage::WhileConditionMustBeBoolean.to_string()
+            SemanticErrorMessage::WhileConditionMustBeBoolean.into()
         )]
     );
 }

@@ -29,7 +29,7 @@ fn different_types() {
         errors,
         vec![SplError(
             25..32,
-            SemanticErrorMessage::AssignmentHasDifferentTypes.to_string()
+            SemanticErrorMessage::AssignmentHasDifferentTypes.into()
         ),]
     );
 }
@@ -48,7 +48,7 @@ fn non_array_int() {
         errors,
         vec![SplError(
             10..14,
-            SemanticErrorMessage::IndexingNonArray.to_string()
+            SemanticErrorMessage::IndexingNonArray.into()
         )]
     );
 }
@@ -68,7 +68,7 @@ fn non_array_wrong_dim() {
         errors,
         vec![SplError(
             25..35,
-            SemanticErrorMessage::IndexingNonArray.to_string()
+            SemanticErrorMessage::IndexingNonArray.into()
         )]
     );
 }
@@ -88,7 +88,7 @@ fn index_non_integer() {
         errors,
         vec![SplError(
             27..30,
-            SemanticErrorMessage::IndexingWithNonInteger.to_string()
+            SemanticErrorMessage::IndexingWithNonInteger.into()
         )]
     );
 }

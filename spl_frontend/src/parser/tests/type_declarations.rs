@@ -92,14 +92,14 @@ fn missing_array_index() {
                                     SplError(
                                         1..1,
                                         ParseErrorMessage::ExpectedToken("int literal".to_string())
-                                            .to_string()
+                                            .into()
                                     ),
                                     SplError(
                                         3..3,
                                         ParseErrorMessage::ExpectedToken(
                                             "type expression".to_string()
                                         )
-                                        .to_string()
+                                        .into()
                                     ),
                                 ]
                             ),
@@ -110,7 +110,7 @@ fn missing_array_index() {
                         0..8,
                         vec![SplError(
                             1..1,
-                            ParseErrorMessage::ExpectedToken("int literal".to_string()).to_string()
+                            ParseErrorMessage::ExpectedToken("int literal".to_string()).into()
                         ),]
                     ),
                 },
@@ -120,7 +120,7 @@ fn missing_array_index() {
                 0..11,
                 vec![SplError(
                     0..0,
-                    ParseErrorMessage::ExpectedToken("identifier".to_string()).to_string()
+                    ParseErrorMessage::ExpectedToken("identifier".to_string()).into()
                 ),]
             ),
         },

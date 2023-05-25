@@ -39,7 +39,7 @@ fn invalid_equals_symbol() {
                         token::ASSIGN.to_string(),
                         token::EQ.to_string()
                     )
-                    .to_string()
+                    .into()
                 )],
             ),
         },

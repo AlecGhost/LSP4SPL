@@ -56,7 +56,7 @@ fn trailing_comma() {
                         0..0,
                         vec![SplError(
                             0..0,
-                            ParseErrorMessage::ExpectedToken("expression".to_string()).to_string()
+                            ParseErrorMessage::ExpectedToken("expression".to_string()).into()
                         ),],
                     )),
                     4
@@ -66,7 +66,7 @@ fn trailing_comma() {
                 0..5,
                 vec![SplError(
                     4..4,
-                    ParseErrorMessage::MissingTrailingSemic.to_string()
+                    ParseErrorMessage::MissingTrailingSemic.into()
                 ),],
             ),
         },

@@ -7,7 +7,7 @@ use thiserror::Error;
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("{1}")]
-pub struct SplError(pub Range<usize>, pub String);
+pub struct SplError(pub Range<usize>, pub ErrorMessage);
 
 impl ToRange for SplError {
     fn to_range(&self) -> Range<usize> {
@@ -31,13 +31,61 @@ impl Identifier {
     pub fn to_error<M, T>(&self, msg: M) -> SplError
     where
         M: Fn(String) -> T,
-        T: ToString,
+        T: Into<ErrorMessage>,
     {
         // Identifier position is the last in the range (which might contain comments)
         let end_pos = self.to_range().end;
         assert!(end_pos > 0, "Identifier must contain at least one token");
         let start_pos = end_pos - 1;
-        SplError(start_pos..end_pos, msg(self.value.clone()).to_string())
+        SplError(start_pos..end_pos, msg(self.value.clone()).into())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ErrorMessage {
+    LexErrorMessage(LexErrorMessage),
+    ParseErrorMessage(ParseErrorMessage),
+    BuildErrorMessage(BuildErrorMessage),
+    SemanticErrorMessage(SemanticErrorMessage),
+}
+
+impl From<LexErrorMessage> for ErrorMessage {
+    fn from(value: LexErrorMessage) -> Self {
+        Self::LexErrorMessage(value)
+    }
+}
+
+impl From<ParseErrorMessage> for ErrorMessage {
+    fn from(value: ParseErrorMessage) -> Self {
+        Self::ParseErrorMessage(value)
+    }
+}
+
+impl From<BuildErrorMessage> for ErrorMessage {
+    fn from(value: BuildErrorMessage) -> Self {
+        Self::BuildErrorMessage(value)
+    }
+}
+
+impl From<SemanticErrorMessage> for ErrorMessage {
+    fn from(value: SemanticErrorMessage) -> Self {
+        Self::SemanticErrorMessage(value)
+    }
+}
+
+impl Display for ErrorMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ErrorMessage::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                LexErrorMessage(msg) => msg.to_string(),
+                ParseErrorMessage(msg) => msg.to_string(),
+                BuildErrorMessage(msg) => msg.to_string(),
+                SemanticErrorMessage(msg) => msg.to_string(),
+            }
+        )
     }
 }
 
@@ -237,7 +285,10 @@ impl<'a> nom::error::ParseError<TokenStream<'a>> for ParserError<'a> {
     }
 
     fn from_error_kind(input: TokenStream<'a>, kind: nom::error::ErrorKind) -> Self {
-        Self { kind: ParserErrorKind::Nom(kind), input }
+        Self {
+            kind: ParserErrorKind::Nom(kind),
+            input,
+        }
     }
 }
 

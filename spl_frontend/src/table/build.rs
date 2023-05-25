@@ -37,7 +37,7 @@ impl TableBuilder for Program {
                 if !main.parameters.is_empty() {
                     self.info.append_error(SplError(
                         main.name.to_range(),
-                        BuildErrorMessage::MainMustNotHaveParameters.to_string(),
+                        BuildErrorMessage::MainMustNotHaveParameters.into(),
                     ));
                 }
             } else {
@@ -45,7 +45,7 @@ impl TableBuilder for Program {
             }
         } else {
             self.info
-                .append_error(SplError(0..0, BuildErrorMessage::MainIsMissing.to_string()));
+                .append_error(SplError(0..0, BuildErrorMessage::MainIsMissing.into()));
         }
     }
 }
@@ -67,7 +67,7 @@ impl TableBuilder for TypeDeclaration {
             if name.value == "main" {
                 name.info.append_error(SplError(
                     name.to_range(),
-                    BuildErrorMessage::MainIsNotAProcedure.to_string(),
+                    BuildErrorMessage::MainIsNotAProcedure.into(),
                 ));
                 return;
             }
