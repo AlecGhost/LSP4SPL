@@ -235,7 +235,7 @@ where
         false
     }
 
-    fn affected_error<'a, O>(input: TokenStream<'a>) -> IResult<O> {
+    const fn affected_error<O>(input: TokenStream) -> IResult<O> {
         Err(nom::Err::Error(ParserError {
             input,
             kind: ParserErrorKind::Affected,
@@ -294,10 +294,10 @@ pub(super) fn many<'a, O>(
 where
     O: super::Parser + ToRange + Clone + std::fmt::Debug,
 {
-    fn parse_insertion<'a, 'b, O: super::Parser>(
+    fn parse_insertion<'a, O: super::Parser>(
         mut input: TokenStream<'a>,
         end_pos: usize,
-        acc: &'b mut Vec<O>,
+        acc: &mut Vec<O>,
     ) -> IResult<'a, ()> {
         while input.location_offset() < end_pos {
             let (i, out) = match O::parse(None, input.clone()) {
@@ -310,10 +310,10 @@ where
         Ok((input, ()))
     }
 
-    fn handle_insertions<'a, 'b, O: super::Parser>(
+    fn handle_insertions<'a, O: super::Parser>(
         input: TokenStream<'a>,
         parser_start: usize,
-        acc: &'b mut Vec<O>,
+        acc: &mut Vec<O>,
     ) -> IResult<'a, ()> {
         let location_offset = input.location_offset();
         let token_change = &input.token_change;

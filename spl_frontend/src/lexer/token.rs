@@ -303,7 +303,7 @@ pub struct TokenChange {
 }
 
 impl TokenChange {
-    pub fn new(deletion_range: Range<usize>, insertion_len: usize) -> Self {
+    pub const fn new(deletion_range: Range<usize>, insertion_len: usize) -> Self {
         Self {
             deletion_range,
             insertion_len,
@@ -330,7 +330,7 @@ impl TokenChange {
     }
 
     /// Returns true, if the tokens in the other range are completely deleted by this change.
-    pub fn deletes(&self, other_range: &Range<usize>) -> bool {
+    pub const fn deletes(&self, other_range: &Range<usize>) -> bool {
         let this_range = &self.deletion_range;
         this_range.start <= other_range.start && other_range.end <= this_range.end
     }
@@ -364,7 +364,7 @@ pub struct TokenStream<'a> {
 }
 
 impl<'a> TokenStream<'a> {
-    pub fn new(tokens: &'a [Token]) -> Self {
+    pub const fn new(tokens: &'a [Token]) -> Self {
         let token_change = TokenChange::new(0..0, tokens.len());
         Self {
             tokens,
@@ -420,7 +420,7 @@ impl TokenStream<'_> {
     }
 
     pub fn get_old_reference(&self) -> usize {
-        self.inc_references.iter().fold(0, |acc, i| acc + i)
+        self.inc_references.iter().sum()
     }
 }
 

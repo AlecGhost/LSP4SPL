@@ -11,8 +11,8 @@ use std::{
     ops::{Deref, DerefMut, Range},
 };
 
-mod error_container;
 mod ast_info_traverser;
+mod error_container;
 
 pub(crate) trait AstInfoTraverser {
     fn traverse(&self, f: fn(&AstInfo));

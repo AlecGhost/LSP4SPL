@@ -301,10 +301,10 @@ impl Parser for TypeExpression {
         }
 
         match this {
-            Some(TypeExpression::NamedType(name)) => {
+            Some(Self::NamedType(name)) => {
                 map(inc::<Identifier>(Some(name)), Self::NamedType)(input)
             }
-            Some(TypeExpression::ArrayType { .. }) => parse_array_type(this, input),
+            Some(Self::ArrayType { .. }) => parse_array_type(this, input),
             None => affected(alt((
                 |input| parse_array_type(None, input),
                 map(inc::<Identifier>(None), Self::NamedType),
@@ -427,7 +427,7 @@ impl Parser for VariableDeclaration {
         }
 
         match this {
-            Some(VariableDeclaration::Valid { .. }) => parse_valid(this, input),
+            Some(Self::Valid { .. }) => parse_valid(this, input),
             _ => affected(alt((|input| parse_valid(None, input), parse_error)))(this, input),
         }
     }
@@ -507,7 +507,7 @@ impl Parser for ParameterDeclaration {
         }
 
         match this {
-            Some(ParameterDeclaration::Valid { .. }) => parse_valid(this, input),
+            Some(Self::Valid { .. }) => parse_valid(this, input),
             _ => affected(alt((|input| parse_valid(None, input), parse_error)))(this, input),
         }
     }
@@ -712,15 +712,15 @@ impl Parser for Statement {
         }
 
         match this {
-            Some(Statement::If(stmt)) => map(inc::<IfStatement>(Some(stmt)), Self::If)(input),
-            Some(Statement::While(stmt)) => {
+            Some(Self::If(stmt)) => map(inc::<IfStatement>(Some(stmt)), Self::If)(input),
+            Some(Self::While(stmt)) => {
                 map(inc::<WhileStatement>(Some(stmt)), Self::While)(input)
             }
-            Some(Statement::Assignment(stmt)) => {
+            Some(Self::Assignment(stmt)) => {
                 map(inc::<Assignment>(Some(stmt)), Self::Assignment)(input)
             }
-            Some(Statement::Call(stmt)) => map(inc::<CallStatement>(Some(stmt)), Self::Call)(input),
-            Some(Statement::Block(stmt)) => {
+            Some(Self::Call(stmt)) => map(inc::<CallStatement>(Some(stmt)), Self::Call)(input),
+            Some(Self::Block(stmt)) => {
                 map(inc::<BlockStatement>(Some(stmt)), Self::Block)(input)
             }
             _ => affected(alt((
@@ -799,10 +799,10 @@ impl Parser for GlobalDeclaration {
         }
 
         match this {
-            Some(GlobalDeclaration::Type(td)) => {
+            Some(Self::Type(td)) => {
                 map(inc::<TypeDeclaration>(Some(td)), Self::Type)(input)
             }
-            Some(GlobalDeclaration::Procedure(pd)) => {
+            Some(Self::Procedure(pd)) => {
                 map(inc::<ProcedureDeclaration>(Some(pd)), Self::Procedure)(input)
             }
             _ => affected(alt((
@@ -820,7 +820,7 @@ impl Parser for Program {
         if input.token_change.insertion_len == 0 && input.token_change.deletion_range.is_empty() {
             return Ok((
                 input,
-                this.unwrap_or_else(|| Program {
+                this.unwrap_or_else(|| Self {
                     global_declarations: Vec::new(),
                     info: AstInfo::new(0..0),
                 }),
@@ -830,7 +830,7 @@ impl Parser for Program {
         let result = map(
             terminated(
                 info(many(
-                    this.clone().map(|program| program.global_declarations),
+                    this.map(|program| program.global_declarations),
                 )),
                 all_consuming(eof),
             ),
@@ -862,7 +862,7 @@ impl<T: Parser> Parser for Reference<T> {
                 }
                 Ok((
                     input,
-                    Reference {
+                    Self {
                         reference: out,
                         offset,
                     },
