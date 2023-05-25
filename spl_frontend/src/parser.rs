@@ -3,12 +3,13 @@ use crate::{
     error::{ParseErrorMessage, ParserError, SplError},
     lexer::token::{IntResult, Token, TokenStream, TokenType},
     parser::utility::{
-        affected, alt, confusable, expect, ignore_until0, ignore_until1, info, many, parse_list,
+        affected, confusable, expect, ignore_until0, ignore_until1, info, many, parse_list,
         reference,
     },
     token, ToRange,
 };
 use nom::{
+    branch::alt,
     bytes::complete::take,
     combinator::{all_consuming, map, opt, peek, recognize},
     multi::many0,
@@ -48,8 +49,8 @@ fn inc<'a, P: Parser + Clone>(node: Option<P>) -> impl FnMut(TokenStream<'a>) ->
 }
 
 impl Parser for IntLiteral {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        map(
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        affected(map(
             info(alt((
                 map(hex, |token| {
                     if let TokenType::Hex(hex_result) = token.token_type {
@@ -80,27 +81,27 @@ impl Parser for IntLiteral {
                 }),
             ))),
             |(value, info)| Self { value, info },
-        )(input)
+        ))(this, input)
     }
 }
 
 impl Parser for Identifier {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        map(info(ident), |(ident, info)| Self {
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        affected(map(info(ident), |(ident, info)| Self {
             value: ident.to_string(),
             info,
-        })(input)
+        }))(this, input)
     }
 }
 
 impl Parser for Variable {
     fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
         let (input, ((mut variable, variable_info), accesses)) = pair(
-            info(map(inc(None), Self::NamedVariable)),
+            info(map(inc::<Identifier>(None), Self::NamedVariable)),
             many0(info(delimited(
                 symbols::lbracket,
                 expect(
-                    reference(inc::<Expression>(None)),
+                    inc::<Reference<Expression>>(None),
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
                 expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
@@ -120,7 +121,7 @@ impl Parser for Variable {
 }
 
 impl Parser for Expression {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
         fn parse_bracketed(input: TokenStream) -> IResult<Expression> {
             // Bracketed := "(" Expr ")"
             let (input, (((_, lparen_info), expr, _), info)) = info(tuple((
@@ -252,47 +253,63 @@ impl Parser for Expression {
         }
 
         // Expr := Comp
-        parse_comparison(input)
+        affected(parse_comparison)(this, input)
     }
 }
 
 impl Parser for TypeExpression {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        fn parse_array_type(input: TokenStream) -> IResult<TypeExpression> {
-            let (input, ((_, _, size, _, _, type_expr), info)) = info(tuple((
-                keywords::array,
-                expect(
-                    symbols::lbracket,
-                    ParseErrorMessage::ExpectedToken("[".to_string()),
-                ),
-                expect(
-                    inc::<IntLiteral>(None),
-                    ParseErrorMessage::ExpectedToken("int literal".to_string()),
-                ),
-                expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
-                expect(
-                    keywords::of,
-                    ParseErrorMessage::ExpectedToken("of".to_string()),
-                ),
-                expect(
-                    reference(inc::<TypeExpression>(None)),
-                    ParseErrorMessage::ExpectedToken("type expression".to_string()),
-                ),
-            )))(input)?;
-            Ok((
-                input,
-                TypeExpression::ArrayType {
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        fn parse_array_type(
+            this: Option<TypeExpression>,
+            input: TokenStream,
+        ) -> IResult<TypeExpression> {
+            let (size, base_type) = match this.clone() {
+                Some(TypeExpression::ArrayType {
+                    size, base_type, ..
+                }) => (size, base_type.map(|boxed| *boxed)),
+                None => (None, None),
+                _ => panic!("Must be array type"),
+            };
+
+            affected(map(
+                info(tuple((
+                    keywords::array,
+                    expect(
+                        symbols::lbracket,
+                        ParseErrorMessage::ExpectedToken("[".to_string()),
+                    ),
+                    expect(
+                        inc::<IntLiteral>(size),
+                        ParseErrorMessage::ExpectedToken("int literal".to_string()),
+                    ),
+                    expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
+                    expect(
+                        keywords::of,
+                        ParseErrorMessage::ExpectedToken("of".to_string()),
+                    ),
+                    expect(
+                        inc::<Reference<TypeExpression>>(base_type),
+                        ParseErrorMessage::ExpectedToken("type expression".to_string()),
+                    ),
+                ))),
+                |((_, _, size, _, _, type_expr), info)| TypeExpression::ArrayType {
                     size,
                     base_type: type_expr.map(Box::new),
                     info,
                 },
-            ))
+            ))(this, input)
         }
 
-        alt((
-            parse_array_type,
-            map(inc::<Identifier>(None), Self::NamedType),
-        ))(input)
+        match this {
+            Some(TypeExpression::NamedType(name)) => {
+                map(inc::<Identifier>(Some(name)), Self::NamedType)(input)
+            }
+            Some(TypeExpression::ArrayType { .. }) => parse_array_type(this, input),
+            None => affected(alt((
+                |input| parse_array_type(None, input),
+                map(inc::<Identifier>(None), Self::NamedType),
+            )))(this, input),
+        }
     }
 }
 
@@ -303,7 +320,7 @@ impl Parser for TypeDeclaration {
                 many0(comment),
                 keywords::r#type,
                 expect(
-                    inc::<Identifier>(None),
+                    inc::<Identifier>(this.clone().and_then(|td| td.name)),
                     ParseErrorMessage::ExpectedToken("identifier".to_string()),
                 ),
                 expect(
@@ -327,7 +344,7 @@ impl Parser for TypeDeclaration {
                     ParseErrorMessage::ExpectedToken(token::EQ.to_string()),
                 ),
                 expect(
-                    reference(inc::<TypeExpression>(None)),
+                    inc::<Reference<TypeExpression>>(this.clone().and_then(|td| td.type_expr)),
                     ParseErrorMessage::ExpectedToken("type expression".to_string()),
                 ),
                 expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
@@ -343,50 +360,60 @@ impl Parser for TypeDeclaration {
 }
 
 impl Parser for VariableDeclaration {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        fn parse_valid(input: TokenStream) -> IResult<VariableDeclaration> {
-            let (input, ((doc, _, name, _, type_expr, _), info)) = info(tuple((
-                many0(comment),
-                keywords::var,
-                expect(
-                    inc::<Identifier>(None),
-                    ParseErrorMessage::ExpectedToken("identifier".to_string()),
-                ),
-                expect(
-                    alt((
-                        symbols::colon,
-                        confusable(
-                            symbols::assign,
-                            ParseErrorMessage::ConfusedToken(
-                                token::COLON.to_string(),
-                                token::ASSIGN.to_string(),
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        fn parse_valid(
+            this: Option<VariableDeclaration>,
+            input: TokenStream,
+        ) -> IResult<VariableDeclaration> {
+            let (name, type_expr) = match this.clone() {
+                Some(VariableDeclaration::Valid {
+                    name, type_expr, ..
+                }) => (name, type_expr),
+                None => (None, None),
+                _ => panic!("Must be valid variable declaration"),
+            };
+
+            affected(map(
+                info(tuple((
+                    many0(comment),
+                    keywords::var,
+                    expect(
+                        inc::<Identifier>(name),
+                        ParseErrorMessage::ExpectedToken("identifier".to_string()),
+                    ),
+                    expect(
+                        alt((
+                            symbols::colon,
+                            confusable(
+                                symbols::assign,
+                                ParseErrorMessage::ConfusedToken(
+                                    token::COLON.to_string(),
+                                    token::ASSIGN.to_string(),
+                                ),
                             ),
-                        ),
-                        confusable(
-                            symbols::eq,
-                            ParseErrorMessage::ConfusedToken(
-                                token::COLON.to_string(),
-                                token::EQ.to_string(),
+                            confusable(
+                                symbols::eq,
+                                ParseErrorMessage::ConfusedToken(
+                                    token::COLON.to_string(),
+                                    token::EQ.to_string(),
+                                ),
                             ),
-                        ),
-                    )),
-                    ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
-                ),
-                expect(
-                    reference(inc::<TypeExpression>(None)),
-                    ParseErrorMessage::ExpectedToken("type expression".to_string()),
-                ),
-                expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
-            )))(input)?;
-            Ok((
-                input,
-                VariableDeclaration::Valid {
+                        )),
+                        ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
+                    ),
+                    expect(
+                        inc::<Reference<TypeExpression>>(type_expr),
+                        ParseErrorMessage::ExpectedToken("type expression".to_string()),
+                    ),
+                    expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+                ))),
+                |((doc, _, name, _, type_expr, _), info)| VariableDeclaration::Valid {
                     doc,
                     name,
                     type_expr,
                     info,
                 },
-            ))
+            ))(this, input)
         }
 
         fn parse_error(input: TokenStream) -> IResult<VariableDeclaration> {
@@ -399,54 +426,69 @@ impl Parser for VariableDeclaration {
             Ok((input, VariableDeclaration::Error(info)))
         }
 
-        alt((parse_valid, parse_error))(input)
+        match this {
+            Some(VariableDeclaration::Valid { .. }) => parse_valid(this, input),
+            _ => affected(alt((|input| parse_valid(None, input), parse_error)))(this, input),
+        }
     }
 }
 
 impl Parser for ParameterDeclaration {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        fn parse_valid(input: TokenStream) -> IResult<ParameterDeclaration> {
-            let (input, ((doc, (ref_kw, name), _, type_expr, _), info)) = info(tuple((
-                many0(comment),
-                alt((
-                    map(
-                        pair(
-                            keywords::r#ref,
-                            expect(
-                                inc::<Identifier>(None),
-                                ParseErrorMessage::ExpectedToken("identifier".to_string()),
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        fn parse_valid(
+            this: Option<ParameterDeclaration>,
+            input: TokenStream,
+        ) -> IResult<ParameterDeclaration> {
+            let (name, type_expr) = match this.clone() {
+                Some(ParameterDeclaration::Valid {
+                    name, type_expr, ..
+                }) => (name, type_expr),
+                None => (None, None),
+                _ => panic!("Must be valid parameter"),
+            };
+
+            affected(map(
+                info(tuple((
+                    many0(comment),
+                    alt((
+                        map(
+                            pair(
+                                keywords::r#ref,
+                                expect(
+                                    inc::<Identifier>(name.clone()),
+                                    ParseErrorMessage::ExpectedToken("identifier".to_string()),
+                                ),
                             ),
+                            |pair| (Some(pair.0), pair.1),
                         ),
-                        |pair| (Some(pair.0), pair.1),
+                        map(inc::<Identifier>(name), |ident| (None, Some(ident))),
+                    )),
+                    expect(
+                        symbols::colon,
+                        ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
                     ),
-                    map(inc::<Identifier>(None), |ident| (None, Some(ident))),
-                )),
-                expect(
-                    symbols::colon,
-                    ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
-                ),
-                expect(
-                    reference(inc::<TypeExpression>(None)),
-                    ParseErrorMessage::ExpectedToken("type expression".to_string()),
-                ),
-                peek(alt((
-                    recognize(symbols::rparen),
-                    recognize(symbols::lcurly),
-                    recognize(symbols::comma),
-                    recognize(eof),
+                    expect(
+                        inc::<Reference<TypeExpression>>(type_expr),
+                        ParseErrorMessage::ExpectedToken("type expression".to_string()),
+                    ),
+                    peek(alt((
+                        recognize(symbols::rparen),
+                        recognize(symbols::lcurly),
+                        recognize(symbols::comma),
+                        recognize(eof),
+                    ))),
                 ))),
-            )))(input)?;
-            let is_ref = ref_kw.is_some();
-            Ok((
-                input,
-                ParameterDeclaration::Valid {
-                    doc,
-                    is_ref,
-                    name,
-                    type_expr,
-                    info,
+                |((doc, (ref_kw, name), _, type_expr, _), info)| {
+                    let is_ref = ref_kw.is_some();
+                    ParameterDeclaration::Valid {
+                        doc,
+                        is_ref,
+                        name,
+                        type_expr,
+                        info,
+                    }
                 },
-            ))
+            ))(this, input)
         }
 
         fn parse_error(input: TokenStream) -> IResult<ParameterDeclaration> {
@@ -464,12 +506,15 @@ impl Parser for ParameterDeclaration {
             Ok((input, ParameterDeclaration::Error(info)))
         }
 
-        alt((parse_valid, parse_error))(input)
+        match this {
+            Some(ParameterDeclaration::Valid { .. }) => parse_valid(this, input),
+            _ => affected(alt((|input| parse_valid(None, input), parse_error)))(this, input),
+        }
     }
 }
 
 impl Parser for CallStatement {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
         fn parse_call_expression(input: TokenStream) -> IResult<Expression> {
             alt((
                 terminated(
@@ -500,9 +545,12 @@ impl Parser for CallStatement {
             ))(input)
         }
 
-        map(
+        affected(map(
             info(tuple((
-                terminated(inc::<Identifier>(None), symbols::lparen),
+                terminated(
+                    inc::<Identifier>(this.clone().map(|c| c.name)),
+                    symbols::lparen,
+                ),
                 alt((
                     map(
                         peek(alt((
@@ -522,116 +570,130 @@ impl Parser for CallStatement {
                 arguments,
                 info,
             },
-        )(input)
+        ))(this, input)
     }
 }
 
 impl Parser for Assignment {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        let (input, ((variable, expr, _), info)) = info(tuple((
-            terminated(
-                inc::<Variable>(None),
-                alt((
-                    symbols::assign,
-                    confusable(
-                        symbols::eq,
-                        ParseErrorMessage::ConfusedToken(
-                            token::ASSIGN.to_string(),
-                            token::EQ.to_string(),
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        affected(map(
+            info(tuple((
+                terminated(
+                    inc::<Variable>(this.clone().map(|assignment| assignment.variable)),
+                    alt((
+                        symbols::assign,
+                        confusable(
+                            symbols::eq,
+                            ParseErrorMessage::ConfusedToken(
+                                token::ASSIGN.to_string(),
+                                token::EQ.to_string(),
+                            ),
                         ),
+                    )),
+                ),
+                expect(
+                    inc::<Reference<Expression>>(
+                        this.clone().and_then(|assignment| assignment.expr),
                     ),
-                )),
-            ),
-            expect(
-                reference(inc::<Expression>(None)),
-                ParseErrorMessage::ExpectedToken("expression".to_string()),
-            ),
-            expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
-        )))(input)?;
-        Ok((
-            input,
-            Self {
+                    ParseErrorMessage::ExpectedToken("expression".to_string()),
+                ),
+                expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+            ))),
+            |((variable, expr, _), info)| Self {
                 variable,
                 expr,
                 info,
             },
-        ))
+        ))(this, input)
     }
 }
 
 impl Parser for IfStatement {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        let (input, ((_, _, condition, _, if_branch, else_branch), info)) = info(tuple((
-            keywords::r#if,
-            expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
-            expect(
-                reference(inc::<Expression>(None)),
-                ParseErrorMessage::ExpectedToken("expression".to_string()),
-            ),
-            expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-            expect(
-                reference(inc::<Statement>(None)),
-                ParseErrorMessage::ExpectedToken("expression".to_string()),
-            ),
-            opt(preceded(
-                keywords::r#else,
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        affected(map(
+            info(tuple((
+                keywords::r#if,
+                expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
                 expect(
-                    reference(inc::<Statement>(None)),
-                    ParseErrorMessage::ExpectedToken("statement".to_string()),
+                    inc::<Reference<Expression>>(
+                        this.clone().and_then(|if_stmt| if_stmt.condition),
+                    ),
+                    ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
-            )),
-        )))(input)?;
-        Ok((
-            input,
-            Self {
+                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+                expect(
+                    inc::<Reference<Statement>>(
+                        this.clone()
+                            .and_then(|if_stmt| if_stmt.if_branch.map(|boxed| *boxed)),
+                    ),
+                    ParseErrorMessage::ExpectedToken("expression".to_string()),
+                ),
+                opt(preceded(
+                    keywords::r#else,
+                    expect(
+                        inc::<Reference<Statement>>(
+                            this.clone()
+                                .and_then(|if_stmt| if_stmt.else_branch.map(|boxed| *boxed)),
+                        ),
+                        ParseErrorMessage::ExpectedToken("statement".to_string()),
+                    ),
+                )),
+            ))),
+            |((_, _, condition, _, if_branch, else_branch), info)| Self {
                 condition,
                 if_branch: if_branch.map(Box::new),
                 else_branch: else_branch.flatten().map(Box::new),
                 info,
             },
-        ))
+        ))(this, input)
     }
 }
 
 impl Parser for WhileStatement {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        let (input, ((_, _, condition, _, stmt), info)) = info(tuple((
-            keywords::r#while,
-            expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
-            expect(
-                reference(inc::<Expression>(None)),
-                ParseErrorMessage::ExpectedToken("expression".to_string()),
-            ),
-            expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-            expect(
-                reference(inc::<Statement>(None)),
-                ParseErrorMessage::ExpectedToken("expression".to_string()),
-            ),
-        )))(input)?;
-        Ok((
-            input,
-            Self {
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        affected(map(
+            info(tuple((
+                keywords::r#while,
+                expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
+                expect(
+                    inc::<Reference<Expression>>(
+                        this.clone().and_then(|while_stmt| while_stmt.condition),
+                    ),
+                    ParseErrorMessage::ExpectedToken("expression".to_string()),
+                ),
+                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+                expect(
+                    inc::<Reference<Statement>>(
+                        this.clone()
+                            .and_then(|while_stmt| while_stmt.statement.map(|boxed| *boxed)),
+                    ),
+                    ParseErrorMessage::ExpectedToken("expression".to_string()),
+                ),
+            ))),
+            |((_, _, condition, _, stmt), info)| Self {
                 condition,
                 statement: stmt.map(Box::new),
                 info,
             },
-        ))
+        ))(this, input)
     }
 }
 
 impl Parser for BlockStatement {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        let (input, (statements, info)) = info(delimited(
-            symbols::lcurly,
-            many0(reference(inc::<Statement>(None))),
-            expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
-        ))(input)?;
-        Ok((input, Self { statements, info }))
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        affected(map(
+            info(delimited(
+                symbols::lcurly,
+                many(this.clone().map(|block_stmt| block_stmt.statements)),
+                expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
+            )),
+            |(statements, info)| Self { statements, info },
+        ))(this, input)
     }
 }
 
 impl Parser for Statement {
-    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
         fn parse_error(input: TokenStream) -> IResult<Statement> {
             let (input, ((_, ignored), mut info)) = info(tuple((
                 many0(comment),
@@ -649,15 +711,28 @@ impl Parser for Statement {
             Ok((input, stmt))
         }
 
-        alt((
-            map(info(symbols::semic), |(_, info)| Self::Empty(info)),
-            map(inc::<IfStatement>(None), Self::If),
-            map(inc::<WhileStatement>(None), Self::While),
-            map(inc::<BlockStatement>(None), Self::Block),
-            map(inc::<CallStatement>(None), Self::Call),
-            map(inc::<Assignment>(None), Self::Assignment),
-            parse_error,
-        ))(input)
+        match this {
+            Some(Statement::If(stmt)) => map(inc::<IfStatement>(Some(stmt)), Self::If)(input),
+            Some(Statement::While(stmt)) => {
+                map(inc::<WhileStatement>(Some(stmt)), Self::While)(input)
+            }
+            Some(Statement::Assignment(stmt)) => {
+                map(inc::<Assignment>(Some(stmt)), Self::Assignment)(input)
+            }
+            Some(Statement::Call(stmt)) => map(inc::<CallStatement>(Some(stmt)), Self::Call)(input),
+            Some(Statement::Block(stmt)) => {
+                map(inc::<BlockStatement>(Some(stmt)), Self::Block)(input)
+            }
+            _ => affected(alt((
+                map(info(symbols::semic), |(_, info)| Self::Empty(info)),
+                map(inc::<IfStatement>(None), Self::If),
+                map(inc::<WhileStatement>(None), Self::While),
+                map(inc::<BlockStatement>(None), Self::Block),
+                map(inc::<CallStatement>(None), Self::Call),
+                map(inc::<Assignment>(None), Self::Assignment),
+                parse_error,
+            )))(this, input),
+        }
     }
 }
 
@@ -668,7 +743,7 @@ impl Parser for ProcedureDeclaration {
                 many0(comment),
                 keywords::proc,
                 expect(
-                    inc::<Identifier>(None),
+                    inc::<Identifier>(this.clone().and_then(|pd| pd.name)),
                     ParseErrorMessage::ExpectedToken("identifier".to_string()),
                 ),
                 expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
@@ -681,12 +756,12 @@ impl Parser for ProcedureDeclaration {
                         ))),
                         |_| Vec::new(),
                     ),
-                    parse_list(reference(inc::<ParameterDeclaration>(None))),
+                    parse_list(inc::<Reference<ParameterDeclaration>>(None)),
                 )),
                 expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
                 expect(symbols::lcurly, ParseErrorMessage::MissingOpening('{')),
-                many0(reference(inc::<VariableDeclaration>(None))),
-                many0(reference(inc::<Statement>(None))),
+                many(this.clone().map(|pd| pd.variable_declarations)),
+                many(this.clone().map(|pd| pd.statements)),
                 expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
             ))),
             |((doc, _, name, _, parameters, _, _, variable_declarations, statements, _), info)| {
@@ -771,12 +846,9 @@ impl Parser for Program {
 impl<T: Parser> Parser for Reference<T> {
     fn parse(this: Option<Self>, mut input: TokenStream) -> IResult<Self> {
         let reference_backup = input.reference_pos;
+        let some_this = this.is_some();
         if let Some(this) = &this {
-            input.old_reference_pos = if this.offset < input.old_reference_pos {
-                input.old_reference_pos + this.offset
-            } else {
-                this.offset
-            };
+            input.inc_references.push(this.offset);
         }
         input.reference_pos = input.location_offset();
         let offset = input.reference_pos - reference_backup;
@@ -785,6 +857,9 @@ impl<T: Parser> Parser for Reference<T> {
             Ok((mut input, out)) => {
                 // recover backup
                 input.reference_pos = reference_backup;
+                if some_this {
+                    input.inc_references.pop();
+                }
                 Ok((
                     input,
                     Reference {
@@ -796,6 +871,7 @@ impl<T: Parser> Parser for Reference<T> {
             Err(nom::Err::Failure(mut err) | nom::Err::Error(mut err)) => {
                 // recover backup
                 err.input.reference_pos = reference_backup;
+                err.input.inc_references.pop();
                 Err(nom::Err::Error(err))
             }
             Err(_) => panic!("Incomplete data"),

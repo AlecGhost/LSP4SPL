@@ -359,7 +359,7 @@ pub struct TokenStream<'a> {
     first_ptr: *const Token,
     pub token_change: TokenChange,
     pub error_buffer: Vec<SplError>,
-    pub old_reference_pos: usize,
+    pub inc_references: Vec<usize>,
     pub reference_pos: usize,
 }
 
@@ -371,7 +371,7 @@ impl<'a> TokenStream<'a> {
             first_ptr: tokens.as_ptr(),
             token_change,
             error_buffer: Vec::new(),
-            old_reference_pos: 0,
+            inc_references: Vec::new(),
             reference_pos: 0,
         }
     }
@@ -382,7 +382,7 @@ impl<'a> TokenStream<'a> {
             first_ptr: tokens.as_ptr(),
             token_change,
             error_buffer: Vec::new(),
-            old_reference_pos: 0,
+            inc_references: Vec::new(),
             reference_pos: 0,
         }
     }
@@ -417,6 +417,10 @@ impl TokenStream<'_> {
             tokens: &self.tokens[offset..],
             ..self
         }
+    }
+
+    pub fn get_old_reference(&self) -> usize {
+        self.inc_references.iter().fold(0, |acc, i| acc + i)
     }
 }
 

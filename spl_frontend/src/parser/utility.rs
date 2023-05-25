@@ -8,7 +8,6 @@ use crate::{
 };
 use nom::{
     bytes::complete::take,
-    error::ParseError,
     multi::many0,
     sequence::preceded,
     {InputTake, Offset},
@@ -107,7 +106,7 @@ where
 {
     move |input: TokenStream| match parser.parse(input) {
         Ok((input, out)) => Ok((input, Some(out))),
-        Err(nom::Err::Failure(mut err) | nom::Err::Error(mut err)) => {
+        Err(nom::Err::Error(mut err)) => {
             let pos = err.input.location_offset() - err.input.reference_pos;
             let error_pos = if pos > 0 { pos - 1 } else { 0 };
             let spl_error = crate::error::SplError(error_pos..error_pos, error_msg.to_string());
@@ -121,7 +120,7 @@ where
 /// Parses a comma separated list of parsers
 pub(super) fn parse_list<'a, O, F>(mut parser: F) -> impl FnMut(TokenStream<'a>) -> IResult<Vec<O>>
 where
-    F: InnerParser<'a, O>,
+    F: InnerParser<'a, O>, // O: super::Parser + ToRange + Clone+ std::fmt::Debug,
 {
     move |input: TokenStream| {
         // Create new parser from closure because `InnerParser` must be used with `parse` function
@@ -174,7 +173,7 @@ where
                 };
                 Ok((input, (out, info)))
             }
-            Err(nom::Err::Failure(mut err) | nom::Err::Error(mut err)) => {
+            Err(nom::Err::Error(mut err)) => {
                 // recover backup
                 err.input.error_buffer = error_backup;
                 Err(nom::Err::Error(err))
@@ -206,7 +205,7 @@ where
                     },
                 ))
             }
-            Err(nom::Err::Failure(mut err) | nom::Err::Error(mut err)) => {
+            Err(nom::Err::Error(mut err)) => {
                 // recover backup
                 err.input.reference_pos = reference_backup;
                 Err(nom::Err::Error(err))
@@ -242,9 +241,10 @@ where
             kind: ParserErrorKind::Affected,
         }))
     }
+
     move |this, input| {
         if let Some(this) = this {
-            let this_range = this.to_range().shift(input.old_reference_pos);
+            let this_range = this.to_range().shift(input.get_old_reference());
             if is_partially_consumed(&input, this_range.start) {
                 // Part of the tokens, that this node pointed to,
                 // were already consumed by previous parsers.
@@ -262,7 +262,7 @@ where
                 }
                 match inner_parser.parse(input) {
                     Ok(result) => Ok(result),
-                    Err(nom::Err::Failure(err) | nom::Err::Error(err)) => affected_error(err.input),
+                    Err(nom::Err::Error(err)) => affected_error(err.input),
                     Err(_) => panic!("Incomplete data"),
                 }
             } else {
@@ -281,42 +281,42 @@ pub(super) fn many<'a, O>(
 where
     O: super::Parser + ToRange + Clone + std::fmt::Debug,
 {
-    fn parse_insertion<O: super::Parser>(
-        mut input: TokenStream,
+    fn parse_insertion<'a, 'b, O: super::Parser>(
+        mut input: TokenStream<'a>,
         end_pos: usize,
-    ) -> IResult<Vec<O>> {
-        let mut acc = Vec::new();
+        acc: &'b mut Vec<O>,
+    ) -> IResult<'a, ()> {
         while input.location_offset() < end_pos {
             let (i, out) = match O::parse(None, input.clone()) {
-                Err(nom::Err::Error(_)) => return Ok((input, acc)),
+                Ok(result) => result,
                 Err(e) => return Err(e),
-                Ok((i, out)) => (i, out),
             };
             acc.push(out);
             input = i;
         }
-        Ok((input, acc))
+        Ok((input, ()))
     }
 
-    fn handle_insertions<O: super::Parser>(
-        input: TokenStream,
+    fn handle_insertions<'a, 'b, O: super::Parser>(
+        input: TokenStream<'a>,
         parser_start: usize,
-    ) -> IResult<Vec<O>> {
+        acc: &'b mut Vec<O>,
+    ) -> IResult<'a, ()> {
         let location_offset = input.location_offset();
         let token_change = &input.token_change;
         let change_start = token_change.deletion_range.start;
         let insertion_range = change_start..(change_start + token_change.insertion_len);
 
         if insertion_range.contains(&location_offset) {
-            parse_insertion(input, insertion_range.end)
+            parse_insertion(input, insertion_range.end, acc)
         } else {
             let new_start_pos = token_change.new_token_pos(parser_start);
             if location_offset < new_start_pos {
                 // unaffected by change,
                 // but only part of the tokens of the previous parser were consumed
-                return parse_insertion(input, new_start_pos);
+                return parse_insertion(input, new_start_pos, acc);
             }
-            Ok((input, Vec::new()))
+            Ok((input, ()))
         }
     }
 
@@ -325,8 +325,11 @@ where
         let parsers = inner_parser.clone().unwrap_or_default();
         for parser in parsers {
             let parser_start = parser.to_range().start;
-            let (i, out) = handle_insertions(input.clone(), parser_start)?;
-            acc.extend(out);
+            let (i, _) = match handle_insertions(input.clone(), parser_start, &mut acc) {
+                Ok(result) => result,
+                Err(nom::Err::Error(err)) => return Ok((err.input, acc)),
+                Err(e) => return Err(e),
+            };
             input = i;
             let (i, out) = match O::parse(Some(parser), input.clone()) {
                 Err(nom::Err::Error(ParserError {
@@ -356,103 +359,3 @@ where
         Ok((input, acc))
     }
 }
-
-/// Copy of `nom::branch::alt`.
-/// Important difference:
-/// Fails if one of the alternatives produces an `Affected` error.
-pub(super) fn alt<'a, O, List: Alt<'a, O>>(
-    mut l: List,
-) -> impl FnMut(TokenStream<'a>) -> IResult<O> {
-    move |i| l.choice(i)
-}
-
-// Trait implementation and macros also from `nom::branch::alt`.
-pub(super) trait Alt<'a, O> {
-    /// Tests each parser in the tuple and returns the result of the first one that succeeds
-    fn choice(&mut self, input: TokenStream<'a>) -> IResult<'a, O>;
-}
-
-macro_rules! succ (
-    (0, $submac:ident ! ($($rest:tt)*)) => ($submac!(1, $($rest)*));
-    (1, $submac:ident ! ($($rest:tt)*)) => ($submac!(2, $($rest)*));
-    (2, $submac:ident ! ($($rest:tt)*)) => ($submac!(3, $($rest)*));
-    (3, $submac:ident ! ($($rest:tt)*)) => ($submac!(4, $($rest)*));
-    (4, $submac:ident ! ($($rest:tt)*)) => ($submac!(5, $($rest)*));
-    (5, $submac:ident ! ($($rest:tt)*)) => ($submac!(6, $($rest)*));
-    (6, $submac:ident ! ($($rest:tt)*)) => ($submac!(7, $($rest)*));
-    (7, $submac:ident ! ($($rest:tt)*)) => ($submac!(8, $($rest)*));
-    (8, $submac:ident ! ($($rest:tt)*)) => ($submac!(9, $($rest)*));
-    (9, $submac:ident ! ($($rest:tt)*)) => ($submac!(10, $($rest)*));
-    (10, $submac:ident ! ($($rest:tt)*)) => ($submac!(11, $($rest)*));
-    (11, $submac:ident ! ($($rest:tt)*)) => ($submac!(12, $($rest)*));
-    (12, $submac:ident ! ($($rest:tt)*)) => ($submac!(13, $($rest)*));
-    (13, $submac:ident ! ($($rest:tt)*)) => ($submac!(14, $($rest)*));
-    (14, $submac:ident ! ($($rest:tt)*)) => ($submac!(15, $($rest)*));
-    (15, $submac:ident ! ($($rest:tt)*)) => ($submac!(16, $($rest)*));
-    (16, $submac:ident ! ($($rest:tt)*)) => ($submac!(17, $($rest)*));
-    (17, $submac:ident ! ($($rest:tt)*)) => ($submac!(18, $($rest)*));
-    (18, $submac:ident ! ($($rest:tt)*)) => ($submac!(19, $($rest)*));
-    (19, $submac:ident ! ($($rest:tt)*)) => ($submac!(20, $($rest)*));
-    (20, $submac:ident ! ($($rest:tt)*)) => ($submac!(21, $($rest)*));
-);
-
-macro_rules! alt_trait(
-    ($first:ident $second:ident $($id: ident)+) => (
-        alt_trait!(__impl $first $second; $($id)+);
-    );
-    (__impl $($current:ident)*; $head:ident $($id: ident)+) => (
-        alt_trait_impl!($($current)*);
-
-        alt_trait!(__impl $($current)* $head; $($id)+);
-    );
-    (__impl $($current:ident)*; $head:ident) => (
-        alt_trait_impl!($($current)*);
-        alt_trait_impl!($($current)* $head);
-    );
-);
-
-macro_rules! alt_trait_impl(
-    ($($id:ident)+) => (
-        impl<'a, Output, $($id: InnerParser<'a, Output>),+> Alt<'a, Output> for ( $($id),+ ) {
-            fn choice(&mut self, input: TokenStream<'a>) -> IResult<'a, Output> {
-                match self.0.parse(input.clone()) {
-                    Err(nom::Err::Error(ParserError {
-                        kind: ParserErrorKind::Affected,
-                        input
-                    })) => Err(nom::Err::Error(ParserError {
-                        kind: ParserErrorKind::Affected,
-                        input
-                    })),
-                    Err(nom::Err::Error(e)) => {
-                        alt_trait_inner!(1, self, input, e, $($id)+)
-                    },
-                    res => res,
-                }
-            }
-        }
-    );
-);
-
-macro_rules! alt_trait_inner(
-    ($it:tt, $self:expr, $input:expr, $err:expr, $head:ident $($id:ident)+) => (
-        match $self.$it.parse($input.clone()) {
-            Err(nom::Err::Error(ParserError {
-                kind: ParserErrorKind::Affected,
-                input
-            })) => Err(nom::Err::Error(ParserError {
-                kind: ParserErrorKind::Affected,
-                input
-            })),
-            Err(nom::Err::Error(e)) => {
-                let err = $err.or(e);
-                succ!($it, alt_trait_inner!($self, $input, err, $($id)+))
-            }
-            res => res,
-    }
-    );
-    ($it:tt, $self:expr, $input:expr, $err:expr, $head:ident) => (
-        Err(nom::Err::Error(ParserError::append($input, nom::error::ErrorKind::Alt, $err)))
-    );
-);
-
-alt_trait!(A B C D E F G H I J K L M N O P Q R S T U);

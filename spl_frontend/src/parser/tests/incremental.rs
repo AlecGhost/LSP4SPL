@@ -270,3 +270,22 @@ proc main() {}
     let ast = test_incremental(text, change);
     assert_debug_snapshot!(ast);
 }
+
+#[test]
+fn delete_inside_block() {
+    let text = "
+proc main() {
+    if (1=1) {
+        x := 1;
+    } else {
+        main();
+    }
+}
+";
+    let change = TextChange {
+        range: 30..46,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
