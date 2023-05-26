@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use spl_frontend::{
     ast::Program,
     lexer, parser,
@@ -48,19 +48,16 @@ fn prepare_parser(tuple: (String, TextChange, Vec<Token>)) -> (Vec<Token>, Token
 
 fn no_change_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("no_change");
-    group.measurement_time(Duration::from_secs(15));
 
     // lexer
     let (text, text_change, tokens) = no_change();
     group.bench_function("lexer", |b| b.iter(|| lexer::lex(black_box(&text))));
     group.bench_function("lexer_inc", |b| {
-        b.iter(|| {
-            lexer::update(
-                black_box(&text),
-                black_box(tokens.clone()),
-                black_box(&text_change),
-            )
-        })
+        b.iter_batched(
+            || tokens.clone(),
+            |tokens| lexer::update(black_box(&text), black_box(tokens), black_box(&text_change)),
+            BatchSize::SmallInput,
+        )
     });
 
     // parser
@@ -68,39 +65,47 @@ fn no_change_benchmark(c: &mut Criterion) {
     let input = TokenStream::new_with_change(&tokens, token_change);
     group.bench_function("parser", |b| b.iter(|| parser::parse(black_box(&tokens))));
     group.bench_function("parser_inc", |b| {
-        b.iter(|| parser::update(black_box(program.clone()), black_box(input.clone())))
+        b.iter_batched(
+            || (program.clone(), input.clone()),
+            |(program, input)| parser::update(black_box(program), black_box(input)),
+            BatchSize::SmallInput,
+        )
     });
 
     // complete
     group.bench_function("complete", |b| {
-        b.iter(|| AnalyzedSource::new(black_box(text.clone())))
+        b.iter_batched(
+            || text.clone(),
+            |text| AnalyzedSource::new(black_box(text)),
+            BatchSize::SmallInput,
+        )
     });
     let analyzed_source = AnalyzedSource::new(text.clone());
     group.bench_function("complete_inc", |b| {
-        b.iter(|| {
-            AnalyzedSource::update(
-                black_box(analyzed_source.clone()),
-                black_box(vec![text_change.clone()]),
-            )
-        })
+        b.iter_batched(
+            || {
+                let src = analyzed_source.clone();
+                let changes = vec![text_change.clone()];
+                (src, changes)
+            },
+            |(src, changes)| AnalyzedSource::update(black_box(src), black_box(changes)),
+            BatchSize::SmallInput,
+        )
     });
 }
 
 fn single_token_change_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("single_token_change");
-    group.measurement_time(Duration::from_secs(15));
 
     // lexer
     let (text, text_change, tokens) = single_character_change();
     group.bench_function("lexer", |b| b.iter(|| lexer::lex(black_box(&text))));
     group.bench_function("lexer_inc", |b| {
-        b.iter(|| {
-            lexer::update(
-                black_box(&text),
-                black_box(tokens.clone()),
-                black_box(&text_change),
-            )
-        })
+        b.iter_batched(
+            || tokens.clone(),
+            |tokens| lexer::update(black_box(&text), black_box(tokens), black_box(&text_change)),
+            BatchSize::SmallInput,
+        )
     });
 
     // parser
@@ -108,39 +113,47 @@ fn single_token_change_benchmark(c: &mut Criterion) {
     let input = TokenStream::new_with_change(&tokens, token_change);
     group.bench_function("parser", |b| b.iter(|| parser::parse(black_box(&tokens))));
     group.bench_function("parser_inc", |b| {
-        b.iter(|| parser::update(black_box(program.clone()), black_box(input.clone())))
+        b.iter_batched(
+            || (program.clone(), input.clone()),
+            |(program, input)| parser::update(black_box(program), black_box(input)),
+            BatchSize::SmallInput,
+        )
     });
 
     // complete
     group.bench_function("complete", |b| {
-        b.iter(|| AnalyzedSource::new(black_box(text.clone())))
+        b.iter_batched(
+            || text.clone(),
+            |text| AnalyzedSource::new(black_box(text)),
+            BatchSize::SmallInput,
+        )
     });
     let analyzed_source = AnalyzedSource::new(text.clone());
     group.bench_function("complete_inc", |b| {
-        b.iter(|| {
-            AnalyzedSource::update(
-                black_box(analyzed_source.clone()),
-                black_box(vec![text_change.clone()]),
-            )
-        })
+        b.iter_batched(
+            || {
+                let src = analyzed_source.clone();
+                let changes = vec![text_change.clone()];
+                (src, changes)
+            },
+            |(src, changes)| AnalyzedSource::update(black_box(src), black_box(changes)),
+            BatchSize::SmallInput,
+        )
     });
 }
 
 fn double_source_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("double_source");
-    group.measurement_time(Duration::from_secs(22));
 
     // lexer
     let (text, text_change, tokens) = double_source();
     group.bench_function("lexer", |b| b.iter(|| lexer::lex(black_box(&text))));
     group.bench_function("lexer_inc", |b| {
-        b.iter(|| {
-            lexer::update(
-                black_box(&text),
-                black_box(tokens.clone()),
-                black_box(&text_change),
-            )
-        })
+        b.iter_batched(
+            || tokens.clone(),
+            |tokens| lexer::update(black_box(&text), black_box(tokens), black_box(&text_change)),
+            BatchSize::SmallInput,
+        )
     });
 
     // parser
@@ -148,28 +161,38 @@ fn double_source_benchmark(c: &mut Criterion) {
     let input = TokenStream::new_with_change(&tokens, token_change);
     group.bench_function("parser", |b| b.iter(|| parser::parse(black_box(&tokens))));
     group.bench_function("parser_inc", |b| {
-        b.iter(|| parser::update(black_box(program.clone()), black_box(input.clone())))
+        b.iter_batched(
+            || (program.clone(), input.clone()),
+            |(program, input)| parser::update(black_box(program), black_box(input)),
+            BatchSize::SmallInput,
+        )
     });
 
     // complete
     group.bench_function("complete", |b| {
-        b.iter(|| AnalyzedSource::new(black_box(text.clone())))
+        b.iter_batched(
+            || text.clone(),
+            |text| AnalyzedSource::new(black_box(text)),
+            BatchSize::SmallInput,
+        )
     });
     let analyzed_source = AnalyzedSource::new(text.clone());
-    group.bench_function("complete_inc", |b| {
-        b.iter(|| {
-            AnalyzedSource::update(
-                black_box(analyzed_source.clone()),
-                black_box(vec![text_change.clone()]),
-            )
-        })
+    group.bench_function("complete_inc", move |b| {
+        b.iter_batched(
+            || {
+                let src = analyzed_source.clone();
+                let changes = vec![text_change.clone()];
+                (src, changes)
+            },
+            |(src, changes)| AnalyzedSource::update(black_box(src), black_box(changes)),
+            BatchSize::SmallInput,
+        )
     });
 }
 
-criterion_group!(
-    benches,
-    no_change_benchmark,
-    single_token_change_benchmark,
-    double_source_benchmark
-);
+criterion_group! {
+    name = benches;
+    config = Criterion::default().measurement_time(Duration::from_secs(60)).sample_size(500);
+    targets = no_change_benchmark, single_token_change_benchmark, double_source_benchmark
+}
 criterion_main!(benches);
