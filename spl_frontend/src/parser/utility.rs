@@ -300,10 +300,7 @@ where
         acc: &mut Vec<O>,
     ) -> IResult<'a, ()> {
         while input.location_offset() < end_pos {
-            let (i, out) = match O::parse(None, input.clone()) {
-                Ok(result) => result,
-                Err(e) => return Err(e),
-            };
+            let (i, out) = O::parse(None, input.clone())?;
             acc.push(out);
             input = i;
         }
@@ -320,17 +317,14 @@ where
         let change_start = token_change.deletion_range.start;
         let insertion_range = change_start..(change_start + token_change.insertion_len);
 
-        if insertion_range.contains(&location_offset) {
-            parse_insertion(input, insertion_range.end, acc)
+        let end_pos = if insertion_range.contains(&location_offset) {
+            insertion_range.end
         } else {
-            let new_start_pos = token_change.new_token_pos(parser_start);
-            if location_offset < new_start_pos {
-                // unaffected by change,
-                // but only part of the tokens of the previous parser were consumed
-                return parse_insertion(input, new_start_pos, acc);
-            }
-            Ok((input, ()))
-        }
+            // unaffected by change,
+            // but there are unconsumed tokens before this parsers starting position
+            token_change.new_token_pos(parser_start)
+        };
+        parse_insertion(input, end_pos, acc)
     }
 
     move |mut input| {
@@ -357,17 +351,12 @@ where
                 Err(e) => {
                     return Err(e);
                 }
-                Ok((i, out)) => (i, out),
+                Ok(result) => result,
             };
             acc.push(out);
             input = i;
         }
-        // TODO: handle properly, only when really needed
-        let (input, out) = match many0(|input| O::parse(None, input))(input) {
-            Ok(result) => result,
-            Err(nom::Err::Error(err)) => return Ok((err.input, acc)),
-            Err(err) => return Err(err),
-        };
+        let (input, out) = many0(|input| O::parse(None, input))(input)?;
         acc.extend(out);
         Ok((input, acc))
     }
