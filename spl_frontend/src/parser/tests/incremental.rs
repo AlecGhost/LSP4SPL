@@ -14,17 +14,15 @@ fn test_incremental(text: &str, change: TextChange) -> Program {
     new_text.replace_range(change.to_range(), &change.text);
     let tokens = lexer::lex(&new_text);
     let (inc_tokens, token_change) = lexer::update(&new_text, analyzed_source.tokens, &change);
-    assert_eq!(tokens, inc_tokens);
+    assert_eq!(inc_tokens, tokens);
 
-    eprintln!("Parsing normal...");
     let ast = parser::parse(&tokens);
-    eprintln!("Parsing inc...");
     let inc_ast = parser::update(
         analyzed_source.ast,
         TokenStream::new_with_change(&inc_tokens, token_change),
     );
 
-    assert_eq!(ast, inc_ast);
+    assert_eq!(inc_ast, ast);
     inc_ast
 }
 
@@ -301,6 +299,66 @@ proc main() {}
     let change = TextChange {
         range: 10..12,
         text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn delete_condition_lhs() {
+    let text = "
+proc main() {
+    if (0 <= 1) {}
+}
+";
+    let change = TextChange {
+        range: 23..24,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn insert_condition_lhs() {
+    let text = "
+proc main() {
+    if ( <= 1) {}
+}
+";
+    let change = TextChange {
+        range: 23..23,
+        text: "0".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn delete_condition_rhs() {
+    let text = "
+proc main() {
+    if (0 <= 1) {}
+}
+";
+    let change = TextChange {
+        range: 28..29,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn insert_condition_rhs() {
+    let text = "
+proc main() {
+    if (0 <= ) {}
+}
+";
+    let change = TextChange {
+        range: 28..28,
+        text: "1".to_string(),
     };
     let ast = test_incremental(text, change);
     assert_debug_snapshot!(ast);

@@ -200,12 +200,13 @@ impl Parser for Expression {
                 inc(parser),
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             )(input)?;
-            let error_pos = lhs.to_range().end;
+            let pos = input.location_offset() - input.reference_pos;
+            let error_pos = if pos > 0 { pos - 1 } else { 0 };
             let rhs = rhs.unwrap_or_else(|| Expression::Error(AstInfo::new(error_pos..error_pos)));
             // all errors are stored in lhs and rhs expressions.
             // Operators cannot lead to errors.
             let expr_start = lhs.to_range().start;
-            let expr_end = rhs.to_range().end;
+            let expr_end = pos;
             let info = AstInfo::new(expr_start..expr_end);
             let exp = Expression::Binary(BinaryExpression {
                 operator,
