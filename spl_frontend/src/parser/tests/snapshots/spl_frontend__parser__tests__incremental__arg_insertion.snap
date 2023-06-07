@@ -1,0 +1,99 @@
+---
+source: spl_frontend/src/parser/tests/incremental.rs
+expression: ast
+---
+Program {
+    global_declarations: [
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "a",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [],
+                    variable_declarations: [],
+                    statements: [
+                        Reference {
+                            reference: Call(
+                                CallStatement {
+                                    name: Identifier {
+                                        value: "b",
+                                        info: AstInfo {
+                                            range: 0..1,
+                                            errors: [],
+                                        },
+                                    },
+                                    arguments: [
+                                        Reference {
+                                            reference: IntLiteral(
+                                                IntLiteral {
+                                                    value: Some(
+                                                        1,
+                                                    ),
+                                                    info: AstInfo {
+                                                        range: 0..1,
+                                                        errors: [],
+                                                    },
+                                                },
+                                            ),
+                                            offset: 2,
+                                        },
+                                        Reference {
+                                            reference: IntLiteral(
+                                                IntLiteral {
+                                                    value: Some(
+                                                        2,
+                                                    ),
+                                                    info: AstInfo {
+                                                        range: 0..1,
+                                                        errors: [],
+                                                    },
+                                                },
+                                            ),
+                                            offset: 4,
+                                        },
+                                        Reference {
+                                            reference: IntLiteral(
+                                                IntLiteral {
+                                                    value: Some(
+                                                        3,
+                                                    ),
+                                                    info: AstInfo {
+                                                        range: 0..1,
+                                                        errors: [],
+                                                    },
+                                                },
+                                            ),
+                                            offset: 6,
+                                        },
+                                    ],
+                                    info: AstInfo {
+                                        range: 0..9,
+                                        errors: [],
+                                    },
+                                },
+                            ),
+                            offset: 5,
+                        },
+                    ],
+                    info: AstInfo {
+                        range: 0..15,
+                        errors: [],
+                    },
+                },
+            ),
+            offset: 0,
+        },
+    ],
+    info: AstInfo {
+        range: 0..15,
+        errors: [],
+    },
+}

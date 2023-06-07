@@ -1,0 +1,126 @@
+---
+source: spl_frontend/src/parser/tests/incremental.rs
+expression: ast
+---
+Program {
+    global_declarations: [
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "a",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [
+                        Reference {
+                            reference: Error(
+                                AstInfo {
+                                    range: 0..0,
+                                    errors: [
+                                        SplError(
+                                            0..0,
+                                            ParseErrorMessage(
+                                                ExpectedToken(
+                                                    "parameter declaration",
+                                                ),
+                                            ),
+                                        ),
+                                    ],
+                                },
+                            ),
+                            offset: 3,
+                        },
+                        Reference {
+                            reference: Valid {
+                                doc: [],
+                                is_ref: false,
+                                name: Some(
+                                    Identifier {
+                                        value: "y",
+                                        info: AstInfo {
+                                            range: 0..1,
+                                            errors: [],
+                                        },
+                                    },
+                                ),
+                                type_expr: Some(
+                                    Reference {
+                                        reference: NamedType(
+                                            Identifier {
+                                                value: "int",
+                                                info: AstInfo {
+                                                    range: 0..1,
+                                                    errors: [],
+                                                },
+                                            },
+                                        ),
+                                        offset: 2,
+                                    },
+                                ),
+                                info: AstInfo {
+                                    range: 0..3,
+                                    errors: [],
+                                },
+                            },
+                            offset: 4,
+                        },
+                    ],
+                    variable_declarations: [],
+                    statements: [
+                        Reference {
+                            reference: Assignment(
+                                Assignment {
+                                    variable: NamedVariable(
+                                        Identifier {
+                                            value: "x",
+                                            info: AstInfo {
+                                                range: 0..1,
+                                                errors: [],
+                                            },
+                                        },
+                                    ),
+                                    expr: Some(
+                                        Reference {
+                                            reference: IntLiteral(
+                                                IntLiteral {
+                                                    value: Some(
+                                                        1,
+                                                    ),
+                                                    info: AstInfo {
+                                                        range: 0..1,
+                                                        errors: [],
+                                                    },
+                                                },
+                                            ),
+                                            offset: 2,
+                                        },
+                                    ),
+                                    info: AstInfo {
+                                        range: 0..4,
+                                        errors: [],
+                                    },
+                                },
+                            ),
+                            offset: 9,
+                        },
+                    ],
+                    info: AstInfo {
+                        range: 0..14,
+                        errors: [],
+                    },
+                },
+            ),
+            offset: 0,
+        },
+    ],
+    info: AstInfo {
+        range: 0..14,
+        errors: [],
+    },
+}

@@ -289,3 +289,63 @@ proc main() {
     let ast = test_incremental(text, change);
     assert_debug_snapshot!(ast);
 }
+
+#[test]
+fn param_deletion() {
+    let text = "
+proc a(x: int, y: int) {
+    x := 1;
+}
+";
+    let change = TextChange {
+        range: 8..14,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn param_insertion() {
+    let text = "
+proc a(, y: int) {
+    n := 1;
+}
+";
+    let change = TextChange {
+        range: 8..8,
+        text: "x: int".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn arg_deletion() {
+    let text = "
+proc a() {
+    b(1, 2, 3);
+}
+";
+    let change = TextChange {
+        range: 20..23,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn arg_insertion() {
+    let text = "
+proc a() {
+    b(1, 3);
+}
+";
+    let change = TextChange {
+        range: 20..20,
+        text: "2, ".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
