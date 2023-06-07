@@ -12,10 +12,13 @@ fn test_incremental(text: &str, change: TextChange) -> Program {
 
     let mut new_text = text.to_string();
     new_text.replace_range(change.to_range(), &change.text);
-    let new_tokens = lexer::lex(&new_text);
-    let ast = parser::parse(&new_tokens);
-
+    let tokens = lexer::lex(&new_text);
     let (inc_tokens, token_change) = lexer::update(&new_text, analyzed_source.tokens, &change);
+    assert_eq!(tokens, inc_tokens);
+
+    eprintln!("Parsing normal...");
+    let ast = parser::parse(&tokens);
+    eprintln!("Parsing inc...");
     let inc_ast = parser::update(
         analyzed_source.ast,
         TokenStream::new_with_change(&inc_tokens, token_change),
@@ -284,6 +287,19 @@ proc main() {
 ";
     let change = TextChange {
         range: 30..46,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn delete_parameter_list() {
+    let text = "
+proc main() {}
+";
+    let change = TextChange {
+        range: 10..12,
         text: "".to_string(),
     };
     let ast = test_incremental(text, change);

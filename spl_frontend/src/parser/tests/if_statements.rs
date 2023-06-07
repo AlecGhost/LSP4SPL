@@ -1,12 +1,12 @@
-use crate::parser::inc;
-
 use super::*;
 
 #[test]
 fn simple() {
     let stmt = "if (1 = 2) {}";
     let tokens = lex(stmt);
-    let (_, is) = all_consuming(terminated(inc::<IfStatement>(None), eof))(tokens.to_tokens()).unwrap();
+    let (_, is) =
+        all_consuming(terminated(|input| IfStatement::parse(None, input), eof))(tokens.to_tokens())
+            .unwrap();
     eq!(
         is,
         IfStatement {
