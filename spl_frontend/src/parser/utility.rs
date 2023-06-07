@@ -1,4 +1,4 @@
-use super::IResult;
+use super::{IResult, Parser};
 use crate::{
     ast::{AstInfo, AstInfoTraverser, Reference},
     error::{ErrorMessage, ParseErrorMessage, ParserError, ParserErrorKind},
@@ -23,6 +23,20 @@ where
 {
     fn parse(&mut self, input: TokenStream<'a>) -> IResult<'a, O> {
         self(input)
+    }
+}
+
+pub(super) trait IncInnerParser<'a, O> {
+    fn parse(&mut self, this: Option<O>, input: TokenStream<'a>) -> IResult<'a, O>;
+}
+
+impl<'a, O, F> IncInnerParser<'a, O> for F
+where
+    F: FnMut(Option<O>, TokenStream<'a>) -> IResult<'a, O>,
+    O: Clone,
+{
+    fn parse(&mut self, this: Option<O>, input: TokenStream<'a>) -> IResult<'a, O> {
+        self(this.clone(), input)
     }
 }
 
@@ -98,19 +112,36 @@ where
 /// If parsing fails, an error with the given message is reported.
 /// Source: [Eyal Kalderon](https://eyalkalderon.com/blog/nom-error-recovery/)
 pub(super) fn expect<'a, O, F>(
+    this: Option<O>,
     mut parser: F,
     error_msg: ParseErrorMessage,
 ) -> impl FnMut(TokenStream<'a>) -> IResult<Option<O>>
 where
-    F: InnerParser<'a, O>,
+    F: IncInnerParser<'a, O>,
+    O: Clone,
 {
-    move |input: TokenStream| match parser.parse(input) {
+    fn expect_error(input: &mut TokenStream, error_msg: ParseErrorMessage) {
+        let pos = input.location_offset() - input.reference_pos;
+        let error_pos = if pos > 0 { pos - 1 } else { 0 };
+        let spl_error = crate::error::SplError(error_pos..error_pos, error_msg.into());
+        input.error_buffer.push(spl_error);
+    }
+
+    move |input: TokenStream| match parser.parse(this.clone(), input) {
         Ok((input, out)) => Ok((input, Some(out))),
+        Err(nom::Err::Error(ParserError {
+            kind: ParserErrorKind::Affected,
+            input,
+        })) => match parser.parse(None, input) {
+            Ok((input, out)) => Ok((input, Some(out))),
+            Err(nom::Err::Error(mut err)) => {
+                expect_error(&mut err.input, error_msg.clone());
+                Ok((err.input, None))
+            }
+            Err(_) => panic!("Incomplete data"),
+        },
         Err(nom::Err::Error(mut err)) => {
-            let pos = err.input.location_offset() - err.input.reference_pos;
-            let error_pos = if pos > 0 { pos - 1 } else { 0 };
-            let spl_error = crate::error::SplError(error_pos..error_pos, error_msg.clone().into());
-            err.input.error_buffer.push(spl_error);
+            expect_error(&mut err.input, error_msg.clone());
             Ok((err.input, None))
         }
         Err(_) => panic!("Incomplete data"),
@@ -120,7 +151,7 @@ where
 /// Parses a comma separated list of parsers
 pub(super) fn parse_list<'a, O, F>(mut parser: F) -> impl FnMut(TokenStream<'a>) -> IResult<Vec<O>>
 where
-    F: InnerParser<'a, O>, // O: super::Parser + ToRange + Clone+ std::fmt::Debug,
+    F: InnerParser<'a, O>, // O: Parser + ToRange + Clone+ std::fmt::Debug,
 {
     move |input: TokenStream| {
         // Create new parser from closure because `InnerParser` must be used with `parse` function
@@ -220,7 +251,7 @@ pub(super) fn affected<'a, F, O>(
 ) -> impl FnMut(Option<O>, TokenStream<'a>) -> IResult<O>
 where
     F: InnerParser<'a, O>,
-    O: super::Parser + ToRange + AstInfoTraverser,
+    O: Parser + ToRange + AstInfoTraverser,
 {
     fn is_partially_consumed(input: &TokenStream, parser_start: usize) -> bool {
         let token_change = &input.token_change;
@@ -292,9 +323,9 @@ pub(super) fn many<'a, O>(
     inner_parser: Option<Vec<O>>,
 ) -> impl FnMut(TokenStream<'a>) -> IResult<Vec<O>>
 where
-    O: super::Parser + ToRange + Clone + std::fmt::Debug,
+    O: Parser + ToRange + Clone + std::fmt::Debug,
 {
-    fn parse_insertion<'a, O: super::Parser>(
+    fn parse_insertion<'a, O: Parser>(
         mut input: TokenStream<'a>,
         end_pos: usize,
         acc: &mut Vec<O>,
@@ -307,7 +338,7 @@ where
         Ok((input, ()))
     }
 
-    fn handle_insertions<'a, O: super::Parser>(
+    fn handle_insertions<'a, O: Parser>(
         input: TokenStream<'a>,
         parser_start: usize,
         acc: &mut Vec<O>,

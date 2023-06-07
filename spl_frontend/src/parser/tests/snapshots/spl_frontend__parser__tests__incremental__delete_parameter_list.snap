@@ -1,0 +1,53 @@
+---
+source: spl_frontend/src/parser/tests/incremental.rs
+expression: ast
+---
+Program {
+    global_declarations: [
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "main",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [],
+                    variable_declarations: [],
+                    statements: [],
+                    info: AstInfo {
+                        range: 0..4,
+                        errors: [
+                            SplError(
+                                1..1,
+                                ParseErrorMessage(
+                                    MissingOpening(
+                                        '(',
+                                    ),
+                                ),
+                            ),
+                            SplError(
+                                1..1,
+                                ParseErrorMessage(
+                                    MissingClosing(
+                                        ')',
+                                    ),
+                                ),
+                            ),
+                        ],
+                    },
+                },
+            ),
+            offset: 0,
+        },
+    ],
+    info: AstInfo {
+        range: 0..4,
+        errors: [],
+    },
+}
