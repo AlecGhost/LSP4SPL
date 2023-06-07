@@ -335,10 +335,10 @@ impl Parser for TypeExpression {
                 Self::NamedType,
             )(input),
             Some(Self::ArrayType { .. }) => parse_array_type(this, input),
-            None => affected(alt((
+            None => alt((
                 |input| parse_array_type(None, input),
                 map(|input| Identifier::parse(None, input), Self::NamedType),
-            )))(this, input),
+            ))(input),
         }
     }
 }
@@ -472,7 +472,7 @@ impl Parser for VariableDeclaration {
 
         match this {
             Some(Self::Valid { .. }) => parse_valid(this, input),
-            _ => affected(alt((|input| parse_valid(None, input), parse_error)))(this, input),
+            _ => alt((|input| parse_valid(None, input), parse_error))(input),
         }
     }
 }
@@ -491,7 +491,7 @@ impl Parser for ParameterDeclaration {
                 _ => panic!("Must be valid parameter"),
             };
 
-            let parser = affected(map(
+            let parser = map(
                 info(tuple((
                     many0(comment),
                     alt((
@@ -521,12 +521,7 @@ impl Parser for ParameterDeclaration {
                         Reference::<TypeExpression>::parse,
                         ParseErrorMessage::ExpectedToken("type expression".to_string()),
                     ),
-                    peek(alt((
-                        recognize(symbols::rparen),
-                        recognize(symbols::lcurly),
-                        recognize(symbols::comma),
-                        recognize(eof),
-                    ))),
+                    peek(look_ahead::param_dec),
                 ))),
                 |((doc, (ref_kw, name), _, type_expr, _), info)| {
                     let is_ref = ref_kw.is_some();
@@ -538,17 +533,12 @@ impl Parser for ParameterDeclaration {
                         info,
                     }
                 },
-            ))(this, input);
+            )(input);
             parser
         }
 
         fn parse_error(input: TokenStream) -> IResult<ParameterDeclaration> {
-            let (input, (_, mut info)) = info(ignore_until0(peek(alt((
-                recognize(symbols::rparen),
-                recognize(symbols::lcurly),
-                recognize(symbols::comma),
-                recognize(eof),
-            )))))(input)?;
+            let (input, (_, mut info)) = info(ignore_until0(peek(look_ahead::param_dec)))(input)?;
             let err = SplError(
                 info.to_range(),
                 ParseErrorMessage::ExpectedToken("parameter declaration".to_string()).into(),
@@ -558,8 +548,11 @@ impl Parser for ParameterDeclaration {
         }
 
         match this {
-            Some(Self::Valid { .. }) => parse_valid(this, input),
-            _ => affected(alt((|input| parse_valid(None, input), parse_error)))(this, input),
+            Some(Self::Valid { .. }) => affected(alt((
+                |input| parse_valid(this.clone(), input),
+                parse_error,
+            )))(this.clone(), input),
+            _ => alt((|input| parse_valid(None, input), parse_error))(input),
         }
     }
 }
@@ -570,20 +563,10 @@ impl Parser for CallStatement {
             alt((
                 terminated(
                     |input| Expression::parse(None, input),
-                    peek(alt((
-                        recognize(symbols::rparen),
-                        recognize(symbols::semic),
-                        recognize(symbols::comma),
-                        recognize(eof),
-                    ))),
+                    peek(look_ahead::arg),
                 ),
                 map(
-                    info(ignore_until0(peek(alt((
-                        recognize(symbols::rparen),
-                        recognize(symbols::semic),
-                        recognize(symbols::comma),
-                        recognize(eof),
-                    ))))),
+                    info(ignore_until0(peek(look_ahead::arg))),
                     |(_, mut info)| {
                         let err = SplError(
                             info.to_range(),
@@ -811,7 +794,7 @@ impl Parser for Statement {
                 |input| BlockStatement::parse(Some(stmt.clone()), input),
                 Self::Block,
             )(input),
-            _ => affected(alt((
+            _ => alt((
                 map(info(symbols::semic), |(_, info)| Self::Empty(info)),
                 map(|input| IfStatement::parse(None, input), Self::If),
                 map(|input| WhileStatement::parse(None, input), Self::While),
@@ -819,7 +802,7 @@ impl Parser for Statement {
                 map(|input| CallStatement::parse(None, input), Self::Call),
                 map(|input| Assignment::parse(None, input), Self::Assignment),
                 parse_error,
-            )))(this, input),
+            ))(input),
         }
     }
 }
@@ -886,11 +869,7 @@ impl Parser for ProcedureDeclaration {
 impl Parser for GlobalDeclaration {
     fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
         fn parse_error(input: TokenStream) -> IResult<GlobalDeclaration> {
-            let (input, (ignored, mut info)) = info(ignore_until1(peek(alt((
-                recognize(keywords::r#type),
-                recognize(keywords::proc),
-                recognize(eof),
-            )))))(input)?;
+            let (input, (ignored, mut info)) = info(ignore_until1(peek(look_ahead::global_dec)))(input)?;
             let err = SplError(
                 info.to_range(),
                 ParseErrorMessage::UnexpectedCharacters(
@@ -912,14 +891,14 @@ impl Parser for GlobalDeclaration {
                 |input| ProcedureDeclaration::parse(Some(pd.clone()), input),
                 Self::Procedure,
             )(input),
-            _ => affected(alt((
+            _ => alt((
                 map(|input| TypeDeclaration::parse(None, input), Self::Type),
                 map(
                     |input| ProcedureDeclaration::parse(None, input),
                     Self::Procedure,
                 ),
                 parse_error,
-            )))(this, input),
+            ))(input),
         }
     }
 }
@@ -1081,6 +1060,7 @@ mod look_ahead {
         };
     }
 
+    look_ahead_parser!(global_dec, keywords::proc, keywords::r#type, eof,);
     look_ahead_parser!(
         stmt,
         symbols::lcurly,
@@ -1092,9 +1072,14 @@ mod look_ahead {
             |input| Identifier::parse(None, input),
             alt((symbols::assign, symbols::lparen, symbols::lbracket))
         ),
-        keywords::proc,
-        keywords::r#type,
-        eof,
+        global_dec,
     );
-    look_ahead_parser!(var_dec, keywords::var, stmt, eof,);
+    look_ahead_parser!(var_dec, keywords::var, stmt,);
+    look_ahead_parser!(
+        param_dec,
+        symbols::rparen,
+        symbols::comma,
+        var_dec,
+    );
+    look_ahead_parser!(arg, param_dec,);
 }
