@@ -1,0 +1,103 @@
+---
+source: spl_frontend/src/parser/tests/incremental.rs
+expression: ast
+---
+Program {
+    global_declarations: [
+        Reference {
+            reference: Procedure(
+                ProcedureDeclaration {
+                    doc: [],
+                    name: Some(
+                        Identifier {
+                            value: "main",
+                            info: AstInfo {
+                                range: 1..2,
+                                errors: [],
+                            },
+                        },
+                    ),
+                    parameters: [],
+                    variable_declarations: [],
+                    statements: [
+                        Reference {
+                            reference: If(
+                                IfStatement {
+                                    condition: Some(
+                                        Reference {
+                                            reference: Binary(
+                                                BinaryExpression {
+                                                    operator: Lse,
+                                                    lhs: IntLiteral(
+                                                        IntLiteral {
+                                                            value: Some(
+                                                                0,
+                                                            ),
+                                                            info: AstInfo {
+                                                                range: 0..1,
+                                                                errors: [],
+                                                            },
+                                                        },
+                                                    ),
+                                                    rhs: Error(
+                                                        AstInfo {
+                                                            range: 1..1,
+                                                            errors: [],
+                                                        },
+                                                    ),
+                                                    info: AstInfo {
+                                                        range: 0..2,
+                                                        errors: [],
+                                                    },
+                                                },
+                                            ),
+                                            offset: 2,
+                                        },
+                                    ),
+                                    if_branch: Some(
+                                        Reference {
+                                            reference: Block(
+                                                BlockStatement {
+                                                    statements: [],
+                                                    info: AstInfo {
+                                                        range: 0..2,
+                                                        errors: [],
+                                                    },
+                                                },
+                                            ),
+                                            offset: 5,
+                                        },
+                                    ),
+                                    else_branch: None,
+                                    info: AstInfo {
+                                        range: 0..7,
+                                        errors: [
+                                            SplError(
+                                                1..1,
+                                                ParseErrorMessage(
+                                                    ExpectedToken(
+                                                        "expression",
+                                                    ),
+                                                ),
+                                            ),
+                                        ],
+                                    },
+                                },
+                            ),
+                            offset: 5,
+                        },
+                    ],
+                    info: AstInfo {
+                        range: 0..13,
+                        errors: [],
+                    },
+                },
+            ),
+            offset: 0,
+        },
+    ],
+    info: AstInfo {
+        range: 0..13,
+        errors: [],
+    },
+}

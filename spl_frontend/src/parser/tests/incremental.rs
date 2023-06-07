@@ -4,24 +4,25 @@ use crate::{
     token::TokenStream,
     AnalyzedSource, TextChange, ToRange,
 };
-use pretty_assertions::assert_eq;
 use insta::assert_debug_snapshot;
+use pretty_assertions::assert_eq;
 
 fn test_incremental(text: &str, change: TextChange) -> Program {
     let analyzed_source = AnalyzedSource::new(text.to_string());
 
     let mut new_text = text.to_string();
     new_text.replace_range(change.to_range(), &change.text);
-    let new_tokens = lexer::lex(&new_text);
-    let ast = parser::parse(&new_tokens);
-
+    let tokens = lexer::lex(&new_text);
     let (inc_tokens, token_change) = lexer::update(&new_text, analyzed_source.tokens, &change);
+    assert_eq!(inc_tokens, tokens);
+
+    let ast = parser::parse(&tokens);
     let inc_ast = parser::update(
         analyzed_source.ast,
         TokenStream::new_with_change(&inc_tokens, token_change),
     );
 
-    assert_eq!(ast, inc_ast);
+    assert_eq!(inc_ast, ast);
     inc_ast
 }
 
@@ -306,6 +307,19 @@ proc a(x: int, y: int) {
 }
 
 #[test]
+fn delete_parameter_list() {
+    let text = "
+proc main() {}
+";
+    let change = TextChange {
+        range: 10..12,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
 fn param_insertion() {
     let text = "
 proc a(, y: int) {
@@ -345,6 +359,105 @@ proc a() {
     let change = TextChange {
         range: 20..20,
         text: "2, ".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn delete_condition_lhs() {
+    let text = "
+proc main() {
+    if (0 <= 1) {}
+}
+";
+    let change = TextChange {
+        range: 23..24,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn insert_condition_lhs() {
+    let text = "
+proc main() {
+    if ( <= 1) {}
+}
+";
+    let change = TextChange {
+        range: 23..23,
+        text: "0".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn delete_condition_rhs() {
+    let text = "
+proc main() {
+    if (0 <= 1) {}
+}
+";
+    let change = TextChange {
+        range: 28..29,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn insert_condition_rhs() {
+    let text = "
+proc main() {
+    if (0 <= ) {}
+}
+";
+    let change = TextChange {
+        range: 28..28,
+        text: "1".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn if_block_disruption() {
+    let text = "
+proc main() {
+    if (0 = 0) {
+        y := 2;
+    } else {
+        x := 1;
+    }
+}
+";
+    let change = TextChange {
+        range: 30..31,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn if_block_restoration() {
+    let text = "
+proc main() {
+    if (0 = 0) 
+        y := 2;
+    }
+    else {
+        x := 1;
+    }
+}
+";
+    let change = TextChange {
+        range: 30..30,
+        text: "{".to_string(),
     };
     let ast = test_incremental(text, change);
     assert_debug_snapshot!(ast);

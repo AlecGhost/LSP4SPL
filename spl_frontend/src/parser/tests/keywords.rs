@@ -1,5 +1,5 @@
 use super::*;
-use crate::parser::{keywords, inc};
+use crate::parser::keywords;
 
 #[test]
 fn array_kw() {
@@ -28,7 +28,10 @@ fn type_declaration() {
     let kw = "type a=int;";
     let tokens = lex(kw);
     assert!(
-        all_consuming(terminated(inc::<TypeDeclaration>(None), eof))(tokens.to_tokens()).is_ok(),
+        all_consuming(terminated(|input| TypeDeclaration::parse(None, input), eof))(
+            tokens.to_tokens()
+        )
+        .is_ok(),
         "Keyword: {}",
         kw
     );
@@ -39,7 +42,10 @@ fn missing_whitespace() {
     let kw = "typea=int;";
     let tokens = lex(kw);
     assert!(
-        all_consuming(terminated(inc::<TypeDeclaration>(None), eof))(tokens.to_tokens()).is_err(),
+        all_consuming(terminated(|input| TypeDeclaration::parse(None, input), eof))(
+            tokens.to_tokens()
+        )
+        .is_err(),
         "Keyword: {}",
         kw
     );

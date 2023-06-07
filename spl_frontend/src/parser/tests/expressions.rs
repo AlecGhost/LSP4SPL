@@ -1,4 +1,3 @@
-use crate::parser::inc;
 use super::*;
 
 type E = Expression;
@@ -8,7 +7,7 @@ fn one() {
     let expr = "1";
     let tokens = lex(expr);
     eq!(
-        all_consuming(terminated(inc::<E>(None), eof))(tokens.to_tokens())
+        all_consuming(terminated(|input| E::parse(None, input), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         *int_lit(1, 0..1),
@@ -22,7 +21,7 @@ fn addition() {
     let expr = "1 + 2";
     let tokens = lex(expr);
     eq!(
-        all_consuming(terminated(inc::<E>(None), eof))(tokens.to_tokens())
+        all_consuming(terminated(|input| E::parse(None, input), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         E::Binary(BinaryExpression {
@@ -41,7 +40,7 @@ fn multiplication_before_addition() {
     let expr = "1 + 2 * 3";
     let tokens = lex(expr);
     eq!(
-        all_consuming(terminated(inc::<E>(None), eof))(tokens.to_tokens())
+        all_consuming(terminated(|input| E::parse(None, input), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         E::Binary(BinaryExpression {
@@ -65,7 +64,7 @@ fn division_before_addition() {
     let expr = "1 / 2 + 3";
     let tokens = lex(expr);
     eq!(
-        all_consuming(terminated(inc::<E>(None), eof))(tokens.to_tokens())
+        all_consuming(terminated(|input| E::parse(None, input), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         E::Binary(BinaryExpression {
@@ -89,7 +88,7 @@ fn left_associativity_in_multiplication() {
     let expr = "1 * 2 / 3 * 4";
     let tokens = lex(expr);
     eq!(
-        all_consuming(terminated(inc::<E>(None), eof))(tokens.to_tokens())
+        all_consuming(terminated(|input| E::parse(None, input), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         E::Binary(BinaryExpression {
@@ -118,7 +117,7 @@ fn left_associativity_in_addition() {
     let expr = "1 - 2 + 3 - 4";
     let tokens = lex(expr);
     eq!(
-        all_consuming(terminated(inc::<E>(None), eof))(tokens.to_tokens())
+        all_consuming(terminated(|input| E::parse(None, input), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         E::Binary(BinaryExpression {
@@ -147,7 +146,7 @@ fn complex_comparison() {
     let expr = "(1 + 2) * 3 = 4 + 5 * 6 / 6";
     let tokens = lex(expr);
     eq!(
-        all_consuming(terminated(inc::<E>(None), eof))(tokens.to_tokens())
+        all_consuming(terminated(|input| E::parse(None, input), eof))(tokens.to_tokens())
             .unwrap()
             .1,
         E::Binary(BinaryExpression {
@@ -194,7 +193,7 @@ fn no_double_comparison() {
     let expr = "a < b > c";
     let tokens = lex(expr);
     assert!(
-        all_consuming(terminated(inc::<E>(None), eof))(tokens.to_tokens()).is_err(),
+        all_consuming(terminated(|input| E::parse(None, input), eof))(tokens.to_tokens()).is_err(),
         "Expression: {}",
         expr
     );

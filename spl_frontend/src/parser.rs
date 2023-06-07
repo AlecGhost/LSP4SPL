@@ -43,8 +43,11 @@ trait Parser: Sized {
     fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self>;
 }
 
-fn inc<'a, P: Parser + Clone>(node: Option<P>) -> impl FnMut(TokenStream<'a>) -> IResult<P> {
-    move |input| P::parse(node.clone(), input)
+fn inc<'a, F, O>(mut f: F) -> impl FnMut(Option<O>, TokenStream<'a>) -> IResult<'a, O>
+where
+    F: FnMut(TokenStream<'a>) -> IResult<'a, O>,
+{
+    move |_, input| f(input)
 }
 
 impl Parser for IntLiteral {
@@ -96,14 +99,22 @@ impl Parser for Identifier {
 impl Parser for Variable {
     fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
         let (input, ((mut variable, variable_info), accesses)) = pair(
-            info(map(inc::<Identifier>(None), Self::NamedVariable)),
+            info(map(
+                |input| Identifier::parse(None, input),
+                Self::NamedVariable,
+            )),
             many0(info(delimited(
                 symbols::lbracket,
                 expect(
-                    inc::<Reference<Expression>>(None),
+                    None,
+                    Reference::<Expression>::parse,
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
-                expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
+                expect(
+                    None,
+                    inc(symbols::rbracket),
+                    ParseErrorMessage::MissingClosing(']'),
+                ),
             ))),
         )(input)?;
         for access in accesses {
@@ -126,10 +137,15 @@ impl Parser for Expression {
             let (input, (((_, lparen_info), expr, _), info)) = info(tuple((
                 info(symbols::lparen),
                 expect(
-                    parse_comparison, // directly go into comparison to prevent re-referencing
+                    None,
+                    inc(parse_comparison), // directly go into comparison to prevent re-referencing
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
-                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
+                expect(
+                    None,
+                    inc(symbols::rparen),
+                    ParseErrorMessage::MissingClosing(')'),
+                ),
             )))(input)?;
             let error_pos = lparen_info.to_range().end;
             let expr =
@@ -144,8 +160,11 @@ impl Parser for Expression {
         fn parse_primary(input: TokenStream) -> IResult<Expression> {
             // Primary := IntLit | Variable | Bracketed
             alt((
-                map(inc::<IntLiteral>(None), Expression::IntLiteral),
-                map(inc::<Variable>(None), Expression::Variable),
+                map(
+                    |input| IntLiteral::parse(None, input),
+                    Expression::IntLiteral,
+                ),
+                map(|input| Variable::parse(None, input), Expression::Variable),
                 parse_bracketed,
             ))(input)
         }
@@ -176,15 +195,17 @@ impl Parser for Expression {
             P: Fn(TokenStream) -> IResult<Expression>,
         {
             let (input, rhs) = expect(
-                parser,
+                None,
+                inc(parser),
                 ParseErrorMessage::ExpectedToken("expression".to_string()),
             )(input)?;
-            let error_pos = lhs.to_range().end;
+            let pos = input.location_offset() - input.reference_pos;
+            let error_pos = if pos > 0 { pos - 1 } else { 0 };
             let rhs = rhs.unwrap_or_else(|| Expression::Error(AstInfo::new(error_pos..error_pos)));
             // all errors are stored in lhs and rhs expressions.
             // Operators cannot lead to errors.
             let expr_start = lhs.to_range().start;
-            let expr_end = rhs.to_range().end;
+            let expr_end = pos;
             let info = AstInfo::new(expr_start..expr_end);
             let exp = Expression::Binary(BinaryExpression {
                 operator,
@@ -274,20 +295,28 @@ impl Parser for TypeExpression {
                 info(tuple((
                     keywords::array,
                     expect(
-                        symbols::lbracket,
+                        None,
+                        inc(symbols::lbracket),
                         ParseErrorMessage::ExpectedToken("[".to_string()),
                     ),
                     expect(
-                        inc::<IntLiteral>(size),
+                        size,
+                        IntLiteral::parse,
                         ParseErrorMessage::ExpectedToken("int literal".to_string()),
                     ),
-                    expect(symbols::rbracket, ParseErrorMessage::MissingClosing(']')),
                     expect(
-                        keywords::of,
+                        None,
+                        inc(symbols::rbracket),
+                        ParseErrorMessage::MissingClosing(']'),
+                    ),
+                    expect(
+                        None,
+                        inc(keywords::of),
                         ParseErrorMessage::ExpectedToken("of".to_string()),
                     ),
                     expect(
-                        inc::<Reference<TypeExpression>>(base_type),
+                        base_type,
+                        Reference::<TypeExpression>::parse,
                         ParseErrorMessage::ExpectedToken("type expression".to_string()),
                     ),
                 ))),
@@ -300,14 +329,15 @@ impl Parser for TypeExpression {
         }
 
         match this {
-            Some(Self::NamedType(name)) => {
-                map(inc::<Identifier>(Some(name)), Self::NamedType)(input)
-            }
+            Some(Self::NamedType(name)) => map(
+                |input| Identifier::parse(Some(name.clone()), input),
+                Self::NamedType,
+            )(input),
             Some(Self::ArrayType { .. }) => parse_array_type(this, input),
-            None => affected(alt((
+            None => alt((
                 |input| parse_array_type(None, input),
-                map(inc::<Identifier>(None), Self::NamedType),
-            )))(this, input),
+                map(|input| Identifier::parse(None, input), Self::NamedType),
+            ))(input),
         }
     }
 }
@@ -319,11 +349,13 @@ impl Parser for TypeDeclaration {
                 many0(comment),
                 keywords::r#type,
                 expect(
-                    inc::<Identifier>(this.clone().and_then(|td| td.name)),
+                    this.clone().and_then(|td| td.name),
+                    Identifier::parse,
                     ParseErrorMessage::ExpectedToken("identifier".to_string()),
                 ),
                 expect(
-                    alt((
+                    None,
+                    inc(alt((
                         symbols::eq,
                         confusable(
                             symbols::assign,
@@ -339,14 +371,19 @@ impl Parser for TypeDeclaration {
                                 token::COLON.to_string(),
                             ),
                         ),
-                    )),
+                    ))),
                     ParseErrorMessage::ExpectedToken(token::EQ.to_string()),
                 ),
                 expect(
-                    inc::<Reference<TypeExpression>>(this.clone().and_then(|td| td.type_expr)),
+                    this.clone().and_then(|td| td.type_expr),
+                    Reference::<TypeExpression>::parse,
                     ParseErrorMessage::ExpectedToken("type expression".to_string()),
                 ),
-                expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+                expect(
+                    None,
+                    inc(symbols::semic),
+                    ParseErrorMessage::MissingTrailingSemic,
+                ),
             ))),
             |((doc, _, name, _, type_expr, _), info)| Self {
                 doc,
@@ -377,11 +414,13 @@ impl Parser for VariableDeclaration {
                     many0(comment),
                     keywords::var,
                     expect(
-                        inc::<Identifier>(name),
+                        name,
+                        Identifier::parse,
                         ParseErrorMessage::ExpectedToken("identifier".to_string()),
                     ),
                     expect(
-                        alt((
+                        None,
+                        inc(alt((
                             symbols::colon,
                             confusable(
                                 symbols::assign,
@@ -397,14 +436,19 @@ impl Parser for VariableDeclaration {
                                     token::EQ.to_string(),
                                 ),
                             ),
-                        )),
+                        ))),
                         ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
                     ),
                     expect(
-                        inc::<Reference<TypeExpression>>(type_expr),
+                        type_expr,
+                        Reference::<TypeExpression>::parse,
                         ParseErrorMessage::ExpectedToken("type expression".to_string()),
                     ),
-                    expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+                    expect(
+                        None,
+                        inc(symbols::semic),
+                        ParseErrorMessage::MissingTrailingSemic,
+                    ),
                 ))),
                 |((doc, _, name, _, type_expr, _), info)| VariableDeclaration::Valid {
                     doc,
@@ -427,17 +471,17 @@ impl Parser for VariableDeclaration {
 
         match this {
             Some(Self::Valid { .. }) => parse_valid(this, input),
-            _ => affected(alt((|input| parse_valid(None, input), parse_error)))(this, input),
+            _ => alt((|input| parse_valid(None, input), parse_error))(input),
         }
     }
 }
 
 impl Parser for ParameterDeclaration {
     fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        fn parse_valid(
+        fn parse_valid<'a>(
             this: Option<ParameterDeclaration>,
-            input: TokenStream,
-        ) -> IResult<ParameterDeclaration> {
+            input: TokenStream<'a>,
+        ) -> IResult<'a, ParameterDeclaration> {
             let (name, type_expr) = match this.clone() {
                 Some(ParameterDeclaration::Valid {
                     name, type_expr, ..
@@ -446,7 +490,7 @@ impl Parser for ParameterDeclaration {
                 _ => panic!("Must be a valid parameter"),
             };
 
-            affected(map(
+            let parser = map(
                 info(tuple((
                     many0(comment),
                     alt((
@@ -454,28 +498,29 @@ impl Parser for ParameterDeclaration {
                             pair(
                                 keywords::r#ref,
                                 expect(
-                                    inc::<Identifier>(name.clone()),
+                                    name.clone(),
+                                    Identifier::parse,
                                     ParseErrorMessage::ExpectedToken("identifier".to_string()),
                                 ),
                             ),
                             |pair| (Some(pair.0), pair.1),
                         ),
-                        map(inc::<Identifier>(name), |ident| (None, Some(ident))),
+                        map(
+                            |input| Identifier::parse(name.clone(), input),
+                            |ident| (None, Some(ident)),
+                        ),
                     )),
                     expect(
-                        symbols::colon,
+                        None,
+                        inc(symbols::colon),
                         ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
                     ),
                     expect(
-                        inc::<Reference<TypeExpression>>(type_expr),
+                        type_expr,
+                        Reference::<TypeExpression>::parse,
                         ParseErrorMessage::ExpectedToken("type expression".to_string()),
                     ),
-                    peek(alt((
-                        recognize(symbols::rparen),
-                        recognize(symbols::lcurly),
-                        recognize(symbols::comma),
-                        recognize(eof),
-                    ))),
+                    peek(look_ahead::param_dec),
                 ))),
                 |((doc, (ref_kw, name), _, type_expr, _), info)| {
                     let is_ref = ref_kw.is_some();
@@ -487,16 +532,12 @@ impl Parser for ParameterDeclaration {
                         info,
                     }
                 },
-            ))(this, input)
+            )(input);
+            parser
         }
 
         fn parse_error(input: TokenStream) -> IResult<ParameterDeclaration> {
-            let (input, (_, mut info)) = info(ignore_until0(peek(alt((
-                recognize(symbols::rparen),
-                recognize(symbols::lcurly),
-                recognize(symbols::comma),
-                recognize(eof),
-            )))))(input)?;
+            let (input, (_, mut info)) = info(ignore_until0(peek(look_ahead::param_dec)))(input)?;
             let err = SplError(
                 info.to_range(),
                 ParseErrorMessage::ExpectedToken("parameter declaration".to_string()).into(),
@@ -505,9 +546,10 @@ impl Parser for ParameterDeclaration {
             Ok((input, ParameterDeclaration::Error(info)))
         }
         match this {
-            Some(Self::Valid { .. }) => {
-                alt((|input| parse_valid(this.clone(), input), parse_error))(input)
-            }
+            Some(Self::Valid { .. }) => affected(alt((
+                |input| parse_valid(this.clone(), input),
+                parse_error,
+            )))(this.clone(), input),
             _ => alt((|input| parse_valid(None, input), parse_error))(input),
         }
     }
@@ -533,23 +575,13 @@ impl Parser for Argument {
         alt((
             map(
                 terminated(
-                    inc::<Expression>(None),
-                    peek(alt((
-                        recognize(symbols::rparen),
-                        recognize(symbols::semic),
-                        recognize(symbols::comma),
-                        recognize(eof),
-                    ))),
+                    |input| Expression::parse(None, input),
+                    peek(look_ahead::arg),
                 ),
                 |expr| Self::Valid(expr),
             ),
             map(
-                info(ignore_until0(peek(alt((
-                    recognize(symbols::rparen),
-                    recognize(symbols::semic),
-                    recognize(symbols::comma),
-                    recognize(eof),
-                ))))),
+                info(ignore_until0(peek(look_ahead::arg))),
                 |(_, mut info)| {
                     let err = SplError(
                         info.to_range(),
@@ -586,7 +618,7 @@ impl Parser for CallStatement {
         affected(map(
             info(tuple((
                 terminated(
-                    inc::<Identifier>(this.clone().map(|c| c.name)),
+                    |input| Identifier::parse(this.clone().map(|c| c.name), input),
                     symbols::lparen,
                 ),
                 alt((
@@ -618,15 +650,23 @@ impl Parser for CallStatement {
                         },
                     ),
                 )),
-                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-                expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+                expect(
+                    None,
+                    inc(symbols::rparen),
+                    ParseErrorMessage::MissingClosing(')'),
+                ),
+                expect(
+                    None,
+                    inc(symbols::semic),
+                    ParseErrorMessage::MissingTrailingSemic,
+                ),
             ))),
             |((name, arguments, _, _), info)| Self {
                 name,
                 arguments,
                 info,
             },
-        ))(this, input)
+        ))(this.clone(), input)
     }
 }
 
@@ -635,7 +675,9 @@ impl Parser for Assignment {
         affected(map(
             info(tuple((
                 terminated(
-                    inc::<Variable>(this.clone().map(|assignment| assignment.variable)),
+                    |input| {
+                        Variable::parse(this.clone().map(|assignment| assignment.variable), input)
+                    },
                     alt((
                         symbols::assign,
                         confusable(
@@ -648,19 +690,22 @@ impl Parser for Assignment {
                     )),
                 ),
                 expect(
-                    inc::<Reference<Expression>>(
-                        this.clone().and_then(|assignment| assignment.expr),
-                    ),
+                    this.clone().and_then(|assignment| assignment.expr),
+                    Reference::<Expression>::parse,
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
-                expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
+                expect(
+                    None,
+                    inc(symbols::semic),
+                    ParseErrorMessage::MissingTrailingSemic,
+                ),
             ))),
             |((variable, expr, _), info)| Self {
                 variable,
                 expr,
                 info,
             },
-        ))(this, input)
+        ))(this.clone(), input)
     }
 }
 
@@ -669,28 +714,33 @@ impl Parser for IfStatement {
         affected(map(
             info(tuple((
                 keywords::r#if,
-                expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
                 expect(
-                    inc::<Reference<Expression>>(
-                        this.clone().and_then(|if_stmt| if_stmt.condition),
-                    ),
+                    None,
+                    inc(symbols::lparen),
+                    ParseErrorMessage::MissingOpening('('),
+                ),
+                expect(
+                    this.clone().and_then(|if_stmt| if_stmt.condition),
+                    Reference::<Expression>::parse,
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
-                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
                 expect(
-                    inc::<Reference<Statement>>(
-                        this.clone()
-                            .and_then(|if_stmt| if_stmt.if_branch.map(|boxed| *boxed)),
-                    ),
+                    None,
+                    inc(symbols::rparen),
+                    ParseErrorMessage::MissingClosing(')'),
+                ),
+                expect(
+                    this.clone()
+                        .and_then(|if_stmt| if_stmt.if_branch.map(|boxed| *boxed)),
+                    Reference::<Statement>::parse,
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
                 opt(preceded(
                     keywords::r#else,
                     expect(
-                        inc::<Reference<Statement>>(
-                            this.clone()
-                                .and_then(|if_stmt| if_stmt.else_branch.map(|boxed| *boxed)),
-                        ),
+                        this.clone()
+                            .and_then(|if_stmt| if_stmt.else_branch.map(|boxed| *boxed)),
+                        Reference::<Statement>::parse,
                         ParseErrorMessage::ExpectedToken("statement".to_string()),
                     ),
                 )),
@@ -710,19 +760,25 @@ impl Parser for WhileStatement {
         affected(map(
             info(tuple((
                 keywords::r#while,
-                expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
                 expect(
-                    inc::<Reference<Expression>>(
-                        this.clone().and_then(|while_stmt| while_stmt.condition),
-                    ),
+                    None,
+                    inc(symbols::lparen),
+                    ParseErrorMessage::MissingOpening('('),
+                ),
+                expect(
+                    this.clone().and_then(|while_stmt| while_stmt.condition),
+                    Reference::<Expression>::parse,
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
-                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
                 expect(
-                    inc::<Reference<Statement>>(
-                        this.clone()
-                            .and_then(|while_stmt| while_stmt.statement.map(|boxed| *boxed)),
-                    ),
+                    None,
+                    inc(symbols::rparen),
+                    ParseErrorMessage::MissingClosing(')'),
+                ),
+                expect(
+                    this.clone()
+                        .and_then(|while_stmt| while_stmt.statement.map(|boxed| *boxed)),
+                    Reference::<Statement>::parse,
                     ParseErrorMessage::ExpectedToken("expression".to_string()),
                 ),
             ))),
@@ -741,7 +797,11 @@ impl Parser for BlockStatement {
             info(delimited(
                 symbols::lcurly,
                 many(this.clone().map(|block_stmt| block_stmt.statements)),
-                expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
+                expect(
+                    None,
+                    inc(symbols::rcurly),
+                    ParseErrorMessage::MissingClosing('}'),
+                ),
             )),
             |(statements, info)| Self { statements, info },
         ))(this, input)
@@ -768,22 +828,35 @@ impl Parser for Statement {
         }
 
         match this {
-            Some(Self::If(stmt)) => map(inc::<IfStatement>(Some(stmt)), Self::If)(input),
-            Some(Self::While(stmt)) => map(inc::<WhileStatement>(Some(stmt)), Self::While)(input),
-            Some(Self::Assignment(stmt)) => {
-                map(inc::<Assignment>(Some(stmt)), Self::Assignment)(input)
-            }
-            Some(Self::Call(stmt)) => map(inc::<CallStatement>(Some(stmt)), Self::Call)(input),
-            Some(Self::Block(stmt)) => map(inc::<BlockStatement>(Some(stmt)), Self::Block)(input),
-            _ => affected(alt((
+            Some(Self::If(stmt)) => map(
+                |input| IfStatement::parse(Some(stmt.clone()), input),
+                Self::If,
+            )(input),
+            Some(Self::While(stmt)) => map(
+                |input| WhileStatement::parse(Some(stmt.clone()), input),
+                Self::While,
+            )(input),
+            Some(Self::Assignment(stmt)) => map(
+                |input| Assignment::parse(Some(stmt.clone()), input),
+                Self::Assignment,
+            )(input),
+            Some(Self::Call(stmt)) => map(
+                |input| CallStatement::parse(Some(stmt.clone()), input),
+                Self::Call,
+            )(input),
+            Some(Self::Block(stmt)) => map(
+                |input| BlockStatement::parse(Some(stmt.clone()), input),
+                Self::Block,
+            )(input),
+            _ => alt((
                 map(info(symbols::semic), |(_, info)| Self::Empty(info)),
-                map(inc::<IfStatement>(None), Self::If),
-                map(inc::<WhileStatement>(None), Self::While),
-                map(inc::<BlockStatement>(None), Self::Block),
-                map(inc::<CallStatement>(None), Self::Call),
-                map(inc::<Assignment>(None), Self::Assignment),
+                map(|input| IfStatement::parse(None, input), Self::If),
+                map(|input| WhileStatement::parse(None, input), Self::While),
+                map(|input| BlockStatement::parse(None, input), Self::Block),
+                map(|input| CallStatement::parse(None, input), Self::Call),
+                map(|input| Assignment::parse(None, input), Self::Assignment),
                 parse_error,
-            )))(this, input),
+            ))(input),
         }
     }
 }
@@ -795,10 +868,15 @@ impl Parser for ProcedureDeclaration {
                 many0(comment),
                 keywords::proc,
                 expect(
-                    inc::<Identifier>(this.clone().and_then(|pd| pd.name)),
+                    this.clone().and_then(|pd| pd.name),
+                    Identifier::parse,
                     ParseErrorMessage::ExpectedToken("identifier".to_string()),
                 ),
-                expect(symbols::lparen, ParseErrorMessage::MissingOpening('(')),
+                expect(
+                    None,
+                    inc(symbols::lparen),
+                    ParseErrorMessage::MissingOpening('('),
+                ),
                 alt((
                     map(
                         peek(alt((
@@ -810,11 +888,23 @@ impl Parser for ProcedureDeclaration {
                     ),
                     parse_list::<ParameterDeclaration>(this.clone().map(|pd| pd.parameters)),
                 )),
-                expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
-                expect(symbols::lcurly, ParseErrorMessage::MissingOpening('{')),
+                expect(
+                    None,
+                    inc(symbols::rparen),
+                    ParseErrorMessage::MissingClosing(')'),
+                ),
+                expect(
+                    None,
+                    inc(symbols::lcurly),
+                    ParseErrorMessage::MissingOpening('{'),
+                ),
                 many(this.clone().map(|pd| pd.variable_declarations)),
                 many(this.clone().map(|pd| pd.statements)),
-                expect(symbols::rcurly, ParseErrorMessage::MissingClosing('}')),
+                expect(
+                    None,
+                    inc(symbols::rcurly),
+                    ParseErrorMessage::MissingClosing('}'),
+                ),
             ))),
             |((doc, _, name, _, parameters, _, _, variable_declarations, statements, _), info)| {
                 Self {
@@ -833,11 +923,7 @@ impl Parser for ProcedureDeclaration {
 impl Parser for GlobalDeclaration {
     fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
         fn parse_error(input: TokenStream) -> IResult<GlobalDeclaration> {
-            let (input, (ignored, mut info)) = info(ignore_until1(peek(alt((
-                recognize(keywords::r#type),
-                recognize(keywords::proc),
-                recognize(eof),
-            )))))(input)?;
+            let (input, (ignored, mut info)) = info(ignore_until1(peek(look_ahead::global_dec)))(input)?;
             let err = SplError(
                 info.to_range(),
                 ParseErrorMessage::UnexpectedCharacters(
@@ -851,15 +937,22 @@ impl Parser for GlobalDeclaration {
         }
 
         match this {
-            Some(Self::Type(td)) => map(inc::<TypeDeclaration>(Some(td)), Self::Type)(input),
-            Some(Self::Procedure(pd)) => {
-                map(inc::<ProcedureDeclaration>(Some(pd)), Self::Procedure)(input)
-            }
-            _ => affected(alt((
-                map(inc::<TypeDeclaration>(None), Self::Type),
-                map(inc::<ProcedureDeclaration>(None), Self::Procedure),
+            Some(Self::Type(td)) => map(
+                |input| TypeDeclaration::parse(Some(td.clone()), input),
+                Self::Type,
+            )(input),
+            Some(Self::Procedure(pd)) => map(
+                |input| ProcedureDeclaration::parse(Some(pd.clone()), input),
+                Self::Procedure,
+            )(input),
+            _ => alt((
+                map(|input| TypeDeclaration::parse(None, input), Self::Type),
+                map(
+                    |input| ProcedureDeclaration::parse(None, input),
+                    Self::Procedure,
+                ),
                 parse_error,
-            )))(this, input),
+            ))(input),
         }
     }
 }
@@ -1003,7 +1096,7 @@ mod symbols {
 }
 
 mod look_ahead {
-    use super::{eof, inc, keywords, symbols};
+    use super::{eof, keywords, symbols, Parser};
     use crate::ast::Identifier;
     use nom::{branch::alt, sequence::pair};
 
@@ -1021,6 +1114,7 @@ mod look_ahead {
         };
     }
 
+    look_ahead_parser!(global_dec, keywords::proc, keywords::r#type, eof,);
     look_ahead_parser!(
         stmt,
         symbols::lcurly,
@@ -1029,12 +1123,17 @@ mod look_ahead {
         keywords::r#if,
         keywords::r#while,
         pair(
-            inc::<Identifier>(None),
+            |input| Identifier::parse(None, input),
             alt((symbols::assign, symbols::lparen, symbols::lbracket))
         ),
-        keywords::proc,
-        keywords::r#type,
-        eof,
+        global_dec,
     );
-    look_ahead_parser!(var_dec, keywords::var, stmt, eof,);
+    look_ahead_parser!(var_dec, keywords::var, stmt,);
+    look_ahead_parser!(
+        param_dec,
+        symbols::rparen,
+        symbols::comma,
+        var_dec,
+    );
+    look_ahead_parser!(arg, param_dec,);
 }
