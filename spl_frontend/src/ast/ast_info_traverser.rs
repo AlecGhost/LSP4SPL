@@ -223,12 +223,16 @@ impl AstInfoTraverser for Statement {
 impl AstInfoTraverser for IfStatement {
     fn traverse(&self, f: fn(&AstInfo)) {
         f(&self.info);
+        self.condition.iter().for_each(|expr| expr.traverse(f));
         self.if_branch.iter().for_each(|stmt| stmt.traverse(f));
         self.else_branch.iter().for_each(|stmt| stmt.traverse(f));
     }
 
     fn traverse_mut(&mut self, f: fn(&mut AstInfo)) {
         f(&mut self.info);
+        self.condition
+            .iter_mut()
+            .for_each(|expr| expr.traverse_mut(f));
         self.if_branch
             .iter_mut()
             .for_each(|stmt| stmt.traverse_mut(f));
@@ -241,11 +245,15 @@ impl AstInfoTraverser for IfStatement {
 impl AstInfoTraverser for WhileStatement {
     fn traverse(&self, f: fn(&AstInfo)) {
         f(&self.info);
+        self.condition.iter().for_each(|expr| expr.traverse(f));
         self.statement.iter().for_each(|stmt| stmt.traverse(f));
     }
 
     fn traverse_mut(&mut self, f: fn(&mut AstInfo)) {
         f(&mut self.info);
+        self.condition
+            .iter_mut()
+            .for_each(|expr| expr.traverse_mut(f));
         self.statement
             .iter_mut()
             .for_each(|stmt| stmt.traverse_mut(f));
