@@ -363,3 +363,42 @@ proc main() {
     let ast = test_incremental(text, change);
     assert_debug_snapshot!(ast);
 }
+
+#[test]
+fn if_block_disruption() {
+    let text = "
+proc main() {
+    if (0 = 0) {
+        y := 2;
+    } else {
+        x := 1;
+    }
+}
+";
+    let change = TextChange {
+        range: 30..31,
+        text: "".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}
+
+#[test]
+fn if_block_restoration() {
+    let text = "
+proc main() {
+    if (0 = 0) 
+        y := 2;
+    }
+    else {
+        x := 1;
+    }
+}
+";
+    let change = TextChange {
+        range: 30..30,
+        text: "{".to_string(),
+    };
+    let ast = test_incremental(text, change);
+    assert_debug_snapshot!(ast);
+}

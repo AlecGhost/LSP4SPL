@@ -1,9 +1,11 @@
+use std::ops::Range;
+
 use super::{IResult, Parser};
 use crate::{
     ast::{AstInfo, AstInfoTraverser, Reference},
     error::{ErrorMessage, ParseErrorMessage, ParserError, ParserErrorKind},
     lexer::token::TokenStream,
-    token::Token,
+    token::{Token, TokenChange},
     Shiftable, ToRange,
 };
 use nom::{
@@ -253,10 +255,14 @@ where
     F: InnerParser<'a, O>,
     O: Parser + ToRange + AstInfoTraverser,
 {
-    fn is_partially_consumed(input: &TokenStream, parser_start: usize) -> bool {
-        let token_change = &input.token_change;
-        let location_offset = input.location_offset();
-
+    /// True if part of the tokens, that this node pointed to,
+    /// were already consumed by previous parsers.
+    /// So this node is no longer valid.
+    fn is_partially_consumed(
+        location_offset: usize,
+        token_change: &TokenChange,
+        parser_start: usize,
+    ) -> bool {
         if token_change.out_of_range(location_offset) {
             let new_start_pos = token_change.new_token_pos(parser_start);
             if location_offset > new_start_pos {
@@ -264,6 +270,24 @@ where
             }
         }
         false
+    }
+
+    /// True if the current location is inside the area of insertion
+    fn is_insertion_here(location_offset: usize, token_change: &TokenChange) -> bool {
+        let change_start = token_change.deletion_range.start;
+        let insertion_range = change_start..(change_start + token_change.insertion_len);
+        insertion_range.contains(&location_offset)
+    }
+
+    /// If true, there is no need to re-parse.
+    /// This node can neither be reused nor rebuilt
+    fn invalid(input: &TokenStream, this_range: &Range<usize>) -> bool {
+        let location_offset = input.location_offset();
+        let token_change = &input.token_change;
+
+        token_change.deletes(&this_range)
+            || is_insertion_here(location_offset, token_change)
+            || is_partially_consumed(location_offset, token_change, this_range.start)
     }
 
     const fn affected_error<O>(input: TokenStream) -> IResult<O> {
@@ -276,21 +300,12 @@ where
     move |this, input| {
         if let Some(mut this) = this {
             let this_range = this.to_range().shift(input.get_old_reference());
-            if is_partially_consumed(&input, this_range.start) {
-                // Part of the tokens, that this node pointed to,
-                // were already consumed by previous parsers.
-                // So this node is no longer valid.
+            if invalid(&input, &this_range) {
                 return affected_error(input);
             }
             // TODO: maybe dynamic affection range
             let affected_range = this_range.start..(this_range.end + 1);
             if input.token_change.overlaps(&affected_range) {
-                if input.token_change.deletes(&this_range) {
-                    // If all tokens of this node were deleted by the change,
-                    // there is no need to try to re-parsing.
-                    // This also prevents parsing of the next node.
-                    return affected_error(input);
-                }
                 match inner_parser.parse(input) {
                     Ok(result) => Ok(result),
                     Err(nom::Err::Error(err)) => affected_error(err.input),
