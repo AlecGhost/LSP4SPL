@@ -99,7 +99,7 @@ impl<T> Reference<T> {
 
 impl<T: ToRange> ToRange for Reference<T> {
     fn to_range(&self) -> Range<usize> {
-        self.reference.to_range().shift(self.offset)
+        self.reference.to_range()
     }
 }
 

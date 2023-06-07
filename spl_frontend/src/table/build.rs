@@ -132,7 +132,7 @@ fn build_parameter(
     global_table: &GlobalTable,
     local_table: &mut LocalTable,
 ) -> Option<VariableEntry> {
-    let range = param.to_range();
+    let range = param.to_range().shift(param.offset);
     if let ParameterDeclaration::Valid {
         doc,
         is_ref,
@@ -179,7 +179,7 @@ fn build_variable(
     global_table: &GlobalTable,
     local_table: &mut LocalTable,
 ) {
-    let range = var.to_range();
+    let range = var.to_range().shift(var.offset);
     if let VariableDeclaration::Valid {
         doc,
         name: Some(name),

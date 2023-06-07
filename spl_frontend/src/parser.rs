@@ -4,7 +4,6 @@ use crate::{
     lexer::token::{IntResult, Token, TokenStream, TokenType},
     parser::utility::{
         affected, confusable, expect, ignore_until0, ignore_until1, info, many, parse_list,
-        reference,
     },
     token, ToRange,
 };
@@ -444,7 +443,7 @@ impl Parser for ParameterDeclaration {
                     name, type_expr, ..
                 }) => (name, type_expr),
                 None => (None, None),
-                _ => panic!("Must be valid parameter"),
+                _ => panic!("Must be a valid parameter"),
             };
 
             affected(map(
@@ -505,18 +504,34 @@ impl Parser for ParameterDeclaration {
             info.append_error(err);
             Ok((input, ParameterDeclaration::Error(info)))
         }
-
         match this {
-            Some(Self::Valid { .. }) => parse_valid(this, input),
-            _ => affected(alt((|input| parse_valid(None, input), parse_error)))(this, input),
+            Some(Self::Valid { .. }) => {
+                alt((|input| parse_valid(this.clone(), input), parse_error))(input)
+            }
+            _ => alt((|input| parse_valid(None, input), parse_error))(input),
         }
     }
 }
 
-impl Parser for CallStatement {
-    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
-        fn parse_call_expression(input: TokenStream) -> IResult<Expression> {
-            alt((
+#[derive(Clone, Debug)]
+enum Argument {
+    Valid(Expression),
+    Error(Expression),
+}
+
+impl ToRange for Argument {
+    fn to_range(&self) -> std::ops::Range<usize> {
+        match self {
+            Self::Valid(expr) => expr.to_range(),
+            Self::Error(expr) => expr.to_range(),
+        }
+    }
+}
+
+impl Parser for Argument {
+    fn parse(_this: Option<Self>, input: TokenStream) -> IResult<Self> {
+        alt((
+            map(
                 terminated(
                     inc::<Expression>(None),
                     peek(alt((
@@ -526,25 +541,48 @@ impl Parser for CallStatement {
                         recognize(eof),
                     ))),
                 ),
-                map(
-                    info(ignore_until0(peek(alt((
-                        recognize(symbols::rparen),
-                        recognize(symbols::semic),
-                        recognize(symbols::comma),
-                        recognize(eof),
-                    ))))),
-                    |(_, mut info)| {
-                        let err = SplError(
-                            info.to_range(),
-                            ParseErrorMessage::ExpectedToken("expression".to_string()).into(),
-                        );
-                        info.append_error(err);
-                        Expression::Error(info)
-                    },
-                ),
-            ))(input)
-        }
+                |expr| Self::Valid(expr),
+            ),
+            map(
+                info(ignore_until0(peek(alt((
+                    recognize(symbols::rparen),
+                    recognize(symbols::semic),
+                    recognize(symbols::comma),
+                    recognize(eof),
+                ))))),
+                |(_, mut info)| {
+                    let err = SplError(
+                        info.to_range(),
+                        ParseErrorMessage::ExpectedToken("expression".to_string()).into(),
+                    );
+                    info.append_error(err);
+                    Self::Error(Expression::Error(info))
+                },
+            ),
+        ))(input)
+    }
+}
 
+impl From<Expression> for Argument {
+    fn from(value: Expression) -> Self {
+        if matches!(value, Expression::Error(_)) {
+            Self::Error(value)
+        } else {
+            Self::Valid(value)
+        }
+    }
+}
+
+impl From<Argument> for Expression {
+    fn from(value: Argument) -> Self {
+        match value {
+            Argument::Valid(expr) | Argument::Error(expr) => expr,
+        }
+    }
+}
+
+impl Parser for CallStatement {
+    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
         affected(map(
             info(tuple((
                 terminated(
@@ -560,7 +598,25 @@ impl Parser for CallStatement {
                         ))),
                         |_| Vec::new(),
                     ),
-                    parse_list(reference(parse_call_expression)),
+                    map(
+                        parse_list::<Argument>(this.clone().map(|c| {
+                            c.arguments
+                                .into_iter()
+                                .map(|arg| Reference {
+                                    reference: arg.reference.into(),
+                                    offset: arg.offset,
+                                })
+                                .collect()
+                        })),
+                        |args| {
+                            args.into_iter()
+                                .map(|arg| Reference {
+                                    reference: arg.reference.into(),
+                                    offset: arg.offset,
+                                })
+                                .collect()
+                        },
+                    ),
                 )),
                 expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
                 expect(symbols::semic, ParseErrorMessage::MissingTrailingSemic),
@@ -752,7 +808,7 @@ impl Parser for ProcedureDeclaration {
                         ))),
                         |_| Vec::new(),
                     ),
-                    parse_list(inc::<Reference<ParameterDeclaration>>(None)),
+                    parse_list::<ParameterDeclaration>(this.clone().map(|pd| pd.parameters)),
                 )),
                 expect(symbols::rparen, ParseErrorMessage::MissingClosing(')')),
                 expect(symbols::lcurly, ParseErrorMessage::MissingOpening('{')),
@@ -848,7 +904,7 @@ impl<T: Parser> Parser for Reference<T> {
                     },
                 ))
             }
-            Err(nom::Err::Failure(mut err) | nom::Err::Error(mut err)) => {
+            Err(nom::Err::Error(mut err)) => {
                 // recover backup
                 err.input.reference_pos = reference_backup;
                 err.input.inc_references.pop();
