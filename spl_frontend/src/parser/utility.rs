@@ -1,9 +1,8 @@
-use std::{collections::VecDeque, ops::Range};
 use crate::{
     ast::{AstInfo, AstInfoTraverser, Reference},
     error::{ErrorMessage, ParseErrorMessage, ParserError, ParserErrorKind},
     lexer::token::TokenStream,
-    parser::{Parser, IResult},
+    parser::{IResult, Parser},
     token::{Token, TokenChange},
     Shiftable, ToRange,
 };
@@ -14,6 +13,7 @@ use nom::{
     sequence::preceded,
     {InputTake, Offset},
 };
+use std::{collections::VecDeque, ops::Range};
 
 pub(super) trait InnerParser<'a, O> {
     fn parse(&mut self, input: TokenStream<'a>) -> IResult<'a, O>;
@@ -29,16 +29,16 @@ where
 }
 
 pub(super) trait IncInnerParser<'a, O> {
-    fn parse(&mut self, this: Option<O>, input: TokenStream<'a>) -> IResult<'a, O>;
+    fn parse(&mut self, this: Option<&'a O>, input: TokenStream<'a>) -> IResult<'a, O>;
 }
 
 impl<'a, O, F> IncInnerParser<'a, O> for F
 where
-    F: FnMut(Option<O>, TokenStream<'a>) -> IResult<'a, O>,
-    O: Clone,
+    F: FnMut(Option<&'a O>, TokenStream<'a>) -> IResult<'a, O>,
+    O: Clone + 'a,
 {
-    fn parse(&mut self, this: Option<O>, input: TokenStream<'a>) -> IResult<'a, O> {
-        self(this.clone(), input)
+    fn parse(&mut self, this: Option<&'a O>, input: TokenStream<'a>) -> IResult<'a, O> {
+        self(this, input)
     }
 }
 
@@ -114,7 +114,7 @@ where
 /// If parsing fails, an error with the given message is reported.
 /// Source: [Eyal Kalderon](https://eyalkalderon.com/blog/nom-error-recovery/)
 pub(super) fn expect<'a, O, F>(
-    this: Option<O>,
+    this: Option<&'a O>,
     mut parser: F,
     error_msg: ParseErrorMessage,
 ) -> impl FnMut(TokenStream<'a>) -> IResult<Option<O>>
@@ -129,7 +129,7 @@ where
         input.error_buffer.push(spl_error);
     }
 
-    move |input: TokenStream| match parser.parse(this.clone(), input) {
+    move |input: TokenStream| match parser.parse(this, input) {
         Ok((input, out)) => Ok((input, Some(out))),
         Err(nom::Err::Error(ParserError {
             kind: ParserErrorKind::Affected,
@@ -174,9 +174,9 @@ impl<O> CommaPreceded<O> {
 }
 
 impl<O: Parser + Clone + ToRange> Parser for CommaPreceded<O> {
-    fn parse(this: Option<Self>, input: TokenStream) -> IResult<Self> {
+    fn parse<'a>(this: Option<&'a Self>, input: TokenStream<'a>) -> IResult<'a, Self> {
         let (input, parsed_inner) = preceded(super::symbols::comma, |input| {
-            Reference::parse(this.clone().and_then(|this| Some(this.inner)), input)
+            Reference::parse(this.as_ref().map(|this| &this.inner), input)
         })(input)?;
         Ok((
             input,
@@ -200,18 +200,30 @@ pub(super) fn parse_list<'a, O>(
     inner_parsers: Option<Vec<Reference<O>>>,
 ) -> impl FnMut(TokenStream<'a>) -> IResult<Vec<Reference<O>>>
 where
-    O: Parser + ToRange + Clone + std::fmt::Debug,
+    O: Parser + ToRange + Clone + std::fmt::Debug + 'a,
 {
     move |input: TokenStream| {
         let mut parsers: VecDeque<_> = inner_parsers.clone().unwrap_or_default().into();
         let first_parser = parsers.pop_front();
-        let (input, head) = Reference::parse(first_parser, input)?;
+        let (input, head) = match Reference::parse(first_parser.as_ref(), input.clone()) {
+            Ok((i, head)) => {
+                let offset = input.offset(&i);
+                let input = input.advance(offset);
+                (input, head)
+            }
+            Err(nom::Err::Error(err)) => {
+                let offset = input.offset(&err.input);
+                let input = input.advance(offset);
+                return Err(nom::Err::Error(ParserError { input, ..err }));
+            }
+            Err(_) => panic!("Incomplete data"),
+        };
         let rest_parsers: Vec<_> = parsers.into();
-        let comma_preceded = rest_parsers
+        let comma_preceded: Vec<_> = rest_parsers
             .into_iter()
             .map(|r| CommaPreceded::new_wrapped(r))
             .collect();
-        let (input, tail) = map(many(Some(comma_preceded)), |comma_preceded| {
+        let (input, tail) = match map(many(Some(&comma_preceded)), |comma_preceded| {
             comma_preceded
                 .into_iter()
                 .map(|r| Reference {
@@ -219,7 +231,20 @@ where
                     offset: r.offset + r.reference.inner.offset,
                 })
                 .collect::<Vec<_>>()
-        })(input)?;
+        })(input.clone())
+        {
+            Ok((i, head)) => {
+                let offset = input.offset(&i);
+                let input = input.advance(offset);
+                (input, head)
+            }
+            Err(nom::Err::Error(err)) => {
+                let offset = input.offset(&err.input);
+                let input = input.advance(offset);
+                return Err(nom::Err::Error(ParserError { input, ..err }));
+            }
+            Err(_) => panic!("Incomplete data"),
+        };
         let mut list = vec![head];
         list.extend(tail);
         Ok((input, list))
@@ -278,10 +303,10 @@ where
 
 pub(super) fn affected<'a, F, O>(
     mut inner_parser: F,
-) -> impl FnMut(Option<O>, TokenStream<'a>) -> IResult<O>
+) -> impl FnMut(Option<&'a O>, TokenStream<'a>) -> IResult<'a, O>
 where
     F: InnerParser<'a, O>,
-    O: Parser + ToRange + AstInfoTraverser,
+    O: Parser + ToRange + AstInfoTraverser + Clone,
 {
     /// True if part of the tokens, that this node pointed to,
     /// were already consumed by previous parsers.
@@ -313,7 +338,7 @@ where
         let location_offset = input.location_offset();
         let token_change = &input.token_change;
 
-        token_change.deletes(&this_range)
+        token_change.deletes(this_range)
             || is_insertion_here(location_offset, token_change)
             || is_partially_consumed(location_offset, token_change, this_range.start)
     }
@@ -326,7 +351,7 @@ where
     }
 
     move |this, input| {
-        if let Some(mut this) = this {
+        if let Some(this) = this {
             let this_range = this.to_range().shift(input.get_old_reference());
             if invalid(&input, &this_range) {
                 return affected_error(input);
@@ -352,8 +377,9 @@ where
 
                 // Delete build and semantic errors from unaffected node.
                 // If the error persists, it will be re-added in the next phase.
-                this.traverse_mut(remove_messages);
-                Ok((input.advance(this_range.len()), this))
+                let mut this_clone = this.clone();
+                this_clone.traverse_mut(remove_messages);
+                Ok((input.advance(this_range.len()), this_clone))
             }
         } else {
             // parsing from scratch
@@ -363,12 +389,12 @@ where
 }
 
 pub(super) fn many<'a, O>(
-    inner_parser: Option<Vec<Reference<O>>>,
+    inner_parser: Option<&'a [Reference<O>]>,
 ) -> impl FnMut(TokenStream<'a>) -> IResult<Vec<Reference<O>>>
 where
     O: Parser + ToRange + Clone + std::fmt::Debug,
 {
-    fn parse_insertion<'a, O: Parser>(
+    fn parse_insertion<'a, O: Parser + 'a>(
         mut input: TokenStream<'a>,
         end_pos: usize,
         acc: &mut Vec<O>,
@@ -381,7 +407,7 @@ where
         Ok((input, ()))
     }
 
-    fn handle_insertions<'a, O: Parser>(
+    fn handle_insertions<'a, O: Parser + 'a>(
         input: TokenStream<'a>,
         parser_start: usize,
         acc: &mut Vec<O>,
@@ -403,7 +429,7 @@ where
 
     move |mut input| {
         let mut acc = Vec::new();
-        let parsers = inner_parser.clone().unwrap_or_default();
+        let parsers = inner_parser.unwrap_or_default();
         for parser in parsers {
             let parser_start = parser.to_range().shift(parser.offset).start;
             let (i, _) = match handle_insertions(input.clone(), parser_start, &mut acc) {
