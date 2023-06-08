@@ -39,7 +39,7 @@ fn no_change() -> ChangeTest {
     }
 }
 
-fn single_character_change() -> ChangeTest {
+fn single_token_change_global() -> ChangeTest {
     let org_text = std::fs::read_to_string("tests/programs/bigtest.spl").unwrap();
     let org_tokens = lexer::lex(&org_text);
     let org_program = parser::parse(&org_tokens);
@@ -49,6 +49,29 @@ fn single_character_change() -> ChangeTest {
     let text_change = TextChange {
         range: 1500..1504,
         text: "type".to_string(),
+    };
+    let (new_tokens, token_change) = lexer::update(&new_text, org_tokens.clone(), &text_change);
+    ChangeTest {
+        org_text,
+        new_text,
+        org_tokens,
+        new_tokens,
+        org_program,
+        text_change,
+        token_change,
+    }
+}
+
+fn single_token_change_local() -> ChangeTest {
+    let org_text = std::fs::read_to_string("tests/programs/bigtest.spl").unwrap();
+    let org_tokens = lexer::lex(&org_text);
+    let org_program = parser::parse(&org_tokens);
+
+    let mut new_text = org_text.clone();
+    new_text.replace_range(1551..1551, "=");
+    let text_change = TextChange {
+        range: 1551..1551,
+        text: "=".to_string(),
     };
     let (new_tokens, token_change) = lexer::update(&new_text, org_tokens.clone(), &text_change);
     ChangeTest {
@@ -147,8 +170,8 @@ fn no_change_benchmark(c: &mut Criterion) {
     });
 }
 
-fn single_token_change_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("single_token_change");
+fn single_token_change_global_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("single_token_change_global");
 
     // lexer
     let ChangeTest {
@@ -159,7 +182,70 @@ fn single_token_change_benchmark(c: &mut Criterion) {
         org_program,
         text_change,
         token_change,
-    } = single_character_change();
+    } = single_token_change_global();
+    group.bench_function("lexer", |b| b.iter(|| lexer::lex(black_box(&new_text))));
+    group.bench_function("lexer_inc", |b| {
+        b.iter_batched(
+            || org_tokens.clone(),
+            |org_tokens| {
+                lexer::update(
+                    black_box(&new_text),
+                    black_box(org_tokens),
+                    black_box(&text_change),
+                )
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    // parser
+    let input = TokenStream::new_with_change(&new_tokens, token_change);
+    group.bench_function("parser", |b| {
+        b.iter(|| parser::parse(black_box(&new_tokens)))
+    });
+    group.bench_function("parser_inc", |b| {
+        b.iter_batched(
+            || (org_program.clone(), input.clone()),
+            |(org_program, input)| parser::update(black_box(org_program), black_box(input)),
+            BatchSize::SmallInput,
+        )
+    });
+
+    // whole
+    group.bench_function("whole", |b| {
+        b.iter_batched(
+            || new_text.clone(),
+            |new_text| AnalyzedSource::new(black_box(new_text)),
+            BatchSize::SmallInput,
+        )
+    });
+    let analyzed_source = AnalyzedSource::new(org_text.clone());
+    group.bench_function("whole_inc", |b| {
+        b.iter_batched(
+            || {
+                let src = analyzed_source.clone();
+                let changes = vec![text_change.clone()];
+                (src, changes)
+            },
+            |(src, changes)| AnalyzedSource::update(black_box(src), black_box(changes)),
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn single_token_change_local_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("single_token_change_local");
+
+    // lexer
+    let ChangeTest {
+        org_text,
+        new_text,
+        org_tokens,
+        new_tokens,
+        org_program,
+        text_change,
+        token_change,
+    } = single_token_change_local();
     group.bench_function("lexer", |b| b.iter(|| lexer::lex(black_box(&new_text))));
     group.bench_function("lexer_inc", |b| {
         b.iter_batched(
@@ -276,6 +362,6 @@ fn double_source_benchmark(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default().measurement_time(Duration::from_secs(50)).sample_size(100);
-    targets = no_change_benchmark, single_token_change_benchmark, double_source_benchmark
+    targets = no_change_benchmark, single_token_change_global_benchmark, single_token_change_local_benchmark, double_source_benchmark
 }
 criterion_main!(benches);
