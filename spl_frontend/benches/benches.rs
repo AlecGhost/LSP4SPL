@@ -275,7 +275,7 @@ fn double_source_benchmark(c: &mut Criterion) {
 
 criterion_group! {
     name = benches;
-    config = Criterion::default().measurement_time(Duration::from_secs(100)).sample_size(500);
+    config = Criterion::default().measurement_time(Duration::from_secs(50)).sample_size(100);
     targets = no_change_benchmark, single_token_change_benchmark, double_source_benchmark
 }
 criterion_main!(benches);
