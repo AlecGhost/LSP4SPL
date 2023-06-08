@@ -103,36 +103,38 @@ impl Parser for Identifier {
 }
 
 impl Parser for Variable {
-    fn parse<'a>(_this: Option<&Self>, input: TokenStream<'a>) -> IResult<'a, Self> {
-        let (input, ((mut variable, variable_info), accesses)) = pair(
-            info(map(
-                |input| Identifier::parse(None, input),
-                Self::NamedVariable,
-            )),
-            many0(info(delimited(
-                symbols::lbracket,
-                expect(
-                    None,
-                    Reference::<Expression>::parse,
-                    ParseErrorMessage::ExpectedToken("expression".to_string()),
-                ),
-                expect(
-                    None,
-                    inc(symbols::rbracket),
-                    ParseErrorMessage::MissingClosing(']'),
-                ),
-            ))),
-        )(input)?;
-        for access in accesses {
-            let (index, mut index_info) = access;
-            index_info.extend_range(&variable_info);
-            variable = Self::ArrayAccess(ArrayAccess {
-                array: Box::new(variable),
-                index: index.map(Box::new),
-                info: index_info,
-            });
-        }
-        Ok((input, variable))
+    fn parse<'a>(this: Option<&Self>, input: TokenStream<'a>) -> IResult<'a, Self> {
+        affected(this, |input| {
+            let (input, ((mut variable, variable_info), accesses)) = pair(
+                info(map(
+                    |input| Identifier::parse(None, input),
+                    Self::NamedVariable,
+                )),
+                many0(info(delimited(
+                    symbols::lbracket,
+                    expect(
+                        None,
+                        Reference::<Expression>::parse,
+                        ParseErrorMessage::ExpectedToken("expression".to_string()),
+                    ),
+                    expect(
+                        None,
+                        inc(symbols::rbracket),
+                        ParseErrorMessage::MissingClosing(']'),
+                    ),
+                ))),
+            )(input)?;
+            for access in accesses {
+                let (index, mut index_info) = access;
+                index_info.extend_range(&variable_info);
+                variable = Self::ArrayAccess(ArrayAccess {
+                    array: Box::new(variable),
+                    index: index.map(Box::new),
+                    info: index_info,
+                });
+            }
+            Ok((input, variable))
+        })(input)
     }
 }
 
@@ -560,6 +562,7 @@ impl Parser for ParameterDeclaration {
             info.append_error(err);
             Ok((input, ParameterDeclaration::Error(info)))
         }
+
         match this {
             Some(Self::Valid { .. }) => {
                 affected(this, alt((|input| parse_valid(this, input), parse_error)))(input)
@@ -585,15 +588,18 @@ impl ToRange for Argument {
 }
 
 impl Parser for Argument {
-    fn parse<'a>(_this: Option<&Self>, input: TokenStream<'a>) -> IResult<'a, Self> {
-        alt((
-            map(
-                terminated(
-                    |input| Expression::parse(None, input),
-                    peek(look_ahead::arg),
-                ),
-                Self::Valid,
-            ),
+    fn parse<'a>(this: Option<&Self>, input: TokenStream<'a>) -> IResult<'a, Self> {
+        fn parse_valid<'a>(
+            this: Option<&Expression>,
+            input: TokenStream<'a>,
+        ) -> IResult<'a, Expression> {
+            terminated(
+                |input| Expression::parse(this, input),
+                peek(look_ahead::arg),
+            )(input)
+        }
+
+        fn parse_error(input: TokenStream) -> IResult<Expression> {
             map(
                 info(ignore_until0(peek(look_ahead::arg))),
                 |(_, mut info)| {
@@ -602,10 +608,19 @@ impl Parser for Argument {
                         ParseErrorMessage::ExpectedToken("expression".to_string()).into(),
                     );
                     info.append_error(err);
-                    Self::Error(Expression::Error(info))
+                    Expression::Error(info)
                 },
-            ),
-        ))(input)
+            )(input)
+        }
+
+        let (input, expr) = match this {
+            Some(Self::Valid(expr)) => affected(
+                Some(expr),
+                alt((|input| parse_valid(Some(expr), input), parse_error)),
+            )(input)?,
+            _ => alt((|input| parse_valid(None, input), parse_error))(input)?,
+        };
+        Ok((input, expr.into()))
     }
 }
 
