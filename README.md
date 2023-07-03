@@ -1,7 +1,7 @@
 # LSP4SPL
 
-LSP4SPL is a Language Server for SPL.
-It uses the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) developed by Microsoft.
+LSP4SPL is implementing the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
+for the programming language SPL.
 
 ## Background
 
@@ -15,11 +15,12 @@ This project aims to help with the development of test programs for this compile
 
 ## Repository
 
-This repository consists of the [language server](https://github.com/AlecGhost/LSP4SPL/tree/master/lsp4spl) itself,
-the [spl_frontend](https://github.com/AlecGhost/LSP4SPL/tree/master/spl_frontend) library,
-that provides the functionality to parse and analyze SPL source code
-and the [extension](https://github.com/AlecGhost/LSP4SPL/tree/master/editors/code)
-that is required to use LSP4SPL in VSCode.
+This repository consists of the following parts:
+
+- the [language server](https://github.com/AlecGhost/LSP4SPL/tree/master/lsp4spl) itself
+- the [spl_frontend](https://github.com/AlecGhost/LSP4SPL/tree/master/spl_frontend) library
+- the [VS Code extension](https://github.com/AlecGhost/LSP4SPL/tree/master/editors/code)
+- a [Tree-sitter grammar](https://github.com/AlecGhost/LSP4SPL/tree/master/editors/nvim/tree-sitter-spl)
 
 ## Features
 
@@ -37,3 +38,4 @@ The following LSP features are supported:
 - [x] Rename
 - [x] Prepare Rename
 - [x] Semantic Tokens
+- [x] Formatting
