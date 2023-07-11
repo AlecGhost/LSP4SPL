@@ -1176,11 +1176,16 @@ mod look_ahead {
         keywords::r#while,
         pair(
             |input| Identifier::parse(None, input),
-            alt((symbols::assign, symbols::lparen, symbols::lbracket))
+            alt((symbols::assign, symbols::lparen))
         ),
         global_dec,
     );
-    look_ahead_parser!(var_dec, keywords::var, stmt,);
+    look_ahead_parser!(
+        var_dec,
+        keywords::var,
+        stmt,
+        pair(|input| Identifier::parse(None, input), symbols::lbracket),
+    );
     look_ahead_parser!(param_dec, symbols::rparen, symbols::comma, var_dec,);
     look_ahead_parser!(arg, param_dec,);
 }
