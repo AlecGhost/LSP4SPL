@@ -1184,7 +1184,10 @@ mod look_ahead {
         var_dec,
         keywords::var,
         stmt,
-        pair(|input| Identifier::parse(None, input), symbols::lbracket),
+        pair(
+            |input| Identifier::parse(None, input),
+            alt((symbols::lbracket, symbols::eq, symbols::colon))
+        ),
     );
     look_ahead_parser!(param_dec, symbols::rparen, symbols::comma, var_dec,);
     look_ahead_parser!(arg, param_dec,);
