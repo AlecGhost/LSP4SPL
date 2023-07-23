@@ -195,23 +195,24 @@ pub fn as_pos_range(range: &TextRange, text: &str) -> PosRange {
 
 fn as_index_range(pos_range: &PosRange, text: &str) -> TextRange {
     let PosRange { start, end } = pos_range;
-    let start = get_insertion_index(start, text).expect("Invalid start position");
-    let end = get_insertion_index(end, text).expect("Invalid end position");
+    let start = get_insertion_index(start, text);
+    let end = get_insertion_index(end, text);
     start..end
 }
 
-/// Tries to convert a text `Position` to an index.
+/// Converts a text `Position` to an index.
+/// If the position is out of bounds, the last possible index is returned.
 ///
 /// Note: This is the insertion index,
 /// so it can be after the last character.
-/// Therefore the text slice should not be indexed with this index
-pub fn get_insertion_index(position: &Position, text: &str) -> Option<usize> {
+/// Therefore the text slice should not be indexed with this index.
+pub fn get_insertion_index(position: &Position, text: &str) -> usize {
     let mut line = 0;
     let mut character = 0;
     let pos = (position.line, position.character);
     for (i, c) in text.char_indices() {
         if (line, character) == pos {
-            return Some(i);
+            return i;
         }
         if c == '\n' {
             line += 1;
@@ -220,9 +221,5 @@ pub fn get_insertion_index(position: &Position, text: &str) -> Option<usize> {
             character += 1;
         }
     }
-    if (line, character) == pos {
-        Some(text.len())
-    } else {
-        None
-    }
+    text.len()
 }

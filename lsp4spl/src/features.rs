@@ -93,34 +93,30 @@ async fn doc_cursor(
     let pos = doc_params.position;
     let uri = doc_params.text_document.uri;
     if let Some(doc) = get_doc(uri, doctx).await? {
-        if let Some(index) = document::get_insertion_index(&pos, &doc.text) {
-            let context = doc
-                .ast
-                .global_declarations
-                .iter()
-                .find(|gd| {
-                    gd.to_text_range(&doc.tokens[gd.offset..])
-                        .contains(&index)
-                })
-                .and_then(|gd| {
-                    use GlobalDeclaration::*;
-                    let name = match gd.as_ref() {
-                        Procedure(pd) => pd.name.as_ref(),
-                        Type(td) => td.name.as_ref(),
-                        Error(_) => None,
-                    };
-                    if let Some(name) = &name {
-                        doc.table.lookup(&name.value).cloned()
-                    } else {
-                        None
-                    }
-                });
-            return Ok(Some(DocumentCursor {
-                doc,
-                index,
-                context,
-            }));
-        }
+        let index = document::get_insertion_index(&pos, &doc.text);
+        let context = doc
+            .ast
+            .global_declarations
+            .iter()
+            .find(|gd| gd.to_text_range(&doc.tokens[gd.offset..]).contains(&index))
+            .and_then(|gd| {
+                use GlobalDeclaration::*;
+                let name = match gd.as_ref() {
+                    Procedure(pd) => pd.name.as_ref(),
+                    Type(td) => td.name.as_ref(),
+                    Error(_) => None,
+                };
+                if let Some(name) = &name {
+                    doc.table.lookup(&name.value).cloned()
+                } else {
+                    None
+                }
+            });
+        return Ok(Some(DocumentCursor {
+            doc,
+            index,
+            context,
+        }));
     }
     Ok(None)
 }
