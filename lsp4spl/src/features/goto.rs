@@ -19,9 +19,7 @@ pub async fn declaration(
     let uri = doc_params.text_document.uri.clone();
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
-            let DocumentCursor {
-                doc, context, ..
-            } = cursor;
+            let DocumentCursor { doc, context, .. } = cursor;
             if let Some(entry) = context {
                 match &entry {
                     GlobalEntry::Type(t) => {
@@ -43,15 +41,12 @@ pub async fn declaration(
                             local_table: Some(&p.local_table),
                         };
                         if let Some(entry) = lookup_table.lookup(&ident.value) {
-                            if let Entry::Procedure(proc_entry) = entry {
-                                if proc_entry.is_default() {
-                                    return Ok(None);
-                                }
+                            // early return for default values
+                            if entry.is_default() {
+                                return Ok(None);
                             }
                             let tokens = match entry {
-                                Entry::Procedure(param_dec) => {
-                                    &doc.tokens[param_dec.to_range()]
-                                }
+                                Entry::Procedure(param_dec) => &doc.tokens[param_dec.to_range()],
                                 Entry::Type(type_dec) => &doc.tokens[type_dec.to_range()],
                                 Entry::Variable(var) | Entry::Parameter(var) => {
                                     &doc.tokens[p.to_range()][var.to_range()]
@@ -87,9 +82,7 @@ pub async fn type_definition(
     let uri = doc_params.text_document.uri.clone();
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
-            let DocumentCursor {
-                doc, context, ..
-            } = cursor;
+            let DocumentCursor { doc, context, .. } = cursor;
             if let Some(entry) = context {
                 match &entry {
                     GlobalEntry::Type(_) => {
@@ -137,10 +130,8 @@ pub async fn type_definition(
                                 Entry::Procedure(_) => { /* no type definition */ }
                                 Entry::Variable(v) | Entry::Parameter(v) => {
                                     if let Some(DataType::Array { creator, .. }) = &v.data_type {
-                                        let entry = doc
-                                            .table
-                                            .lookup(creator)
-                                            .expect("Invalid creator");
+                                        let entry =
+                                            doc.table.lookup(creator).expect("Invalid creator");
                                         match entry {
                                             GlobalEntry::Type(t) => {
                                                 return Ok(Some(Location {
@@ -177,9 +168,7 @@ pub async fn implementation(
     let uri = doc_params.text_document.uri.clone();
     if let Some(cursor) = super::doc_cursor(doc_params, doctx).await? {
         if let Some(ident) = &cursor.ident() {
-            let DocumentCursor {
-                doc, context, ..
-            } = cursor;
+            let DocumentCursor { doc, context, .. } = cursor;
             if let Some(entry) = context {
                 match &entry {
                     GlobalEntry::Procedure(p) => {
@@ -192,10 +181,7 @@ pub async fn implementation(
                             if let Entry::Procedure(_) = entry {
                                 return Ok(Some(Location {
                                     uri,
-                                    range: as_pos_range(
-                                        &entry.to_text_range(tokens),
-                                        &doc.text,
-                                    ),
+                                    range: as_pos_range(&entry.to_text_range(tokens), &doc.text),
                                 }));
                             }
                             /* no implementation for types and variables */

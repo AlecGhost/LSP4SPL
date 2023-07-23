@@ -74,9 +74,14 @@ pub struct ProcedureEntry {
     pub doc: Option<String>,
 }
 
-impl ProcedureEntry {
+impl Entry<'_> {
     pub fn is_default(&self) -> bool {
-        initialization::DEFAULT_ENTRIES.contains(&self.name.value.as_str())
+        match self {
+            Self::Type(TypeEntry { name, .. }) | Self::Procedure(ProcedureEntry { name, .. }) => {
+                initialization::DEFAULT_ENTRIES.contains(&name.value.as_str())
+            }
+            _ => false,
+        }
     }
 }
 
