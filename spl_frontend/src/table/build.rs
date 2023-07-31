@@ -63,7 +63,7 @@ impl TableBuilder for GlobalDeclaration {
 impl TableBuilder for TypeDeclaration {
     fn build(&mut self, table: &mut GlobalTable, offset: usize) {
         let range = self.to_range().shift(offset);
-        if let Some(name) = &mut self.name {
+        if let Some(name) = self.name.as_mut() {
             if name.value == "main" {
                 name.info.append_error(SplError(
                     name.to_range(),
@@ -76,12 +76,13 @@ impl TableBuilder for TypeDeclaration {
                 global_table: Some(table),
                 local_table: None,
             };
+            let data_type = get_data_type(self.type_expr.as_mut(), Some(name), &lookup_table);
             if table
                 .enter(
                     name.to_string(),
                     GlobalEntry::Type(TypeEntry {
                         name: name.clone(),
-                        data_type: get_data_type(&mut self.type_expr, Some(name), &lookup_table),
+                        data_type,
                         range,
                         doc: documentation,
                     }),
@@ -98,7 +99,7 @@ impl TableBuilder for TypeDeclaration {
 impl TableBuilder for ProcedureDeclaration {
     fn build(&mut self, table: &mut GlobalTable, offset: usize) {
         let range = self.to_range().shift(offset);
-        if let Some(name) = &mut self.name {
+        if let Some(name) = self.name.as_mut() {
             let documentation = get_documentation(&self.doc);
             let mut local_table = LocalTable::default();
             let parameters = self
@@ -147,10 +148,11 @@ fn build_parameter(
                 global_table: Some(global_table),
                 local_table: None,
             };
+            let data_type = get_data_type(type_expr.as_mut(), Some(name), &lookup_table);
             let param_entry = VariableEntry {
                 name: name.clone(),
                 is_ref: *is_ref,
-                data_type: get_data_type(type_expr, Some(name), &lookup_table),
+                data_type,
                 range,
                 doc: documentation,
             };
@@ -192,7 +194,7 @@ fn build_variable(
             name: name.clone(),
             is_ref: false,
             data_type: get_data_type(
-                type_expr,
+                type_expr.as_mut(),
                 Some(name),
                 &LookupTable {
                     global_table: Some(global_table),
@@ -213,11 +215,11 @@ fn build_variable(
 }
 
 fn get_data_type(
-    type_expr: &mut Option<Reference<TypeExpression>>,
+    type_expr: Option<&mut Reference<TypeExpression>>,
     caller: Option<&Identifier>,
     table: &LookupTable,
 ) -> Option<DataType> {
-    type_expr.as_mut().and_then(|type_expr| {
+    type_expr.and_then(|type_expr| {
         use TypeExpression::*;
         match type_expr.as_mut() {
             ArrayType {
@@ -230,7 +232,11 @@ fn get_data_type(
                     Some(base_type),
                 ) = (
                     size,
-                    get_data_type(&mut base_type.clone().map(|boxed| *boxed), caller, table),
+                    get_data_type(
+                        base_type.as_mut().map(|boxed| boxed.as_mut()),
+                        caller,
+                        table,
+                    ),
                 ) {
                     caller.map(|creator| DataType::Array {
                         size: *size,

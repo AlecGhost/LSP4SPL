@@ -72,3 +72,30 @@ fn invalid_bool() {
         ]
     );
 }
+
+#[test]
+fn invalid_array_of() {
+    let (table, errors) = test("type a = array [3] of bool;");
+    eq!(
+        table,
+        GlobalTable::initialize(vec![(
+            "a".to_string(),
+            GlobalEntry::Type(TypeEntry {
+                name: Identifier::new("a".to_string(), 1..2),
+                data_type: None,
+                range: 0..10,
+                doc: None
+            }),
+        )])
+    );
+    eq!(
+        errors,
+        vec![
+            SplError(0..0, BuildErrorMessage::MainIsMissing.into()),
+            SplError(
+                8..9,
+                BuildErrorMessage::UndefinedType("bool".to_string()).into()
+            ),
+        ]
+    );
+}

@@ -100,7 +100,7 @@ impl ErrorContainer for TypeExpression {
             } => {
                 let mut errors = info.errors();
                 if let Some(base_type) = base_type {
-                    errors.extend(base_type.errors());
+                    errors.extend(base_type.errors().shift(base_type.offset));
                 }
                 errors
             }

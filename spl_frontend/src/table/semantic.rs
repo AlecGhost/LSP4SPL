@@ -13,7 +13,6 @@ use std::cmp::Ordering;
 mod tests;
 
 /// Analyzes the given program for semantic errors.
-/// Errors are reported by the specifie.
 pub fn analyze(program: &mut Program, table: &GlobalTable) {
     program
         .global_declarations
