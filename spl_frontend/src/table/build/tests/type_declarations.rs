@@ -31,8 +31,8 @@ fn array() {
             GlobalEntry::Type(TypeEntry {
                 name: Identifier::new("a".to_string(), 1..2),
                 data_type: Some(DataType::Array {
-                    size: 5,
-                    base_type: Box::new(DataType::Int),
+                    size: Some(5),
+                    base_type: Some(Box::new(DataType::Int)),
                     creator: "a".to_string(),
                 }),
                 range: 0..10,
@@ -82,7 +82,11 @@ fn invalid_array_of() {
             "a".to_string(),
             GlobalEntry::Type(TypeEntry {
                 name: Identifier::new("a".to_string(), 1..2),
-                data_type: None,
+                data_type: Some(DataType::Array {
+                    size: Some(3),
+                    base_type: None,
+                    creator: "a".to_string()
+                }),
                 range: 0..10,
                 doc: None
             }),

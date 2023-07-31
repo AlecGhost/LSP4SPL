@@ -103,15 +103,13 @@ impl AnalyzeStatement for CallStatement {
                     Ordering::Less => {
                         self.info.append_error(SplError(
                             self.to_range(),
-                            SemanticErrorMessage::TooFewArguments(self.name.value.clone())
-                                .into(),
+                            SemanticErrorMessage::TooFewArguments(self.name.value.clone()).into(),
                         ));
                     }
                     Ordering::Greater => {
                         self.info.append_error(SplError(
                             self.to_range(),
-                            SemanticErrorMessage::TooManyArguments(self.name.value.clone())
-                                .into(),
+                            SemanticErrorMessage::TooManyArguments(self.name.value.clone()).into(),
                         ));
                     }
                 };
@@ -255,7 +253,7 @@ impl AnalyzeExpression for ArrayAccess {
         self.array
             .analyze(table)
             .and_then(|array_type| match array_type {
-                DataType::Array { base_type, .. } => Some(*base_type),
+                DataType::Array { base_type, .. } => base_type.map(|boxed| *boxed),
                 _ => {
                     self.info.append_error(SplError(
                         self.to_range(),

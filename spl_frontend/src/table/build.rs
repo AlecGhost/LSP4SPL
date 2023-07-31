@@ -225,27 +225,18 @@ fn get_data_type(
             ArrayType {
                 size, base_type, ..
             } => {
-                if let (
-                    Some(IntLiteral {
-                        value: Some(size), ..
-                    }),
-                    Some(base_type),
-                ) = (
+                let size = size.as_ref().and_then(|int_lit| int_lit.value);
+                let base_type = get_data_type(
+                    base_type.as_mut().map(|boxed| boxed.as_mut()),
+                    caller,
+                    table,
+                )
+                .map(Box::new);
+                caller.map(|creator| DataType::Array {
                     size,
-                    get_data_type(
-                        base_type.as_mut().map(|boxed| boxed.as_mut()),
-                        caller,
-                        table,
-                    ),
-                ) {
-                    caller.map(|creator| DataType::Array {
-                        size: *size,
-                        base_type: Box::new(base_type),
-                        creator: creator.to_string(),
-                    })
-                } else {
-                    None
-                }
+                    base_type,
+                    creator: creator.to_string(),
+                })
             }
             NamedType(name) => {
                 if name.value == "int" {

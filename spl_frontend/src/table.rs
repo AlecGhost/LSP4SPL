@@ -99,8 +99,8 @@ pub enum DataType {
     Int,
     Bool,
     Array {
-        size: u32,
-        base_type: Box<Self>,
+        size: Option<u32>,
+        base_type: Option<Box<Self>>,
         creator: String,
     },
 }
@@ -291,7 +291,14 @@ impl Display for DataType {
                 size,
                 base_type,
                 creator: _,
-            } => format!("array [{}] of {}", size, base_type),
+            } => format!(
+                "array [{}] of {}",
+                size.as_ref()
+                    .map_or_else(|| "_".to_string(), |size| size.to_string()),
+                base_type
+                    .as_ref()
+                    .map_or_else(|| "_".to_string(), |dt| dt.to_string())
+            ),
         };
         write!(f, "{}", display)
     }
