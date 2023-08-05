@@ -5,7 +5,7 @@ use crate::{
         lex,
         token::{Token, TokenStream},
     },
-    parser::{eof, Parser},
+    parser::{markers::eof, Parser},
 };
 use nom::{combinator::all_consuming, sequence::terminated};
 #[cfg(test)]

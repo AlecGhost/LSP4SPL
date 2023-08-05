@@ -32,6 +32,11 @@ pub fn parse(input: &[Token]) -> Program {
     program
 }
 
+/// Incrementally updates the AST based on the changed tokens.
+///
+/// # Panics
+///
+/// Panics if updating fails.
 pub fn update(program: Program, input: TokenStream) -> Program {
     let (_, program) = Program::parse(Some(&program), input).expect("Parser cannot fail");
     program
@@ -56,7 +61,7 @@ impl Parser for IntLiteral {
             this,
             map(
                 info(alt((
-                    map(hex, |token| {
+                    map(literals::hex, |token| {
                         if let TokenType::Hex(hex_result) = token.token_type {
                             match hex_result {
                                 IntResult::Int(i) => Some(i),
@@ -66,14 +71,14 @@ impl Parser for IntLiteral {
                             panic!("Invalid hex parse")
                         }
                     }),
-                    map(char, |token| {
+                    map(literals::char, |token| {
                         if let TokenType::Char(c) = token.token_type {
                             Some((c as u8).into())
                         } else {
                             panic!("Invalid char parse")
                         }
                     }),
-                    map(int, |token| {
+                    map(literals::int, |token| {
                         if let TokenType::Int(int_result) = token.token_type {
                             match int_result {
                                 IntResult::Int(i) => Some(i),
@@ -94,7 +99,7 @@ impl Parser for Identifier {
     fn parse<'a>(this: Option<&Self>, input: TokenStream<'a>) -> IResult<'a, Self> {
         affected(
             this,
-            map(info(ident), |(ident, info)| Self {
+            map(info(literals::ident), |(ident, info)| Self {
                 value: ident.to_string(),
                 info,
             }),
@@ -657,7 +662,7 @@ impl Parser for CallStatement {
                             peek(alt((
                                 recognize(symbols::rparen),
                                 recognize(symbols::semic),
-                                recognize(eof),
+                                recognize(markers::eof),
                             ))),
                             |_| Vec::new(),
                         ),
@@ -928,7 +933,7 @@ impl Parser for ProcedureDeclaration {
                             peek(alt((
                                 recognize(symbols::rparen),
                                 recognize(symbols::lcurly),
-                                recognize(eof),
+                                recognize(markers::eof),
                             ))),
                             |_| Vec::new(),
                         ),
@@ -1014,7 +1019,7 @@ impl Parser for Program {
                 info(many(
                     this.map(|program| program.global_declarations.as_slice()),
                 )),
-                all_consuming(eof),
+                all_consuming(markers::eof),
             ),
             |(global_declarations, info)| Self {
                 global_declarations,
@@ -1106,11 +1111,12 @@ macro_rules! tag_parser {
     };
 }
 
-tag_parser!(ident, TokenType::Ident(_));
-tag_parser!(char, TokenType::Char(_));
-tag_parser!(int, TokenType::Int(_));
-tag_parser!(hex, TokenType::Hex(_));
-tag_parser!(eof, TokenType::Eof);
+mod literals {
+    tag_parser!(ident, TokenType::Ident(_));
+    tag_parser!(char, TokenType::Char(_));
+    tag_parser!(int, TokenType::Int(_));
+    tag_parser!(hex, TokenType::Hex(_));
+}
 
 mod keywords {
     tag_parser!(array, TokenType::Array);
@@ -1147,8 +1153,12 @@ mod symbols {
     tag_parser!(divide, TokenType::Divide);
 }
 
+mod markers {
+    tag_parser!(eof, TokenType::Eof);
+}
+
 mod look_ahead {
-    use super::{eof, keywords, symbols, Parser};
+    use super::{keywords, markers::eof, symbols, Parser};
     use crate::ast::Identifier;
     use nom::{branch::alt, sequence::pair};
 
