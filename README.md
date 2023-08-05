@@ -40,20 +40,22 @@ This repository consists of the following parts:
 - the [VS Code extension](https://github.com/AlecGhost/LSP4SPL/tree/master/editors/code)
 - a [Tree-sitter grammar](https://github.com/AlecGhost/LSP4SPL/tree/master/editors/nvim/tree-sitter-spl)
 
-# Building
-
-First, get the code and go into the new directory.
-
-```
-git clone https://github.com/AlecGhost/LSP4SPL.git
-cd LSP4SPL
-```
+## Building
 
 If you haven't already, install [Rust](https://rustup.rs/).
-Then you can build the language server binary with this command:
+
+If you are just interested in the binary of the language server,
+install it with this command:
 
 ```sh
-cargo build --release
+cargo install lsp4spl
 ```
 
-The binary will appear here: `target/release/lsp4spl`.
+Alternatively, you can clone this repository
+and then build it.
+
+```sh
+git clone https://github.com/AlecGhost/LSP4SPL.git
+cd LSP4SPL
+cargo build --release
+```
