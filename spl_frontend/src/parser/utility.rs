@@ -1,9 +1,8 @@
 use crate::{
     ast::{AstInfo, AstInfoTraverser, Reference},
     error::{ErrorMessage, ParseErrorMessage, ParserError, ParserErrorKind},
-    lexer::token::TokenStream,
     parser::{IResult, Parser},
-    token::{Token, TokenChange},
+    tokens::{TokenStream, Token, TokenChange},
     Shiftable, ToRange,
 };
 use nom::{

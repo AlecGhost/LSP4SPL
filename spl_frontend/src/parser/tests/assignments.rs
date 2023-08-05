@@ -1,4 +1,4 @@
-use crate::token;
+use crate::tokens;
 
 use super::*;
 
@@ -38,8 +38,8 @@ fn invalid_equals_symbol() {
                 vec![SplError(
                     1..2,
                     ParseErrorMessage::ConfusedToken(
-                        token::ASSIGN.to_string(),
-                        token::EQ.to_string()
+                        tokens::ASSIGN.to_string(),
+                        tokens::EQ.to_string()
                     )
                     .into()
                 )],

@@ -1,11 +1,9 @@
 use crate::{
     ast::*,
     error::{ParseErrorMessage, SplError},
-    lexer::{
-        lex,
-        token::{Token, TokenStream},
-    },
+    lexer::lex,
     parser::{markers::eof, Parser},
+    tokens::{Token, TokenStream},
 };
 use nom::{combinator::all_consuming, sequence::terminated};
 #[cfg(test)]

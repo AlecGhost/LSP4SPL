@@ -1,8 +1,7 @@
 //! Contains structs and enums for all AST nodes
 use crate::{
     error::{OperatorConversionError, SplError},
-    lexer::token::TokenType,
-    token::Token,
+    tokens::{Token, TokenType},
     Shiftable, ToRange, ToTextRange,
 };
 use spl_frontend_macros::{ToRange, ToTextRange};

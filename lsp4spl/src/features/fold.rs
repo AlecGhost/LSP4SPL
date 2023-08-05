@@ -3,7 +3,7 @@ use color_eyre::eyre::Result;
 use lsp_types::{FoldingRange, FoldingRangeKind, FoldingRangeParams};
 use spl_frontend::{
     ast::GlobalDeclaration,
-    token::{Token, TokenType},
+    tokens::{Token, TokenType},
     Shiftable, ToRange,
 };
 use tokio::sync::mpsc::Sender;

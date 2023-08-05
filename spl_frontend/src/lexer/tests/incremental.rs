@@ -1,6 +1,6 @@
 use crate::{
     lexer,
-    token::{IntResult, Token, TokenChange, TokenType},
+    tokens::{IntResult, Token, TokenChange, TokenType},
     TextChange,
 };
 use pretty_assertions::assert_eq;

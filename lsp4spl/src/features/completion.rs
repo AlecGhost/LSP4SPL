@@ -6,7 +6,7 @@ use spl_frontend::{
     table::{
         GlobalEntry, GlobalTable, LocalEntry, LocalTable, LookupTable, SymbolTable, TableEntry,
     },
-    token::{Token, TokenList, TokenType},
+    tokens::{Token, TokenList, TokenType},
     ToTextRange,
 };
 use tokio::sync::mpsc::Sender;
@@ -347,7 +347,7 @@ fn new_global_declaration(global_table: &GlobalTable) -> Vec<CompletionItem> {
 
 mod items {
     use lsp_types::{CompletionItem, CompletionItemKind};
-    use spl_frontend::token;
+    use spl_frontend::tokens;
 
     macro_rules! item {
         ($name:ident, $label:expr) => {
@@ -361,15 +361,15 @@ mod items {
         };
     }
 
-    item!(array, token::ARRAY);
-    item!(of, token::OF);
-    item!(r#if, token::IF);
-    item!(r#else, token::ELSE);
-    item!(r#while, token::WHILE);
-    item!(r#type, token::TYPE);
-    item!(proc, token::PROC);
-    item!(var, token::VAR);
-    item!(r#ref, token::REF);
+    item!(array, tokens::ARRAY);
+    item!(of, tokens::OF);
+    item!(r#if, tokens::IF);
+    item!(r#else, tokens::ELSE);
+    item!(r#while, tokens::WHILE);
+    item!(r#type, tokens::TYPE);
+    item!(proc, tokens::PROC);
+    item!(var, tokens::VAR);
+    item!(r#ref, tokens::REF);
 
     /// int is a type, not a keyword
     pub(super) fn int() -> CompletionItem {

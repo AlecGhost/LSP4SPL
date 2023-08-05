@@ -35,7 +35,7 @@ pub async fn format(
 mod fmt {
     use spl_frontend::{
         ast::*,
-        token::{Token, TokenType},
+        tokens::{Token, TokenType},
     };
 
     #[derive(Clone, Debug)]

@@ -7,7 +7,7 @@ use lsp_types::{
 use spl_frontend::{
     ast::{CallStatement, GlobalDeclaration, ProcedureDeclaration, Reference, Statement},
     table::{GlobalEntry, SymbolTable},
-    token::{Token, TokenType},
+    tokens::{Token, TokenType},
     ToRange,
 };
 use tokio::sync::mpsc::Sender;

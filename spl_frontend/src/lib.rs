@@ -1,16 +1,16 @@
 #![warn(clippy::nursery)]
 use ast::Program;
 use error::SplError;
-use lexer::token::{Token, TokenStream};
 use std::ops::Range;
 use table::GlobalTable;
+use tokens::{Token, TokenStream};
 
 pub mod ast;
 pub mod error;
 pub mod lexer;
 pub mod parser;
-pub use lexer::token;
 pub mod table;
+pub mod tokens;
 
 pub trait ToRange {
     fn to_range(&self) -> Range<usize>;

@@ -1,22 +1,21 @@
-use crate::error::{LexErrorMessage, SplError};
-use crate::{Shiftable, TextChange, ToRange};
-use nom::combinator::{eof, iterator, peek};
-use nom::sequence::{delimited, pair, terminated};
+use crate::{
+    error::{LexErrorMessage, SplError},
+    tokens::{IntResult, Token, TokenChange, TokenType},
+    Shiftable, TextChange, ToRange,
+};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_till},
     character::complete::{alpha1, anychar, digit1, hex_digit1, multispace0},
-    combinator::map,
+    combinator::{eof, iterator, map, peek},
     multi::many0,
-    sequence::preceded,
+    sequence::{delimited, pair, preceded, terminated},
 };
 use std::ops::Range;
-use token::{IntResult, Token, TokenChange, TokenType};
 use utility::{alpha_numeric0, expect, is_alpha_numeric, verify};
 
 #[cfg(test)]
 mod tests;
-pub mod token;
 mod utility;
 
 /// Type alias for nom_locate::LocatedSpan.

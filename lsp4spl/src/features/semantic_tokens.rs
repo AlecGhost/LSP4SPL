@@ -4,7 +4,7 @@ use lsp_types::{Position, SemanticToken, SemanticTokens, SemanticTokensParams};
 use spl_frontend::{
     ast::{AstInfo, GlobalDeclaration, ProcedureDeclaration, TypeDeclaration},
     table::{Entry, GlobalTable, LookupTable},
-    token::{Token, TokenType},
+    tokens::{Token, TokenType},
     AnalyzedSource, ToRange,
 };
 use tokio::sync::mpsc::Sender;

@@ -6,7 +6,7 @@ use lsp_types::{TextDocumentPositionParams, Url};
 use spl_frontend::{
     ast::{GlobalDeclaration, Identifier, ProcedureDeclaration},
     table::{GlobalEntry, GlobalTable, LocalTable, SymbolTable},
-    token::TokenType,
+    tokens::TokenType,
     AnalyzedSource, ToRange, ToTextRange,
 };
 use tokio::sync::{mpsc::Sender, oneshot};

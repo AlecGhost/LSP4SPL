@@ -1,4 +1,4 @@
-use crate::token::TokenStream;
+use crate::tokens::TokenStream;
 use crate::Shiftable;
 use crate::{ast::Identifier, ToRange};
 use std::fmt::{Debug, Display};

@@ -1,6 +1,6 @@
-use crate::lexer::{
-    lex,
-    token::{IntResult, Token, TokenType},
+use crate::{
+    lexer::lex,
+    tokens::{IntResult, Token, TokenType},
 };
 use pretty_assertions::assert_eq;
 

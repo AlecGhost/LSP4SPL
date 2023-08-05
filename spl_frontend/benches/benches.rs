@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion
 use spl_frontend::{
     ast::Program,
     lexer, parser,
-    token::{Token, TokenChange, TokenStream},
+    tokens::{Token, TokenChange, TokenStream},
     AnalyzedSource, TextChange,
 };
 use std::time::Duration;

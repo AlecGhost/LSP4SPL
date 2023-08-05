@@ -1,11 +1,11 @@
 use crate::{
     ast::*,
     error::{ParseErrorMessage, ParserError, SplError},
-    lexer::token::{IntResult, Token, TokenStream, TokenType},
     parser::utility::{
         affected, confusable, expect, ignore_until0, ignore_until1, info, many, parse_list,
     },
-    token, ToRange,
+    tokens::{self, IntResult, Token, TokenStream, TokenType},
+    ToRange,
 };
 use nom::{
     branch::alt,
@@ -378,19 +378,19 @@ impl Parser for TypeDeclaration {
                             confusable(
                                 symbols::assign,
                                 ParseErrorMessage::ConfusedToken(
-                                    token::EQ.to_string(),
-                                    token::ASSIGN.to_string(),
+                                    tokens::EQ.to_string(),
+                                    tokens::ASSIGN.to_string(),
                                 ),
                             ),
                             confusable(
                                 symbols::colon,
                                 ParseErrorMessage::ConfusedToken(
-                                    token::EQ.to_string(),
-                                    token::COLON.to_string(),
+                                    tokens::EQ.to_string(),
+                                    tokens::COLON.to_string(),
                                 ),
                             ),
                         ))),
-                        ParseErrorMessage::ExpectedToken(token::EQ.to_string()),
+                        ParseErrorMessage::ExpectedToken(tokens::EQ.to_string()),
                     ),
                     expect(
                         this.and_then(|td| td.type_expr.as_ref()),
@@ -446,19 +446,19 @@ impl Parser for VariableDeclaration {
                                 confusable(
                                     symbols::assign,
                                     ParseErrorMessage::ConfusedToken(
-                                        token::COLON.to_string(),
-                                        token::ASSIGN.to_string(),
+                                        tokens::COLON.to_string(),
+                                        tokens::ASSIGN.to_string(),
                                     ),
                                 ),
                                 confusable(
                                     symbols::eq,
                                     ParseErrorMessage::ConfusedToken(
-                                        token::COLON.to_string(),
-                                        token::EQ.to_string(),
+                                        tokens::COLON.to_string(),
+                                        tokens::EQ.to_string(),
                                     ),
                                 ),
                             ))),
-                            ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
+                            ParseErrorMessage::ExpectedToken(tokens::COLON.to_string()),
                         ),
                         expect(
                             type_expr,
@@ -535,7 +535,7 @@ impl Parser for ParameterDeclaration {
                     expect(
                         None,
                         inc(symbols::colon),
-                        ParseErrorMessage::ExpectedToken(token::COLON.to_string()),
+                        ParseErrorMessage::ExpectedToken(tokens::COLON.to_string()),
                     ),
                     expect(
                         type_expr,
@@ -723,8 +723,8 @@ impl Parser for Assignment {
                             confusable(
                                 symbols::eq,
                                 ParseErrorMessage::ConfusedToken(
-                                    token::ASSIGN.to_string(),
-                                    token::EQ.to_string(),
+                                    tokens::ASSIGN.to_string(),
+                                    tokens::EQ.to_string(),
                                 ),
                             ),
                         )),
@@ -1087,9 +1087,9 @@ fn comment(input: TokenStream) -> IResult<String> {
 macro_rules! tag_parser {
     ($name:ident, $token_type:pat) => {
         pub fn $name(
-            input: crate::lexer::token::TokenStream,
-        ) -> crate::parser::IResult<crate::lexer::token::Token> {
-            use crate::{lexer::token::TokenType, parser::comment};
+            input: crate::tokens::TokenStream,
+        ) -> crate::parser::IResult<crate::tokens::Token> {
+            use crate::{parser::comment, tokens::TokenType};
             use nom::{bytes::complete::take, multi::many0};
             let err = Err(nom::Err::Error(crate::error::ParserError {
                 input: input.clone(),
@@ -1165,8 +1165,8 @@ mod look_ahead {
     macro_rules! look_ahead_parser {
         ($name:ident, $($parser:expr, )+) => {
         pub fn $name(
-            input: crate::token::TokenStream,
-        ) -> crate::parser::IResult<crate::token::TokenStream> {
+            input: crate::tokens::TokenStream,
+        ) -> crate::parser::IResult<crate::tokens::TokenStream> {
             nom::branch::alt((
                 $(
                     nom::combinator::recognize($parser),

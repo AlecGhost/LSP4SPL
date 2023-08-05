@@ -233,7 +233,7 @@ impl ToRange for Entry<'_> {
 
 // TODO: Remove
 impl ToTextRange for Entry<'_> {
-    fn to_text_range(&self, tokens: &[crate::token::Token]) -> Range<usize> {
+    fn to_text_range(&self, tokens: &[crate::tokens::Token]) -> Range<usize> {
         use Entry::*;
         match self {
             Type(t) => t.name.to_text_range(tokens),
@@ -263,7 +263,7 @@ impl ToRange for TypeEntry {
 
 // TODO: Remove
 impl ToTextRange for GlobalEntry {
-    fn to_text_range(&self, tokens: &[crate::token::Token]) -> Range<usize> {
+    fn to_text_range(&self, tokens: &[crate::tokens::Token]) -> Range<usize> {
         use GlobalEntry::*;
         match self {
             Procedure(p) => p.name.to_text_range(tokens),

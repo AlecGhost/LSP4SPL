@@ -1,7 +1,7 @@
 use crate::{
     ast::{AstInfo, GlobalDeclaration, Identifier, ProcedureDeclaration, Program, Reference},
     lexer, parser,
-    token::TokenStream,
+    tokens::TokenStream,
     AnalyzedSource, TextChange, ToRange,
 };
 use insta::assert_debug_snapshot;
