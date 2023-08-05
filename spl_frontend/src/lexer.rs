@@ -48,6 +48,11 @@ pub fn lex(src: &str) -> Vec<Token> {
     tokens
 }
 
+/// Incrementally updates the tokens based on a text change.
+///
+/// # Panics
+///
+/// Panics if updating fails.
 pub fn update(
     new_text: &str,
     mut tokens: Vec<Token>,

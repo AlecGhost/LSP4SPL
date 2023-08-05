@@ -1,6 +1,6 @@
 use crate::{ast::Identifier, error::KeyAlreadyExistsError, ToRange, ToTextRange};
-pub(crate) use build::build;
-pub(crate) use semantic::analyze;
+pub use build::build;
+pub use semantic::analyze;
 use std::{
     collections::{hash_map, HashMap},
     fmt::Display,
@@ -21,34 +21,41 @@ pub trait SymbolTable {
     ) -> Result<(), KeyAlreadyExistsError<String>>;
 }
 
+/// Symbol table with a global scope.
 #[derive(Clone, PartialEq, Eq)]
 pub struct GlobalTable {
     pub entries: HashMap<String, GlobalEntry>,
 }
 
+/// Symbol table with the scope of one specific procedure.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LocalTable {
     pub entries: HashMap<String, LocalEntry>,
 }
 
+/// Combines a `LocalTable` and its `GlobalTable`,
+/// so that a combined lookup can be performed.
 #[derive(Debug)]
 pub struct LookupTable<'a> {
     pub local_table: Option<&'a LocalTable>,
     pub global_table: Option<&'a GlobalTable>,
 }
 
+/// Symbol table entry in the global scope.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GlobalEntry {
     Type(TypeEntry),
     Procedure(ProcedureEntry),
 }
 
+/// Symbol table entry in the local scope.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LocalEntry {
     Variable(VariableEntry),
     Parameter(VariableEntry),
 }
 
+/// Symbol table entry with no specific scope.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Entry<'a> {
     Type(&'a TypeEntry),
@@ -187,6 +194,8 @@ impl TableEntry for LocalEntry {
 }
 
 impl<'a> LookupTable<'a> {
+    /// Looks for an entry, first in the local table,
+    /// then, if not found, in the global table.
     pub fn lookup(&self, key: &str) -> Option<Entry<'a>> {
         self.local_table
             .and_then(|table| table.lookup(key))
