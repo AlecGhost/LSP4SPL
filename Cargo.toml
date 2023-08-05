@@ -8,9 +8,9 @@ members = [
 
 [workspace.package]
 description = "Language Server for SPL"
-authors = ["Alec Ghost"]
-license = ""
-repository = ""
+authors = ["AlecGhost"]
+license = "MIT"
+repository = "https://github.com/AlecGhost/LSP4SPL"
 edition = "2021"
 rust-version = "1.66"
 

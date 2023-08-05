@@ -1,10 +1,10 @@
 [package]
 name = "tree-sitter-spl"
 description = "SPL grammar for the tree-sitter parsing library"
-version = "0.0.1"
-keywords = ["incremental", "parsing", "SPL"]
-categories = ["parsing", "text-editors"]
+authors = ["AlecGhost"]
+license = "MIT"
 repository = "https://github.com/AlecGhost/LSP4SPL"
+version = "0.1.0"
 
 build = "bindings/rust/build.rs"
 include = [

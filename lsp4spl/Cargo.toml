@@ -1,5 +1,9 @@
 [package]
 name = "lsp4spl"
+description = "Language Server for SPL"
+authors = ["AlecGhost"]
+license = "MIT"
+repository = "https://github.com/AlecGhost/LSP4SPL"
 version = "0.1.0"
 edition = "2021"
 
