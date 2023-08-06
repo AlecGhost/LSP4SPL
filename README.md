@@ -1,7 +1,7 @@
 # LSP4SPL
 
 LSP4SPL is implementing the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
-for the programming language SPL.
+for the Simple Programming Language (SPL).
 
 ## Background
 
@@ -9,9 +9,6 @@ SPL is a programming language developed by Prof. Dr. Hellwig Geisse at [THM](htt
 Have a look at [this script](https://homepages.thm.de/~hg53/cb-ss20/praktikum/compprakt.pdf),
 written by Prof. Dr. Michael Jäger,
 for a specification of the language.
-
-CS students at THM have to write a compiler as part of the CS1019 class.
-This project aims to help with the development of test programs for this compiler.
 
 ## Features
 
@@ -40,18 +37,19 @@ This repository consists of the following parts:
 - the [VS Code extension](https://github.com/AlecGhost/LSP4SPL/tree/master/editors/code)
 - a [Tree-sitter grammar](https://github.com/AlecGhost/LSP4SPL/tree/master/editors/nvim/tree-sitter-spl)
 
-## Building
+## Installation
 
-If you haven't already, install [Rust](https://rustup.rs/).
+You can download the latest binary
+from the [releases page](https://github.com/AlecGhost/LSP4SPL/releases).
 
-If you are just interested in the binary of the language server,
-install it with this command:
+Alternatively, you can install the binary with `cargo`,
+if you have [Rust](https://rustup.rs/) installed.
 
 ```sh
 cargo install lsp4spl
 ```
 
-Alternatively, you can clone this repository
+Of course, you can also clone this repository
 and then build it.
 
 ```sh
