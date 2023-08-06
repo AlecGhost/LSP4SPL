@@ -1,0 +1,23 @@
+//
+// test2.spl -- Aufgabenblatt 2, Testprogramm b)
+//
+
+
+proc summe(n: int, m: int, ref s: int) {
+  s := n + m;
+}
+
+
+proc main() {
+  var x: int;
+  var y: int;
+  var s: int;
+
+  //readi(x);
+  x := 3;
+  //readi(y);
+  y := 5;
+  summe(x, y, s);
+  printi(s);
+  printc('\n');
+}
