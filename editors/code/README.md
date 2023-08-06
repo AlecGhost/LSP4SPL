@@ -3,40 +3,36 @@
 To get LSP4SPL up and running in VS Code, you need to install this extension.
 It starts the language server and hooks it up with VS Code.
 
-## Installation
+## Features
 
-Currently this extension is not published in the store,
-so you need to build it yourself.
-You need `npm` and `npx` installed.
+The following LSP features are supported:
 
-First, clone this repository and go into this folder.
+- [x] Go to Declaration
+- [x] Go to Definition
+- [x] Go to Type Definition
+- [x] Go to Implementation
+- [x] Find References
+- [x] Hover
+- [x] Signature Help
+- [x] Folding Range
+- [x] Completion Proposals
+- [x] Rename
+- [x] Prepare Rename
+- [x] Semantic Tokens
+- [x] Formatting
 
-```sh
-git clone https://github.com/AlecGhost/LSP4SPL.git
-cd LSP4SPL/editors/code
-```
+## Quick Start
 
-Then install all the dependencies.
-
-```sh
-npm install
-```
-
-Afterwards, you can package the extension and manually install it to VS Code.
-
-```sh
-npx vsce package
-```
+1. Install the [Language Server](https://github.com/AlecGhost/LSP4SPL).
+2. Configure the path to the executable.
 
 ## Configuration
 
-You need to tell the extension, where the LSP4SPL binary is located.
+You need to tell the extension, where the LSP4SPL executable is located.
 To do this, add this to your `settings.json`:
 
 ```json
 {
-   "lsp4spl.executable": "path/to/the/binary"
+  "lsp4spl.executable": "path/to/the/executable"
 }
 ```
-
-If you haven't got the binary yet, consider [building](https://github.com/AlecGhost/LSP4SPL/tree/master#building) it.
