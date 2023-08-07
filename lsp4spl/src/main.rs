@@ -54,7 +54,6 @@ async fn main() -> Result<()> {
                     save: None,
                 },
             )),
-            selection_range_provider: None,
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             completion_provider: Some(Default::default()),
             signature_help_provider: Some(Default::default()),
@@ -62,27 +61,15 @@ async fn main() -> Result<()> {
             type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
             implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
             references_provider: Some(OneOf::Left(true)),
-            document_highlight_provider: None,
-            document_symbol_provider: None,
-            workspace_symbol_provider: None,
-            code_action_provider: None,
-            code_lens_provider: None,
             document_formatting_provider: Some(OneOf::Left(true)),
-            document_range_formatting_provider: None,
-            document_on_type_formatting_provider: None,
             rename_provider: Some(OneOf::Right(RenameOptions {
                 prepare_provider: Some(true),
                 work_done_progress_options: WorkDoneProgressOptions {
                     work_done_progress: None,
                 },
             })),
-            document_link_provider: None,
-            color_provider: None,
             folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
             declaration_provider: Some(DeclarationCapability::Simple(true)),
-            execute_command_provider: None,
-            workspace: None,
-            call_hierarchy_provider: None,
             semantic_tokens_provider: Some(
                 SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
                     legend: SemanticTokensLegend {
@@ -94,12 +81,7 @@ async fn main() -> Result<()> {
                     ..Default::default()
                 }),
             ),
-            moniker_provider: None,
-            linked_editing_range_provider: None,
-            experimental: None,
-            inlay_hint_provider: None,
-            inline_value_provider: None,
-            position_encoding: None,
+            ..Default::default()
         },
     );
     ls.run().await?;
