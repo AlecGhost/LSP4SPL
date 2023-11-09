@@ -5,6 +5,7 @@ members = [
     "spl_frontend",
     "spl_frontend/spl_frontend_macros",
 ]
+resolver = "2"
 
 [workspace.package]
 description = "Language Server for SPL"

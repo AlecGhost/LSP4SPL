@@ -4,7 +4,7 @@ description = "Compiler-Frontend for SPL"
 authors = ["AlecGhost"]
 license = "MIT"
 repository = "https://github.com/AlecGhost/LSP4SPL"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
@@ -12,7 +12,7 @@ nom = "7.1.3"
 nom_locate = "4.2.0"
 thiserror = "1.0.50"
 tokio = { version = "1.33.0", features = ["full"] }
-spl_frontend_macros = { version = "0.1.0", path  = "./spl_frontend_macros" }
+spl_frontend_macros = { version = "0.1.1", path  = "./spl_frontend_macros" }
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["html_reports"] }

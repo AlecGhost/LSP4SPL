@@ -628,7 +628,7 @@ dependencies = [
 
 [[package]]
 name = "lsp4spl"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bytes",
  "clap",
@@ -1071,7 +1071,7 @@ dependencies = [
 
 [[package]]
 name = "spl_frontend"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "insta",
@@ -1085,7 +1085,7 @@ dependencies = [
 
 [[package]]
 name = "spl_frontend_macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
