@@ -59,7 +59,7 @@
     "@types/node": "^18.11.18",
     "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^2.18.0",
-    "esbuild": "^0.18.18",
+    "esbuild": "^0.25.0",
     "typescript": "^4.9.5"
   },
   "scripts": {
