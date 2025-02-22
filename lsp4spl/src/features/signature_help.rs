@@ -6,7 +6,7 @@ use lsp_types::{
 };
 use spl_frontend::{
     ast::{CallStatement, GlobalDeclaration, ProcedureDeclaration, Reference, Statement},
-    table::{GlobalEntry, ProcedureEntry, SymbolTable, VariableEntry},
+    table::{GlobalEntry, ProcedureEntry, SymbolTable},
     tokens::{Token, TokenType},
     Shiftable, ToRange, ToTextRange,
 };
@@ -48,13 +48,13 @@ pub async fn signature_help(
                         let documentation = proc_entry.doc.as_ref().map(|doc| {
                             Documentation::MarkupContent(MarkupContent {
                                 kind: MarkupKind::Markdown,
-                                value: doc.clone(),
+                                value: String::new() + "---\n" + doc.trim_start() + "\n",
                             })
                         });
                         let tokens = &cursor.doc.tokens[call_stmt.to_range().shift(offset)];
                         let active_parameter = get_active_param(&parameters, tokens, &cursor.index);
                         let help = SignatureInformation {
-                            label: proc_entry.name.to_string(),
+                            label: proc_entry.to_string(),
                             documentation,
                             parameters: Some(parameters),
                             active_parameter,
@@ -141,20 +141,8 @@ fn get_param_info(proc_entry: &ProcedureEntry) -> Vec<ParameterInformation> {
         .parameters
         .iter()
         .map(|param| ParameterInformation {
-            label: ParameterLabel::Simple(param.name.to_string()),
-            documentation: Some(Documentation::MarkupContent(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: {
-                    let VariableEntry {
-                        name, data_type, ..
-                    } = param;
-                    let type_info = data_type
-                        .as_ref()
-                        .map(|dt| dt.to_string())
-                        .unwrap_or_else(|| "".to_string());
-                    name.value.clone() + ": " + &type_info
-                },
-            })),
+            label: ParameterLabel::Simple(param.to_string()),
+            documentation: None,
         })
         .collect()
 }
