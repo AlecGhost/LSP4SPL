@@ -1,6 +1,7 @@
 use super::*;
 
 impl AstInfoTraverser for Program {
+    #[allow(dead_code)]
     fn traverse(&self, f: fn(&AstInfo)) {
         f(&self.info);
         self.global_declarations
