@@ -5,8 +5,9 @@ use lsp_types::{
     DeclarationCapability, FoldingRangeProviderCapability, HoverProviderCapability,
     ImplementationProviderCapability, OneOf, RenameOptions, SemanticTokensFullOptions,
     SemanticTokensLegend, SemanticTokensOptions, SemanticTokensServerCapabilities,
-    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextDocumentSyncOptions, TypeDefinitionProviderCapability, WorkDoneProgressOptions,
+    ServerCapabilities, ServerInfo, SignatureHelpOptions, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, TypeDefinitionProviderCapability,
+    WorkDoneProgressOptions,
 };
 use server::LanguageServer;
 use simplelog::{Config, LevelFilter, WriteLogger};
@@ -56,7 +57,13 @@ async fn main() -> Result<()> {
             )),
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             completion_provider: Some(Default::default()),
-            signature_help_provider: Some(Default::default()),
+            signature_help_provider: Some(SignatureHelpOptions {
+                trigger_characters: Some(vec!["(".to_string()]),
+                retrigger_characters: Some(vec![",".to_string()]),
+                work_done_progress_options: WorkDoneProgressOptions {
+                    work_done_progress: None,
+                },
+            }),
             definition_provider: Some(OneOf::Left(true)),
             type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
             implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
