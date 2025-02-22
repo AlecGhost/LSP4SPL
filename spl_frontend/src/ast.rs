@@ -32,7 +32,7 @@ impl AstInfo {
         }
     }
 
-    pub fn new_with_errors(range: Range<usize>, errors: Vec<SplError>) -> Self {
+    pub const fn new_with_errors(range: Range<usize>, errors: Vec<SplError>) -> Self {
         Self { range, errors }
     }
 

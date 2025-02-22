@@ -127,7 +127,7 @@ pub fn update(
     let insertion_len = new_tokens.len();
     let token_change = TokenChange::new(deletion_range, insertion_len);
 
-    let new_tokens = vec![unaffected_head, new_tokens, unaffected_tail, vec![eof]].concat();
+    let new_tokens = [unaffected_head, new_tokens, unaffected_tail, vec![eof]].concat();
     (new_tokens, token_change)
 }
 

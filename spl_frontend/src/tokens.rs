@@ -388,8 +388,8 @@ impl<'a> TokenStream<'a> {
     }
 
     /// Access to first token
-    pub fn fragment(&self) -> Option<&Token> {
-        self.tokens.get(0)
+    pub const fn fragment(&self) -> Option<&Token> {
+        self.tokens.first()
     }
 }
 
@@ -424,7 +424,7 @@ impl TokenStream<'_> {
     }
 }
 
-impl<'a> ToRange for TokenStream<'a> {
+impl ToRange for TokenStream<'_> {
     fn to_range(&self) -> Range<usize> {
         self.fragment().map_or(0..0, |token| token.range.clone())
     }
@@ -432,7 +432,7 @@ impl<'a> ToRange for TokenStream<'a> {
 
 /// source: [Stackoverflow](https://stackoverflow.com/a/57203324)
 /// enables indexing and slicing
-impl<'a, Idx> std::ops::Index<Idx> for TokenStream<'a>
+impl<Idx> std::ops::Index<Idx> for TokenStream<'_>
 where
     Idx: std::slice::SliceIndex<[Token]>,
 {
@@ -443,13 +443,13 @@ where
     }
 }
 
-impl<'a> nom::InputLength for TokenStream<'a> {
+impl nom::InputLength for TokenStream<'_> {
     fn input_len(&self) -> usize {
         self.tokens.len()
     }
 }
 
-impl<'a> nom::InputTake for TokenStream<'a> {
+impl nom::InputTake for TokenStream<'_> {
     fn take(&self, count: usize) -> Self {
         Self {
             tokens: &self.tokens[0..count],
@@ -472,7 +472,7 @@ impl<'a> nom::InputTake for TokenStream<'a> {
 }
 
 /// source: [nom traits](https://docs.rs/nom/latest/src/nom/traits.rs.html#62-69)
-impl<'a> nom::Offset for TokenStream<'a> {
+impl nom::Offset for TokenStream<'_> {
     fn offset(&self, second: &Self) -> usize {
         let fst = self.tokens.as_ptr();
         let snd = second.tokens.as_ptr();
@@ -480,7 +480,7 @@ impl<'a> nom::Offset for TokenStream<'a> {
     }
 }
 
-impl<'a> nom::Slice<RangeTo<usize>> for TokenStream<'a> {
+impl nom::Slice<RangeTo<usize>> for TokenStream<'_> {
     fn slice(&self, range: RangeTo<usize>) -> Self {
         Self {
             tokens: &self.tokens[range],

@@ -20,7 +20,7 @@ pub(super) fn is_alpha_numeric(c: char) -> bool {
 pub(super) fn verify<'a, O, F, G>(
     mut parser: F,
     verification: G,
-) -> impl FnMut(Span<'a>) -> IResult<O>
+) -> impl FnMut(Span<'a>) -> IResult<'a, O>
 where
     F: FnMut(Span<'a>) -> IResult<'a, O>,
     G: Fn(&O) -> bool,
@@ -47,7 +47,7 @@ pub(super) fn expect<'a, O, F>(
     mut inner: F,
     error_msg: LexErrorMessage,
     error_pos: usize,
-) -> impl FnMut(Span<'a>) -> IResult<Result<O, SplError>>
+) -> impl FnMut(Span<'a>) -> IResult<'a, Result<O, SplError>>
 where
     F: FnMut(Span<'a>) -> IResult<'a, O>,
 {

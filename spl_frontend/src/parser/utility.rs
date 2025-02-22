@@ -2,7 +2,7 @@ use crate::{
     ast::{AstInfo, AstInfoTraverser, Reference},
     error::{ErrorMessage, ParseErrorMessage, ParserError, ParserErrorKind},
     parser::{IResult, Parser},
-    tokens::{TokenStream, Token, TokenChange},
+    tokens::{Token, TokenChange, TokenStream},
     Shiftable, ToRange,
 };
 use nom::{
@@ -47,7 +47,7 @@ where
 /// Remember: `TokenStream` can be empty.
 pub(super) fn ignore_until0<'a, F>(
     mut pattern: F,
-) -> impl FnMut(TokenStream<'a>) -> IResult<TokenStream<'a>>
+) -> impl FnMut(TokenStream<'a>) -> IResult<'a, TokenStream<'a>>
 where
     F: InnerParser<'a, TokenStream<'a>>,
 {
@@ -77,7 +77,7 @@ where
 /// Returns all consumed tokens as `TokenStream`.
 pub(super) fn ignore_until1<'a, F>(
     mut pattern: F,
-) -> impl FnMut(TokenStream<'a>) -> IResult<Vec<Token>>
+) -> impl FnMut(TokenStream<'a>) -> IResult<'a, Vec<Token>>
 where
     F: InnerParser<'a, TokenStream<'a>>,
 {
@@ -233,7 +233,7 @@ where
 pub(super) fn confusable<'a, O, F>(
     mut parser: F,
     error_msg: ParseErrorMessage,
-) -> impl FnMut(TokenStream<'a>) -> IResult<O>
+) -> impl FnMut(TokenStream<'a>) -> IResult<'a, O>
 where
     F: InnerParser<'a, O>,
 {

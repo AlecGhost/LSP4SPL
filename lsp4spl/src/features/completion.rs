@@ -76,7 +76,7 @@ fn complete_type(
             RBracket => Some(vec![items::of()]),
             Of => {
                 let completions =
-                    vec![vec![snippets::array(), items::array()], search_types(table)].concat();
+                    [vec![snippets::array(), items::array()], search_types(table)].concat();
                 Some(completions)
             }
             _ => None,
@@ -132,8 +132,7 @@ fn complete_procedure(
                     TokenType::Colon => Some(search_types(table)),
                     TokenType::Semic | TokenType::LCurly => {
                         let completions =
-                            vec![vec![snippets::var(), items::var()], new_stmt(&lookup_table)]
-                                .concat();
+                            [vec![snippets::var(), items::var()], new_stmt(&lookup_table)].concat();
                         Some(completions)
                     }
                     _ => None,
@@ -208,7 +207,7 @@ fn complete_statement(
 ) -> Option<Vec<CompletionItem>> {
     // provide completion support for `else` after if statement
     if last_stmt_is_if && matches!(last_token.token_type, TokenType::RCurly) {
-        let completions = vec![
+        let completions = [
             vec![snippets::r#else(), items::r#else()],
             new_stmt(lookup_table),
         ]
@@ -313,7 +312,7 @@ fn search_procedures(table: &GlobalTable) -> Vec<CompletionItem> {
 }
 
 fn new_stmt(lookup_table: &LookupTable) -> Vec<CompletionItem> {
-    vec![
+    [
         vec![
             snippets::r#if(),
             snippets::r#while(),
