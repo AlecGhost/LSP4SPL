@@ -4,7 +4,7 @@ description = "Compiler-Frontend for SPL"
 authors = ["AlecGhost"]
 license = "MIT"
 repository = "https://github.com/AlecGhost/LSP4SPL"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]
